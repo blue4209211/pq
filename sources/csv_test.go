@@ -8,12 +8,12 @@ import (
 )
 
 func TestCSVDataSourceName(t *testing.T) {
-	source := CSVDataSource{}
+	source := csvDataSource{}
 	assert.Equal(t, source.Name(), "csv")
 }
 
 func TestCSVDataSourceReader(t *testing.T) {
-	source := CSVDataSource{}
+	source := csvDataSource{}
 
 	csvString :=
 		`a,b,c,d
@@ -51,7 +51,7 @@ func TestCSVDataSourceReader(t *testing.T) {
 }
 
 func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
-	source := CSVDataSource{}
+	source := csvDataSource{}
 
 	csvString :=
 		`1	2	"c1"	"d1"
@@ -80,10 +80,20 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 	data, err := csvReader.Data()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
+
+	// wrong seprator
+	csvReader, err = source.Reader(strings.NewReader(csvString), map[string]string{
+		ConfigCsvHeader: "false",
+		ConfigCsvSep:    "^^",
+	})
+	assert.NoError(t, err)
+
+	schema, err = csvReader.Schema()
+	assert.Error(t, err)
 }
 
 func TestCSVDataSourceWriter(t *testing.T) {
-	source := CSVDataSource{}
+	source := csvDataSource{}
 
 	csvString :=
 		`1	2	c1	d1
@@ -103,5 +113,43 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	writer.Write(buff)
 
 	assert.Equal(t, csvString, buff.String())
+
+	csvStringWithHeader := `a	b	c	d
+1	2	c1	d1
+3	4	c2	"d	2"
+5			d2
+`
+	configs = map[string]string{
+		ConfigCsvHeader: "true",
+		ConfigCsvSep:    "\t",
+	}
+	csvReader, err = source.Reader(strings.NewReader(csvStringWithHeader), configs)
+	assert.NoError(t, err)
+	dataframe = NewDatasourceDataFrame("df_1", csvReader)
+	writer, err = source.Writer(&dataframe, configs)
+	buff = new(strings.Builder)
+	writer.Write(buff)
+
+	assert.Equal(t, csvStringWithHeader, buff.String())
+
+}
+
+func BenchmarkCSVParsing(b *testing.B) {
+
+	source := csvDataSource{}
+	csvString := `1,2,"c1","d1"
+3,4,"c2","d,2"
+5,,"","d2"`
+
+	csvStringData := csvString
+	for i := 1; i < 1000; i++ {
+		csvStringData = csvStringData + "\n" + csvString
+	}
+
+	for i := 0; i < b.N; i++ {
+		csvReader, _ := source.Reader(strings.NewReader(csvStringData), map[string]string{})
+		csvReader.Schema()
+		csvReader.Data()
+	}
 
 }

@@ -39,62 +39,61 @@ func readJSONByArray(jsonText string) (objMapList []map[string]interface{}, err 
 	if isArray {
 		objMapList = make([]map[string]interface{}, 0)
 		err = json.Unmarshal(byetArr, &objMapList)
-		return objMapList, err
-	} else {
-		objMap := make(map[string]interface{})
-		objMapList = make([]map[string]interface{}, 1)
-		err = json.Unmarshal(byetArr, &objMap)
-		if err != nil {
-			return objMapList, err
-		}
-		objMapList[0] = objMap
-		return objMapList, err
+		return
 	}
+	objMap := make(map[string]interface{})
+	objMapList = make([]map[string]interface{}, 1)
+	err = json.Unmarshal(byetArr, &objMap)
+	if err != nil {
+		return
+	}
+	objMapList[0] = objMap
+	return
 }
 
-const ConfigJsonSingleLine = "json.singleline"
+// ConfigJSONSingleLine While parsing Input, treat eachline as JSON object or Single Object/Array in the file
+const ConfigJSONSingleLine = "json.objectOnEachLine"
 
 var jsonConfig = map[string]string{
-	ConfigJsonSingleLine: "true",
+	ConfigJSONSingleLine: "true",
 }
 
-type JSONDataSource struct {
+type jsonDataSource struct {
 }
 
-func (self *JSONDataSource) Args() map[string]string {
+func (t *jsonDataSource) Args() map[string]string {
 	return jsonConfig
 }
 
-func (self *JSONDataSource) Name() string {
+func (t *jsonDataSource) Name() string {
 	return "json"
 }
 
-func (self *JSONDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
-	return &JSONDataSourceWriter{data: data, args: args}, nil
+func (t *jsonDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
+	return &jsonDataSourceWriter{data: data, args: args}, nil
 }
 
-func (self *JSONDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
-	return &JSONDataSourceReader{reader: reader, args: args}, nil
+func (t *jsonDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
+	return &jsonDataSourceReader{reader: reader, args: args}, nil
 }
 
-type JSONDataSourceWriter struct {
+type jsonDataSourceWriter struct {
 	data df.DataFrame
 	args map[string]string
 }
 
-func (self *JSONDataSourceWriter) Write(writer io.Writer) (err error) {
-	records, err := self.data.Data()
+func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
+	records, err := t.data.Data()
 	if err != nil {
 		return
 	}
 
-	schema, err := self.data.Schema()
+	schema, err := t.data.Schema()
 	if err != nil {
 		return
 	}
 
 	jsonRecords := make([]map[string]interface{}, len(records))
-
 	for index, row := range records {
 		obj := make(map[string]interface{})
 		for i, c := range schema {
@@ -103,52 +102,62 @@ func (self *JSONDataSourceWriter) Write(writer io.Writer) (err error) {
 		jsonRecords[index] = obj
 	}
 
+	singlelineParse, err := isSingleLineParse(t.args)
+	if err != nil {
+		return err
+	}
+
 	encoder := json.NewEncoder(writer)
-	err = encoder.Encode(jsonRecords)
+	if singlelineParse {
+		for _, r := range jsonRecords {
+			err = encoder.Encode(r)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		err = encoder.Encode(jsonRecords)
+	}
 
 	return
 }
 
-type JSONDataSourceReader struct {
+type jsonDataSourceReader struct {
 	reader  io.Reader
 	args    map[string]string
 	cols    []df.Column
 	records [][]interface{}
 }
 
-func (self *JSONDataSourceReader) Schema() (columns []df.Column, err error) {
-	err = self.init()
+func (t *jsonDataSourceReader) Schema() (columns []df.Column, err error) {
+	err = t.init()
 	if err != nil {
 		return columns, err
 	}
-	return self.cols, err
+	return t.cols, err
 }
 
-func (self *JSONDataSourceReader) Data() (data [][]interface{}, err error) {
-	err = self.init()
+func (t *jsonDataSourceReader) Data() (data [][]interface{}, err error) {
+	err = t.init()
 	if err != nil {
 		return data, err
 	}
 
-	return self.records, err
+	return t.records, err
 
 }
 
-func (self *JSONDataSourceReader) readJSON() (objMapList []map[string]interface{}, err error) {
+func (t *jsonDataSourceReader) readJSON() (objMapList []map[string]interface{}, err error) {
 
-	singleline, ok := self.args[ConfigJsonSingleLine]
-	singlelineParse := false
-	if ok {
-		singlelineParse, err = strconv.ParseBool(singleline)
-		if err != nil {
-			return objMapList, err
-		}
+	singlelineParse, err := isSingleLineParse(t.args)
+	if err != nil {
+		return objMapList, err
 	}
 	if singlelineParse {
-		return readJSONByLine(self.reader)
+		return readJSONByLine(t.reader)
 	}
 	buf := new(strings.Builder)
-	_, err = io.Copy(buf, self.reader)
+	_, err = io.Copy(buf, t.reader)
 	if err != nil {
 		return
 	}
@@ -157,12 +166,12 @@ func (self *JSONDataSourceReader) readJSON() (objMapList []map[string]interface{
 
 }
 
-func (self *JSONDataSourceReader) init() (err error) {
-	if len(self.cols) != 0 {
+func (t *jsonDataSourceReader) init() (err error) {
+	if len(t.cols) != 0 {
 		return err
 	}
 
-	objMapList, err := self.readJSON()
+	objMapList, err := t.readJSON()
 	if err != nil {
 		return err
 	}
@@ -182,11 +191,14 @@ func (self *JSONDataSourceReader) init() (err error) {
 	}
 	sort.Strings(colMapKeys)
 
-	self.cols = make([]df.Column, len(colMap))
+	t.cols = make([]df.Column, len(colMap))
 	index := 0
 	for _, k := range colMapKeys {
 		v := colMap[k]
-		typeStr := v.Kind().String()
+		typeStr := "string"
+		if v != nil {
+			typeStr = v.Kind().String()
+		}
 		if typeStr == "slice" || typeStr == "array" || typeStr == "map" {
 			typeStr = "string"
 		}
@@ -195,17 +207,17 @@ func (self *JSONDataSourceReader) init() (err error) {
 		if err != nil {
 			return errors.New("json : unable to get format for - " + k + ", " + typeStr)
 		}
-		self.cols[index] = df.Column{Name: k, Format: dfFormat}
+		t.cols[index] = df.Column{Name: k, Format: dfFormat}
 		index = index + 1
 	}
 
-	self.records = make([][]interface{}, len(objMapList))
+	t.records = make([][]interface{}, len(objMapList))
 
 	for i, objMap := range objMapList {
 
-		row := make([]interface{}, len(self.cols))
+		row := make([]interface{}, len(t.cols))
 
-		for j, c := range self.cols {
+		for j, c := range t.cols {
 			if v, ok := objMap[c.Name]; ok {
 				row[j], err = c.Format.Convert(v)
 				if err != nil {
@@ -216,9 +228,22 @@ func (self *JSONDataSourceReader) init() (err error) {
 			}
 		}
 
-		self.records[i] = row
+		t.records[i] = row
 
 	}
 
 	return err
+}
+
+func isSingleLineParse(config map[string]string) (singlelineParse bool, err error) {
+	singleline, ok := config[ConfigJSONSingleLine]
+	singlelineParse = true
+	if ok {
+		singlelineParse, err = strconv.ParseBool(singleline)
+		if err != nil {
+			return singlelineParse, err
+		}
+	}
+
+	return
 }

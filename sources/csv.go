@@ -10,7 +10,10 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
-const ConfigCsvHeader = "csv.header"
+// ConfigCsvHeader Is First valid line header
+const ConfigCsvHeader = "csv.hasHeader"
+
+// ConfigCsvSep File Seprator, Default = ,
 const ConfigCsvSep = "csv.sep"
 
 var csvConfig = map[string]string{
@@ -18,51 +21,51 @@ var csvConfig = map[string]string{
 	ConfigCsvSep:    ",",
 }
 
-type CSVDataSource struct {
+type csvDataSource struct {
 }
 
-func (self *CSVDataSource) Args() map[string]string {
+func (t *csvDataSource) Args() map[string]string {
 	return csvConfig
 }
 
-func (self *CSVDataSource) Name() string {
+func (t *csvDataSource) Name() string {
 	return "csv"
 }
 
-func (self *CSVDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
-	return &CSVDataSourceReader{reader: reader, args: args}, nil
+func (t *csvDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
+	return &csvDataSourceReader{reader: reader, args: args}, nil
 }
 
-func (self *CSVDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
-	return &CSVDataSourceWriter{data: data, args: args}, nil
+func (t *csvDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
+	return &csvDataSourceWriter{data: data, args: args}, nil
 }
 
-type CSVDataSourceWriter struct {
+type csvDataSourceWriter struct {
 	data df.DataFrame
 	args map[string]string
 }
 
-func (self *CSVDataSourceWriter) Write(writer io.Writer) (err error) {
+func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 	csvWriter := csv.NewWriter(writer)
 	defer csvWriter.Flush()
 
-	seprator, err := getColSeprator(self.args)
+	seprator, err := getColSeprator(t.args)
 	if err != nil {
 		return
 	}
 	csvWriter.Comma = seprator
-	dataArr, err := self.data.Data()
+	dataArr, err := t.data.Data()
 	if err != nil {
 		return
 	}
 
-	isHeader, err := isHeaderEnabled(self.args)
+	isHeader, err := isHeaderEnabled(t.args)
 	if err != nil {
 		return
 	}
 
 	if isHeader {
-		schema, err := self.data.Schema()
+		schema, err := t.data.Schema()
 		if err != nil {
 			return err
 		}
@@ -86,23 +89,23 @@ func (self *CSVDataSourceWriter) Write(writer io.Writer) (err error) {
 	return
 }
 
-type CSVDataSourceReader struct {
+type csvDataSourceReader struct {
 	reader   io.Reader
 	args     map[string]string
 	records  [][]string
 	isHeader bool
 }
 
-func (self *CSVDataSourceReader) Schema() (columns []df.Column, err error) {
-	err = self.init()
+func (t *csvDataSourceReader) Schema() (columns []df.Column, err error) {
+	err = t.init()
 	if err != nil {
 		return
 	}
 
-	columns = make([]df.Column, len(self.records[0]))
+	columns = make([]df.Column, len(t.records[0]))
 	f, _ := df.GetFormat("string")
-	for i, col := range self.records[0] {
-		if self.isHeader {
+	for i, col := range t.records[0] {
+		if t.isHeader {
 			columns[i] = df.Column{Name: col, Format: f}
 		} else {
 			columns[i] = df.Column{Name: "c" + strconv.Itoa(i), Format: f}
@@ -111,20 +114,20 @@ func (self *CSVDataSourceReader) Schema() (columns []df.Column, err error) {
 	return
 }
 
-func (self *CSVDataSourceReader) Data() (data [][]interface{}, err error) {
-	err = self.init()
+func (t *csvDataSourceReader) Data() (data [][]interface{}, err error) {
+	err = t.init()
 	if err != nil {
 		return
 	}
 
 	index := 0
-	if self.isHeader {
+	if t.isHeader {
 		index = 1
 	}
 
-	data = make([][]interface{}, len(self.records)-index)
+	data = make([][]interface{}, len(t.records)-index)
 
-	for i, record := range self.records[index:] {
+	for i, record := range t.records[index:] {
 		row := make([]interface{}, len(record))
 		for j, cell := range record {
 			row[j] = cell
@@ -135,12 +138,12 @@ func (self *CSVDataSourceReader) Data() (data [][]interface{}, err error) {
 	return
 }
 
-func (self *CSVDataSourceReader) init() (err error) {
-	if self.records != nil {
+func (t *csvDataSourceReader) init() (err error) {
+	if t.records != nil {
 		return nil
 	}
-	csvReader := csv.NewReader(self.reader)
-	seprator, err := getColSeprator(self.args)
+	csvReader := csv.NewReader(t.reader)
+	seprator, err := getColSeprator(t.args)
 	if err != nil {
 		return
 	}
@@ -149,13 +152,13 @@ func (self *CSVDataSourceReader) init() (err error) {
 	if err != nil {
 		return
 	}
-	self.records = records
+	t.records = records
 
-	isHeader, err := isHeaderEnabled(self.args)
+	isHeader, err := isHeaderEnabled(t.args)
 	if err != nil {
 		return
 	}
-	self.isHeader = isHeader
+	t.isHeader = isHeader
 
 	return
 }

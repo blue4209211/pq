@@ -1,28 +1,31 @@
 package engine
 
 import (
-	"bufio"
+	"archive/zip"
+	"compress/gzip"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/log"
 	"github.com/blue4209211/pq/sources"
 )
 
-type QueryEngine interface {
+type queryEngine interface {
 	Query(query string, df []df.DataFrame) (df.DataFrame, error)
 	Close()
 }
 
-func GetQueryEngine(config map[string]string) (QueryEngine, error) {
-	queryEngine, err := NewSQLiteEngine(config)
+func getQueryEngine(config map[string]string) (queryEngine, error) {
+	queryEngine, err := newSQLiteEngine(config)
 	return &queryEngine, err
 }
 
-func Query(query string, dfs []df.DataFrame, config map[string]string) (data df.DataFrame, err error) {
-	engine, err := GetQueryEngine(config)
+func queryDataFrames(query string, dfs []df.DataFrame, config map[string]string) (data df.DataFrame, err error) {
+	engine, err := getQueryEngine(config)
 	if err != nil {
 		return data, err
 	}
@@ -31,58 +34,221 @@ func Query(query string, dfs []df.DataFrame, config map[string]string) (data df.
 	return engine.Query(query, dfs)
 }
 
-func getFileDetails(fileName string) (path string, name string, ext string, err error) {
+func getFileDetails(fileName string) (path string, name string, ext string, comrpression string, err error) {
 
 	nameAndAlias := strings.Split(fileName, "#")
 	if len(nameAndAlias) == 2 {
 		path = nameAndAlias[0]
 		name = nameAndAlias[1]
 	} else {
-		name = strings.Split(filepath.Base(fileName), ".")[0]
 		path = fileName
+		name = strings.Split(filepath.Base(path), ".")[0]
 	}
 
-	ext = strings.ReplaceAll(filepath.Ext(path), ".", "")
+	if strings.Index(path, ".csv") >= 0 || strings.Index(path, ".tsv") >= 0 {
+		ext = "csv"
+	} else if strings.Index(path, ".json") >= 0 {
+		ext = "json"
+	}
+
+	if strings.Index(path, ".gz") >= 0 {
+		comrpression = "gz"
+	} else if strings.Index(path, ".zip") >= 0 {
+		comrpression = "zip"
+	}
 
 	return
 }
 
-func QueryFiles(query string, files []string, config map[string]string) (data df.DataFrame, err error) {
-	dfs := make([]df.DataFrame, len(files))
+// QueryFiles on given files or directories
+func QueryFiles(query string, fileOrDrs []string, config map[string]string) (data df.DataFrame, err error) {
+	dfs := make([]df.DataFrame, 0)
 
-	for i, f := range files {
+	for _, fileOrDir := range fileOrDrs {
 
-		path, name, ext, err := getFileDetails(f)
-		var reader io.Reader
-		if path == "-" {
-			reader = bufio.NewReader(os.Stdin)
-			ext1, ok := config["fmt.std.type"]
-			if !ok {
-				ext1 = "json"
-			}
-			ext = ext1
-			name = "stdin"
+		var fileOrDirPath, fileOrDirName string
+
+		var files []string
+		if fileOrDir == "-" {
+			fileOrDirName = "stdin"
+			fileOrDirPath = "-"
+			files = []string{"-"}
 		} else {
-			reader, err = os.Open(path)
+			fileOrDirPath, fileOrDirName, _, _, err = getFileDetails(fileOrDir)
 			if err != nil {
 				return data, err
 			}
+
+			fileInfo, fileStateErr := os.Stat(fileOrDirPath)
+			if fileStateErr == nil {
+				if fileInfo.IsDir() {
+					err = filepath.Walk(fileOrDirPath, func(path string, info os.FileInfo, err error) error {
+						if !info.IsDir() {
+							files = append(files, path)
+						}
+						return nil
+					})
+					if err != nil {
+						return data, err
+					}
+				} else {
+					files = []string{fileOrDirPath}
+				}
+			} else {
+				files, err = filepath.Glob(fileOrDirPath)
+				if err != nil {
+					return data, err
+				}
+
+				if len(files) > 0 && strings.Index(fileOrDir, "#") == -1 {
+					return data, errors.New("Regex is defined as filePath but missing alias name, use # to define alias name")
+				}
+
+			}
+
+			if len(files) == 0 {
+				return data, errors.New("File/Dir Not found or Invalid pattern - " + fileOrDir)
+			}
 		}
-		streamSource, err := sources.GetSource(ext)
+		dfsFiles := make([]df.DataFrame, 0)
+
+		for _, f := range files {
+			path, name, ext, compression, err := getFileDetails(f)
+
+			if err != nil {
+				return data, err
+			}
+
+			if ext == "" {
+				log.Debug("unable to detect fileType for (%s), falling back to json", f)
+				ext = "json"
+			}
+
+			if path == "-" {
+				ext1, ok := config["fmt.std.type"]
+				if !ok {
+					ext1 = "json"
+				}
+				ext = ext1
+				name = "stdin"
+
+				ds, err := getDataframeFromSource(name, ext, os.Stdin, config)
+				if err != nil {
+					return data, err
+				}
+
+				dfsFiles = append(dfsFiles, ds)
+			} else if compression == "gz" {
+				f, err := os.Open(path)
+				if err != nil {
+					return data, err
+				}
+				defer f.Close()
+				reader, err := gzip.NewReader(f)
+				if err != nil {
+					return data, err
+				}
+
+				ds, err := getDataframeFromSource(name, ext, reader, config)
+				if err != nil {
+					return data, err
+				}
+				dfsFiles = append(dfsFiles, ds)
+
+			} else if compression == "zip" {
+				zipReader, err := zip.OpenReader(path)
+				if err != nil {
+					return data, err
+				}
+				for _, f := range zipReader.File {
+					zipFile, err := f.Open()
+					if err != nil {
+						return data, err
+					}
+					defer zipFile.Close()
+
+					ds, err := getDataframeFromSource(name, ext, zipFile, config)
+					if err != nil {
+						return data, err
+					}
+					dfsFiles = append(dfsFiles, ds)
+
+				}
+			} else {
+				f, err := os.Open(path)
+				if err != nil {
+					return data, err
+				}
+				defer f.Close()
+
+				ds, err := getDataframeFromSource(name, ext, f, config)
+				if err != nil {
+					return data, err
+				}
+				dfsFiles = append(dfsFiles, ds)
+			}
+		}
+
+		mergedDfs, err := mergeDfs(fileOrDirName, dfsFiles...)
 		if err != nil {
 			return data, err
 		}
-
-		dataframeReader, err := streamSource.Reader(reader, config)
-		if err != nil {
-			return data, err
-		}
-
-		dataframe := sources.NewDatasourceDataFrame(name, dataframeReader)
-
-		dfs[i] = &dataframe
+		dfs = append(dfs, mergedDfs)
 	}
 
-	return Query(query, dfs, config)
+	return queryDataFrames(query, dfs, config)
+}
 
+func mergeDfs(name string, dfs ...df.DataFrame) (data df.DataFrame, err error) {
+
+	if len(dfs) == 0 {
+		return data, errors.New("Empty data")
+	}
+
+	cols, err := dfs[0].Schema()
+	if err != nil {
+		return
+	}
+
+	var records [][]interface{}
+	if len(dfs) == 1 {
+		records, err = dfs[0].Data()
+		if err != nil {
+			return
+		}
+	} else {
+		records = make([][]interface{}, 0)
+
+		for _, df := range dfs {
+			dfRecords, err := df.Data()
+			if err != nil {
+				return data, err
+			}
+			records = append(records, dfRecords...)
+		}
+	}
+
+	inMemoryDf := df.NewInmemoryDataframeWithName(name, cols, records)
+	data = &inMemoryDf
+	return
+}
+
+func getDataframeFromSource(name string, ext string, reader io.Reader, config map[string]string) (data df.DataFrame, err error) {
+	streamSource, err := sources.GetSource(ext)
+	if err != nil {
+		return data, err
+	}
+	dataframeReader, err := streamSource.Reader(reader, config)
+	if err != nil {
+		return data, err
+	}
+	dataframe := sources.NewDatasourceDataFrame(name, dataframeReader)
+	_, err = dataframe.Schema()
+
+	if err != nil {
+		return data, err
+	}
+
+	data = &dataframe
+	return
 }

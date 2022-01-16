@@ -10,12 +10,15 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/log"
+
+	// initialize sqlite
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// ConfigEngineStorage -  default storage, defaults to memory
 const ConfigEngineStorage = "engine.storage"
 
-type SQLLiteQueryEngine struct {
+type sqlliteQueryEngine struct {
 	db     *sql.DB
 	dbFile *os.File
 }
@@ -23,27 +26,24 @@ type SQLLiteQueryEngine struct {
 func getSqliteType(c df.DataFrameFormat) string {
 	if c.Name() == "string" {
 		return "text"
-	} else {
-		return c.Name()
 	}
+	return c.Name()
 }
 
-func (self *SQLLiteQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
-	sqlStmt := `
-				create table "%s" (%s);
-			`
+func (t *sqlliteQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
+	sqlStmt := `create table "%s" (%s);`
 	columnStr := ""
 	for _, col := range cols {
 		columnStr = columnStr + " \"" + col.Name + "\" " + getSqliteType(col.Format) + " ,"
 	}
 
 	sqlStmt = fmt.Sprintf(sqlStmt, tableName, columnStr[0:len(columnStr)-1])
-	_, err = self.db.Exec(sqlStmt)
+	_, err = t.db.Exec(sqlStmt)
 
 	return err
 }
 
-func (self *SQLLiteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
+func (t *sqlliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
 	cols, err := dataFrame.Schema()
 	if err != nil {
@@ -52,6 +52,10 @@ func (self *SQLLiteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 	data, err := dataFrame.Data()
 	if err != nil {
 		return err
+	}
+
+	if len(data) == 0 {
+		return
 	}
 
 	valueStrings := make([]string, 0, len(data))
@@ -74,11 +78,12 @@ func (self *SQLLiteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 	}
 	stmt := fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES %s", dataFrame.Name(), colString, strings.Join(valueStrings, ","))
 
-	_, err = self.db.Exec(stmt, valueArgs...)
+	_, err = t.db.Exec(stmt, valueArgs...)
+
 	return err
 }
 
-func (self *SQLLiteQueryEngine) registerDataFrame(dataFrame df.DataFrame) error {
+func (t *sqlliteQueryEngine) registerDataFrame(dataFrame df.DataFrame) error {
 
 	cols, err := dataFrame.Schema()
 	if err != nil {
@@ -88,24 +93,24 @@ func (self *SQLLiteQueryEngine) registerDataFrame(dataFrame df.DataFrame) error 
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	err = self.createTable(dataFrame.Name(), cols)
+	err = t.createTable(dataFrame.Name(), cols)
 	if err != nil {
 		return err
 	}
 
-	err = self.insertData(dataFrame)
+	err = t.insertData(dataFrame)
 	return err
 }
 
-func (self *SQLLiteQueryEngine) Query(query string, data []df.DataFrame) (result df.DataFrame, err error) {
+func (t *sqlliteQueryEngine) Query(query string, data []df.DataFrame) (result df.DataFrame, err error) {
 	for _, r := range data {
-		err = self.registerDataFrame(r)
+		err = t.registerDataFrame(r)
 		if err != nil {
 			return result, err
 		}
 	}
 
-	rows, err := self.db.Query(query)
+	rows, err := t.db.Query(query)
 	if err != nil {
 		return
 	}
@@ -160,19 +165,21 @@ func (self *SQLLiteQueryEngine) Query(query string, data []df.DataFrame) (result
 		return
 	}
 
-	return df.NewInmemoryDataframe(cols, dataRows), err
+	inMempryDf := df.NewInmemoryDataframe(cols, dataRows)
+	result = &inMempryDf
+	return
 }
 
-func (self *SQLLiteQueryEngine) Close() {
-	self.db.Close()
-	self.dbFile.Close()
-	if self.dbFile != nil {
-		fileName := self.dbFile.Name()
+func (t *sqlliteQueryEngine) Close() {
+	t.db.Close()
+	t.dbFile.Close()
+	if t.dbFile != nil {
+		fileName := t.dbFile.Name()
 		os.Remove(fileName)
 	}
 }
 
-func NewSQLiteEngine(config map[string]string) (engine SQLLiteQueryEngine, err error) {
+func newSQLiteEngine(config map[string]string) (engine sqlliteQueryEngine, err error) {
 	var db *sql.DB
 	format, ok := config[ConfigEngineStorage]
 	if !ok {
@@ -181,16 +188,15 @@ func NewSQLiteEngine(config map[string]string) (engine SQLLiteQueryEngine, err e
 
 	if format == "memory" {
 		db, err = sql.Open("sqlite3", ":memory:")
-		return SQLLiteQueryEngine{db: db}, nil
-	} else {
-		dataFile, err := ioutil.TempFile("", "pq.*.sq")
-		if err != nil {
-			return engine, err
-		}
-		db, err = sql.Open("sqlite3", dataFile.Name())
-		if err != nil {
-			return engine, err
-		}
-		return SQLLiteQueryEngine{db: db, dbFile: dataFile}, nil
+		return sqlliteQueryEngine{db: db}, nil
 	}
+	dataFile, err := ioutil.TempFile("", "pq.*.sq")
+	if err != nil {
+		return engine, err
+	}
+	db, err = sql.Open("sqlite3", dataFile.Name())
+	if err != nil {
+		return engine, err
+	}
+	return sqlliteQueryEngine{db: db, dbFile: dataFile}, nil
 }

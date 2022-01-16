@@ -10,53 +10,54 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
+// ConfigStdType source format for StdIn/Out
 const ConfigStdType = "std.type"
 
 var stdConfig = map[string]string{
 	ConfigStdType: "json",
 }
 
-type StdDataSource struct {
+type stdDataSource struct {
 }
 
-func (self *StdDataSource) Name() string {
+func (t *stdDataSource) Name() string {
 	return "std"
 }
 
-func (self *StdDataSource) Args() map[string]string {
+func (t *stdDataSource) Args() map[string]string {
 	return stdConfig
 }
 
-func (self *StdDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
-	return &StdDataSourceReader{reader: reader, args: args}, nil
+func (t *stdDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
+	return &stdDataSourceReader{reader: reader, args: args}, nil
 }
 
-func (self *StdDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
-	return &StdDataSourceWriter{data: data, args: args}, nil
+func (t *stdDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
+	return &stdDataSourceWriter{data: data, args: args}, nil
 }
 
-type StdDataSourceWriter struct {
+type stdDataSourceWriter struct {
 	data df.DataFrame
 	args map[string]string
 }
 
-func (self *StdDataSourceWriter) Write(writer io.Writer) error {
+func (t *stdDataSourceWriter) Write(writer io.Writer) error {
 	return errors.New("Unsupported")
 }
 
-type StdDataSourceReader struct {
+type stdDataSourceReader struct {
 	reader  io.Reader
 	args    map[string]string
 	records [][]string
 }
 
-func (self *StdDataSourceReader) Schema() (columns []df.Column, err error) {
-	err = self.init()
+func (t *stdDataSourceReader) Schema() (columns []df.Column, err error) {
+	err = t.init()
 	if err != nil {
 		return
 	}
 
-	headerStr, ok := self.args["fmt.csv.header"]
+	headerStr, ok := t.args["fmt.csv.header"]
 	header := true
 	if ok {
 		header, err = strconv.ParseBool(headerStr)
@@ -65,9 +66,9 @@ func (self *StdDataSourceReader) Schema() (columns []df.Column, err error) {
 		}
 	}
 
-	columns = make([]df.Column, len(self.records[0]))
+	columns = make([]df.Column, len(t.records[0]))
 	f, _ := df.GetFormat("string")
-	for i, col := range self.records[0] {
+	for i, col := range t.records[0] {
 		if header {
 			columns[i] = df.Column{Name: col, Format: f}
 		} else {
@@ -77,14 +78,14 @@ func (self *StdDataSourceReader) Schema() (columns []df.Column, err error) {
 	return
 }
 
-func (self *StdDataSourceReader) Data() (data [][]interface{}, err error) {
-	err = self.init()
+func (t *stdDataSourceReader) Data() (data [][]interface{}, err error) {
+	err = t.init()
 	if err != nil {
 		return
 	}
 
-	data = make([][]interface{}, len(self.records)-1)
-	for i, record := range self.records[1:] {
+	data = make([][]interface{}, len(t.records)-1)
+	for i, record := range t.records[1:] {
 		row := make([]interface{}, len(record))
 		for j, cell := range record {
 			row[j] = cell
@@ -95,12 +96,12 @@ func (self *StdDataSourceReader) Data() (data [][]interface{}, err error) {
 	return
 }
 
-func (self *StdDataSourceReader) init() (err error) {
-	if self.records != nil {
+func (t *stdDataSourceReader) init() (err error) {
+	if t.records != nil {
 		return nil
 	}
-	csvReader := csv.NewReader(self.reader)
-	seprator, ok := self.args["fmt.csv.sep"]
+	csvReader := csv.NewReader(t.reader)
+	seprator, ok := t.args["fmt.csv.sep"]
 	if ok {
 		if len(seprator) == 1 {
 			r, _ := utf8.DecodeRuneInString(seprator)
@@ -115,6 +116,6 @@ func (self *StdDataSourceReader) init() (err error) {
 	if err != nil {
 		return
 	}
-	self.records = records
+	t.records = records
 	return
 }

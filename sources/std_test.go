@@ -7,6 +7,6 @@ import (
 )
 
 func TestStdDataSource(t *testing.T) {
-	source := StdDataSource{}
+	source := stdDataSource{}
 	assert.Equal(t, source.Name(), "std")
 }

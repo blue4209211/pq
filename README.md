@@ -33,6 +33,11 @@ Run Query on Files, StdIn and Stor to a file
 pq -output=/tmp/response.json 'select * from test1,stdin' test1.json -
 ```
 
+Run Query on File patterns (requires aliasing else throws error)
+```
+pq -output=/tmp/response.json 'select * from p1' /data/*/*/*.json#p1 -
+```
+
 
 Print Help
 ```
@@ -102,7 +107,7 @@ Usage of pq:
 ```
 make build
 make install
-
+make test
 ```
 
 ## Supported SQL Functions
@@ -110,9 +115,17 @@ make install
 
 ## TODO
 - performance improvements
+    - Benechmark existing perf
+    - Improve performance
 - better support for json
+    - store json object instead of strings
+    - Autodetetct json formatting
 - more source types
     - parquet
-    - avro
     - xml
+    - avro
 - handling on unstructured data (logfiles)
+    - full text search
+- read from external source systems
+    - s3
+    - dynamodb

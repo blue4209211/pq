@@ -26,13 +26,13 @@ func main() {
 
 	confInputCSVSep := flag.String("input."+sources.ConfigCsvSep, ",", "CSV File Seprator")
 	confInputCSVHeader := flag.Bool("input."+sources.ConfigCsvHeader, true, "First Line as Header")
-	confInputJSONSingleLine := flag.Bool("input."+sources.ConfigJsonSingleLine, false, "Parse JSON in multiline mode")
+	confInputJSONSingleLine := flag.Bool("input."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
 	confInputStdType := flag.String("input."+sources.ConfigStdType, "json", "Format for Reading from Std(console)")
 
 	confOutputStdType := flag.String("output."+sources.ConfigStdType, "json", "Format for Writing to Std(console)")
 	confOutputCSVSep := flag.String("output."+sources.ConfigCsvSep, ",", "CSV File Seprator")
 	confOutputCSVHeader := flag.Bool("output."+sources.ConfigCsvHeader, true, "First Line as Header")
-	confOutputJSONSingleLine := flag.Bool("output."+sources.ConfigJsonSingleLine, false, "Parse JSON in multiline mode")
+	confOutputJSONSingleLine := flag.Bool("output."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
 
 	confOutputfile := flag.String("output", "-", "Resoult Output, Defaults to Stdout")
 	confLoggerName := flag.String("logger", "info", "Logger - debug/info/warning/error")
@@ -54,13 +54,13 @@ func main() {
 	inputConfig := map[string]string{}
 	inputConfig[sources.ConfigCsvSep] = *confInputCSVSep
 	inputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confInputCSVHeader)
-	inputConfig[sources.ConfigJsonSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
+	inputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
 	inputConfig[sources.ConfigStdType] = *confInputStdType
 
 	outputConfig := map[string]string{}
 	outputConfig[sources.ConfigCsvSep] = *confOutputCSVSep
 	outputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confOutputCSVHeader)
-	outputConfig[sources.ConfigJsonSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
+	outputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
 	outputConfig[sources.ConfigStdType] = *confOutputStdType
 
 	log.Debug("input configs - %s", inputConfig)

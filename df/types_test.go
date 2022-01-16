@@ -25,6 +25,8 @@ func TestIntType(t *testing.T) {
 	f, err := GetFormatFromKind(reflect.Int)
 	assert.NoError(t, err)
 
+	assert.Equal(t, f.Name(), "integer")
+
 	c, err := f.Convert("1")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), c)
@@ -48,6 +50,7 @@ func TestIntType(t *testing.T) {
 func TestDoubleType(t *testing.T) {
 	f, err := GetFormatFromKind(reflect.Float64)
 	assert.NoError(t, err)
+	assert.Equal(t, f.Name(), "double")
 
 	c, err := f.Convert("1")
 	assert.NoError(t, err)
@@ -72,6 +75,7 @@ func TestDoubleType(t *testing.T) {
 func TestStringType(t *testing.T) {
 	f, err := GetFormatFromKind(reflect.String)
 	assert.NoError(t, err)
+	assert.Equal(t, f.Name(), "string")
 
 	c, err := f.Convert(1)
 	assert.NoError(t, err)
@@ -100,6 +104,7 @@ func TestStringType(t *testing.T) {
 func TestBoolType(t *testing.T) {
 	f, err := GetFormatFromKind(reflect.Bool)
 	assert.NoError(t, err)
+	assert.Equal(t, f.Name(), "boolean")
 
 	c, err := f.Convert("1")
 	assert.NoError(t, err)
