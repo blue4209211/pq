@@ -38,6 +38,15 @@ Run Query on File patterns (requires aliasing else throws error)
 pq -output=/tmp/response.json 'select * from p1' /data/*/*/*.json#p1 -
 ```
 
+Read data from nexted json
+```
+echo '[{"a":"1", "b":true,"c":1, "d":[1,2,3], "e": "[{\"ea\":1, \"eb\":2}, {\"ea\":3, \"eb\":4}]"}]' | pq  'select json_extract(value, "$.ea") as ea from stdin, json_each(stdin.e)' -
+```
+
+Show table schema
+```
+echo '[{"a":"1", "b":true,"c":1, "d":[1,2,3], "e": 2.1}]' | pq  'pragma table_info("stdin")' -
+```
 
 Print Help
 ```

@@ -18,10 +18,9 @@ import (
 func main() {
 
 	startTime := time.Now()
-
 	defer func() {
 		elaspedTime := time.Since(startTime)
-		log.Info("Execution Time %s", elaspedTime)
+		log.Debug("Execution Time %s", elaspedTime)
 	}()
 
 	confInputCSVSep := flag.String("input."+sources.ConfigCsvSep, ",", "CSV File Seprator")
@@ -36,6 +35,7 @@ func main() {
 
 	confOutputfile := flag.String("output", "-", "Resoult Output, Defaults to Stdout")
 	confLoggerName := flag.String("logger", "info", "Logger - debug/info/warning/error")
+	confEngineStorage := flag.String(engine.ConfigEngineStorage, "memory", "Logger - memory/file")
 
 	flag.Parse()
 
@@ -56,12 +56,14 @@ func main() {
 	inputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confInputCSVHeader)
 	inputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
 	inputConfig[sources.ConfigStdType] = *confInputStdType
+	inputConfig[engine.ConfigEngineStorage] = *confEngineStorage
 
 	outputConfig := map[string]string{}
 	outputConfig[sources.ConfigCsvSep] = *confOutputCSVSep
 	outputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confOutputCSVHeader)
 	outputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
 	outputConfig[sources.ConfigStdType] = *confOutputStdType
+	outputConfig[engine.ConfigEngineStorage] = *confEngineStorage
 
 	log.Debug("input configs - %s", inputConfig)
 	for i, f := range fileNames {
@@ -98,7 +100,6 @@ func writeRespose(data df.DataFrame, config map[string]string, format string, ou
 		defer file.Close()
 		writerBuf = file
 	} else {
-		log.Info("Response =")
 		writerBuf = os.Stdout
 	}
 

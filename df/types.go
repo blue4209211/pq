@@ -18,7 +18,7 @@ func (self intFormat) String() string {
 }
 
 func (self intFormat) Name() string {
-	return "integer"
+	return self.name
 }
 
 func (self intFormat) Type() reflect.Kind {
@@ -41,7 +41,7 @@ func (self stringFormat) String() string {
 }
 
 func (self stringFormat) Name() string {
-	return "string"
+	return self.name
 }
 
 func (self stringFormat) Type() reflect.Kind {
@@ -64,7 +64,7 @@ func (self boolFormat) String() string {
 }
 
 func (self boolFormat) Name() string {
-	return "boolean"
+	return self.name
 }
 
 func (self boolFormat) Type() reflect.Kind {
@@ -87,7 +87,7 @@ func (self doubleFormat) String() string {
 }
 
 func (self doubleFormat) Name() string {
-	return "double"
+	return self.name
 }
 
 func (self doubleFormat) Type() reflect.Kind {
@@ -101,20 +101,27 @@ func (self doubleFormat) Convert(i interface{}) (interface{}, error) {
 	return i2double(i)
 }
 
+// GetFormatFromKind returns format based on kind
 func GetFormatFromKind(t reflect.Kind) (format DataFrameFormat, err error) {
 	return GetFormat(t.String())
 }
 
+var intFormatObj intFormat = intFormat{name: "integer"}
+var stringFormatObj stringFormat = stringFormat{name: "string"}
+var doubleFormatObj doubleFormat = doubleFormat{name: "double"}
+var boolFormatObj boolFormat = boolFormat{name: "boolean"}
+
+// GetFormat returns format based on type
 func GetFormat(t string) (format DataFrameFormat, err error) {
 	t = strings.ToLower(t)
 	if t == "string" || t == "text" {
-		format = stringFormat{name: "string"}
+		format = stringFormatObj
 	} else if t == "float64" || t == "float32" || t == "double" {
-		format = doubleFormat{name: "double"}
+		format = doubleFormatObj
 	} else if t == "integer" || t == "int8" || t == "int16" || t == "int32" || t == "int64" || t == "uint8" || t == "uint16" || t == "uint32" || t == "uint64" || t == "int" || t == "uint" {
-		format = intFormat{name: "integer"}
+		format = intFormatObj
 	} else if t == "bool" || t == "boolean" {
-		format = boolFormat{name: "boolean"}
+		format = boolFormatObj
 	} else {
 		err = errors.New(t)
 

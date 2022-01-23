@@ -9,25 +9,79 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/blue4209211/pq/df"
 )
 
 func readJSONByLine(reader io.Reader) (objMapList []map[string]interface{}, err error) {
-	scanner := bufio.NewScanner(reader)
+	bufferedReader := bufio.NewReader(reader)
+	jobs := make(chan string, 5)
+	results := make(chan asyncJSONReadResult, 100)
+	wg := new(sync.WaitGroup)
+	objMapListChannel := make(chan asyncJSONReadResult, 1)
+	defer close(objMapListChannel)
 
-	objMapList = make([]map[string]interface{}, 0)
-
-	for scanner.Scan() {
-		jsonText := scanner.Text()
-		objs, err := readJSONByArray(jsonText)
-		if err != nil {
-			return objMapList, err
-		}
-		objMapList = append(objMapList, objs...)
-
+	for w := 0; w < 3; w++ {
+		wg.Add(1)
+		go readJSONByArrayAsync(jobs, results, wg)
 	}
-	return objMapList, err
+
+	go resultCollector(objMapListChannel, results)
+
+	// in somecases line size gets bigger than default scanner settings
+	// so using reader to handle those scenarios
+	jsonText := ""
+	for err == nil {
+		jsonTextArr, isPrefix, err := bufferedReader.ReadLine()
+		jsonText = jsonText + string(jsonTextArr)
+		if isPrefix {
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+
+		jobs <- jsonText
+		jsonText = ""
+	}
+
+	close(jobs)
+	wg.Wait()
+	close(results)
+	for r := range objMapListChannel {
+		return r.data, r.err
+	}
+	return objMapList, errors.New("Unable to read data")
+}
+
+type asyncJSONReadResult struct {
+	data []map[string]interface{}
+	err  error
+}
+
+func resultCollector(collector chan<- asyncJSONReadResult, results <-chan asyncJSONReadResult) {
+	objMapList := make([]map[string]interface{}, 0)
+	for r := range results {
+		if r.err != nil {
+			collector <- asyncJSONReadResult{data: objMapList, err: r.err}
+			break
+		} else {
+			objMapList = append(objMapList, r.data...)
+		}
+	}
+
+	collector <- asyncJSONReadResult{data: objMapList, err: nil}
+}
+
+func readJSONByArrayAsync(jobs <-chan string, results chan<- asyncJSONReadResult, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for data := range jobs {
+		r, e := readJSONByArray(data)
+		results <- asyncJSONReadResult{data: r, err: e}
+	}
+
 }
 
 func readJSONByArray(jsonText string) (objMapList []map[string]interface{}, err error) {
@@ -48,6 +102,7 @@ func readJSONByArray(jsonText string) (objMapList []map[string]interface{}, err 
 		return
 	}
 	objMapList[0] = objMap
+
 	return
 }
 

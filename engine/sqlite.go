@@ -10,15 +10,13 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/log"
-
-	// initialize sqlite
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 // ConfigEngineStorage -  default storage, defaults to memory
 const ConfigEngineStorage = "engine.storage"
 
-type sqlliteQueryEngine struct {
+type sqliteQueryEngine struct {
 	db     *sql.DB
 	dbFile *os.File
 }
@@ -30,20 +28,21 @@ func getSqliteType(c df.DataFrameFormat) string {
 	return c.Name()
 }
 
-func (t *sqlliteQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
+func (t *sqliteQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
 	sqlStmt := `create table "%s" (%s);`
 	columnStr := ""
 	for _, col := range cols {
 		columnStr = columnStr + " \"" + col.Name + "\" " + getSqliteType(col.Format) + " ,"
 	}
-
 	sqlStmt = fmt.Sprintf(sqlStmt, tableName, columnStr[0:len(columnStr)-1])
+	if err != nil {
+		return err
+	}
 	_, err = t.db.Exec(sqlStmt)
-
 	return err
 }
 
-func (t *sqlliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
+func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
 	cols, err := dataFrame.Schema()
 	if err != nil {
@@ -83,7 +82,7 @@ func (t *sqlliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 	return err
 }
 
-func (t *sqlliteQueryEngine) registerDataFrame(dataFrame df.DataFrame) error {
+func (t *sqliteQueryEngine) RegisterTable(dataFrame df.DataFrame) error {
 
 	cols, err := dataFrame.Schema()
 	if err != nil {
@@ -102,15 +101,12 @@ func (t *sqlliteQueryEngine) registerDataFrame(dataFrame df.DataFrame) error {
 	return err
 }
 
-func (t *sqlliteQueryEngine) Query(query string, data []df.DataFrame) (result df.DataFrame, err error) {
-	for _, r := range data {
-		err = t.registerDataFrame(r)
-		if err != nil {
-			return result, err
-		}
-	}
+func (t *sqliteQueryEngine) Query(query string) (result df.DataFrame, err error) {
+	return queryInternal(t.db, query)
+}
 
-	rows, err := t.db.Query(query)
+func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
+	rows, err := db.Query(query)
 	if err != nil {
 		return
 	}
@@ -136,7 +132,7 @@ func (t *sqlliteQueryEngine) Query(query string, data []df.DataFrame) (result df
 		cols[i] = df.Column{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]interface{}, 0)
+	dataRows := make([][]interface{}, 0, 10)
 
 	for rows.Next() {
 		dataRowPtrs := make([]interface{}, len(sqlCols))
@@ -165,38 +161,58 @@ func (t *sqlliteQueryEngine) Query(query string, data []df.DataFrame) (result df
 		return
 	}
 
-	inMempryDf := df.NewInmemoryDataframe(cols, dataRows)
-	result = &inMempryDf
+	inMemoryDf := df.NewInmemoryDataframe(cols, dataRows)
+	result = &inMemoryDf
 	return
 }
 
-func (t *sqlliteQueryEngine) Close() {
+func (t *sqliteQueryEngine) Close() {
 	t.db.Close()
-	t.dbFile.Close()
 	if t.dbFile != nil {
+		t.dbFile.Close()
 		fileName := t.dbFile.Name()
 		os.Remove(fileName)
 	}
 }
 
-func newSQLiteEngine(config map[string]string) (engine sqlliteQueryEngine, err error) {
+var module pqModule = pqModule{}
+var moduleRegistered bool = false
+
+func newSQLiteEngine(config map[string]string, data []df.DataFrame) (engine queryEngine, err error) {
 	var db *sql.DB
 	format, ok := config[ConfigEngineStorage]
 	if !ok {
 		format = "memory"
 	}
-
 	if format == "memory" {
 		db, err = sql.Open("sqlite3", ":memory:")
-		return sqlliteQueryEngine{db: db}, nil
+		engine = &sqliteQueryEngine{db: db}
+	} else if format == "pq" {
+		if !moduleRegistered {
+			sql.Register("sqlite3_pq", &sqlite3.SQLiteDriver{
+				ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+					return conn.CreateModule("pq", &module)
+				},
+			})
+			moduleRegistered = true
+		}
+		db, err = sql.Open("sqlite3_pq", ":memory:")
+		if err != nil {
+			return engine, err
+		}
+		engine = &sqlitePQQueryEngine{&module, db}
+	} else if format == "file" {
+		dataFile, err := ioutil.TempFile("", "pq.*.sq")
+		if err != nil {
+			return engine, err
+		}
+		db, err = sql.Open("sqlite3", dataFile.Name())
+		if err != nil {
+			return engine, err
+		}
+		engine = &sqliteQueryEngine{db: db, dbFile: dataFile}
+	} else {
+		err = errors.New("Unknown Format - " + format)
 	}
-	dataFile, err := ioutil.TempFile("", "pq.*.sq")
-	if err != nil {
-		return engine, err
-	}
-	db, err = sql.Open("sqlite3", dataFile.Name())
-	if err != nil {
-		return engine, err
-	}
-	return sqlliteQueryEngine{db: db, dbFile: dataFile}, nil
+	return
 }
