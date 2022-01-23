@@ -20,22 +20,26 @@ func main() {
 	startTime := time.Now()
 	defer func() {
 		elaspedTime := time.Since(startTime)
-		log.Debug("Execution Time %s", elaspedTime)
+		log.Debug("Execution Time ", elaspedTime)
 	}()
 
 	confInputCSVSep := flag.String("input."+sources.ConfigCsvSep, ",", "CSV File Seprator")
 	confInputCSVHeader := flag.Bool("input."+sources.ConfigCsvHeader, true, "First Line as Header")
 	confInputJSONSingleLine := flag.Bool("input."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
 	confInputStdType := flag.String("input."+sources.ConfigStdType, "json", "Format for Reading from Std(console)")
+	confInputXmlElementName := flag.String("input."+sources.ConfigXMLElementName, "element", "XML Element to use for Parsing XML file")
+	confInputXmlSingleLine := flag.Bool("input."+sources.ConfigXMLSingleLine, true, "Read Xml element from each line")
 
 	confOutputStdType := flag.String("output."+sources.ConfigStdType, "json", "Format for Writing to Std(console)")
 	confOutputCSVSep := flag.String("output."+sources.ConfigCsvSep, ",", "CSV File Seprator")
 	confOutputCSVHeader := flag.Bool("output."+sources.ConfigCsvHeader, true, "First Line as Header")
 	confOutputJSONSingleLine := flag.Bool("output."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
+	confOutputXmlElementName := flag.String("output."+sources.ConfigXMLElementName, "element", "XML Element to use for Writing XML file")
+	confOutputXmlSingleLine := flag.Bool("output."+sources.ConfigXMLSingleLine, true, "Write 1 row per each line")
 
 	confOutputfile := flag.String("output", "-", "Resoult Output, Defaults to Stdout")
 	confLoggerName := flag.String("logger", "info", "Logger - debug/info/warning/error")
-	confEngineStorage := flag.String(engine.ConfigEngineStorage, "memory", "Logger - memory/file")
+	confEngineStorage := flag.String(engine.ConfigEngineStorage, "pq", "Logger - memory/file")
 
 	flag.Parse()
 
@@ -57,6 +61,8 @@ func main() {
 	inputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
 	inputConfig[sources.ConfigStdType] = *confInputStdType
 	inputConfig[engine.ConfigEngineStorage] = *confEngineStorage
+	inputConfig[sources.ConfigXMLElementName] = *confInputXmlElementName
+	inputConfig[sources.ConfigXMLSingleLine] = strconv.FormatBool(*confInputXmlSingleLine)
 
 	outputConfig := map[string]string{}
 	outputConfig[sources.ConfigCsvSep] = *confOutputCSVSep
@@ -64,24 +70,26 @@ func main() {
 	outputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
 	outputConfig[sources.ConfigStdType] = *confOutputStdType
 	outputConfig[engine.ConfigEngineStorage] = *confEngineStorage
+	outputConfig[sources.ConfigXMLElementName] = *confOutputXmlElementName
+	outputConfig[sources.ConfigXMLSingleLine] = strconv.FormatBool(*confOutputXmlSingleLine)
 
-	log.Debug("input configs - %s", inputConfig)
+	log.Debug("input configs - ", inputConfig)
 	for i, f := range fileNames {
 		if f != "-" {
 			f, err := filepath.Abs(f)
 			if err != nil {
-				log.Error("Unable to Read Path - %s, %s", f, err)
+				log.Error("Unable to Read Path -", f, err)
 				os.Exit(1)
 			}
 		}
 		fileNames[i] = f
 	}
 
-	log.Debug("files - %s", fileNames)
+	log.Debug("files - ", fileNames)
 
 	df, err := engine.QueryFiles(query, fileNames, inputConfig)
 	if err != nil {
-		log.Error("Error - %s", err)
+		log.Error("Error - ", err)
 		os.Exit(1)
 	}
 
@@ -105,15 +113,15 @@ func writeRespose(data df.DataFrame, config map[string]string, format string, ou
 
 	source, err := sources.GetSource(format)
 	if err != nil {
-		log.Info("Unable to Get Source = %s", err)
+		log.Info("Unable to Get Source = ", err)
 	}
 	writer, err := source.Writer(data, config)
 	if err != nil {
-		log.Info("Unable to Get Source Writer = %s", err)
+		log.Info("Unable to Get Source Writer = ", err)
 	}
 	err = writer.Write(writerBuf)
 	if err != nil {
-		log.Error("Unable to Write Response %s", err)
+		log.Error("Unable to Write Response ", err)
 	}
 	return
 }

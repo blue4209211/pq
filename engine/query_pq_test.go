@@ -16,9 +16,8 @@ func TestQuerySingleCSVFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err := dataframe.Data()
-	assert.Equal(t, 4, len(data))
-	schema, err := dataframe.Schema()
+	assert.Equal(t, int64(4), dataframe.Len())
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 	assert.Equal(t, schema[0].Format.Name(), "string")
@@ -30,9 +29,8 @@ func TestQuerySingleCSVFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err = dataframe.Data()
-	assert.Equal(t, 4, len(data))
-	schema, err = dataframe.Schema()
+	assert.Equal(t, int64(4), dataframe.Len())
+	schema = dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 	assert.Equal(t, schema[0].Format.Name(), "string")
@@ -53,9 +51,8 @@ func TestQuerySingleJSONFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err := dataframe.Data()
-	assert.Equal(t, 4, len(data))
-	schema, err := dataframe.Schema()
+	assert.Equal(t, int64(4), dataframe.Len())
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 	assert.Equal(t, schema[0].Format.Name(), "double")
@@ -69,9 +66,8 @@ func TestQueryMultiFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err := dataframe.Data()
-	assert.Equal(t, 12, len(data))
-	schema, err := dataframe.Schema()
+	assert.Equal(t, int64(12), dataframe.Len())
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 
@@ -81,9 +77,8 @@ func TestQueryMultiFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err = dataframe.Data()
-	assert.Equal(t, 12, len(data))
-	schema, err = dataframe.Schema()
+	assert.Equal(t, int64(12), dataframe.Len())
+	schema = dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 }
@@ -95,9 +90,8 @@ func TestQueryCompressedFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err := dataframe.Data()
-	assert.Equal(t, 4, len(data))
-	schema, err := dataframe.Schema()
+	assert.Equal(t, int64(4), dataframe.Len())
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 
@@ -107,9 +101,8 @@ func TestQueryCompressedFilePQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
-	data, err = dataframe.Data()
-	assert.Equal(t, 12, len(data))
-	schema, err = dataframe.Schema()
+	assert.Equal(t, int64(12), dataframe.Len())
+	schema = dataframe.Schema()
 	assert.Equal(t, 3, len(schema))
 	assert.Equal(t, schema[0].Name, "c1")
 }
@@ -126,11 +119,11 @@ func BenchmarkDataframeQueryPQ(b *testing.B) {
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{
 		ConfigEngineStorage: "pq",
 	})
-	dataframe := sources.NewDatasourceDataFrame("t1", jsonReader)
+	dataframe := df.NewInmemoryDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {
-		queryDataFrames("select * from t1", []df.DataFrame{&dataframe}, map[string]string{
+		queryDataFrames("select * from t1", []df.DataFrame{dataframe}, map[string]string{
 			ConfigEngineStorage: "pq",
 		})
 	}
@@ -147,13 +140,13 @@ func BenchmarkMultipleDataframeQueryPQ(b *testing.B) {
 	}
 
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe := sources.NewDatasourceDataFrame("t1", jsonReader)
+	dataframe := df.NewInmemoryDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
 	jsonReader2, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe2 := sources.NewDatasourceDataFrame("t2", jsonReader2)
+	dataframe2 := df.NewInmemoryDataframeWithName("t2", jsonReader2.Schema(), jsonReader2.Data())
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {
-		queryDataFrames("select count(*) from t1,t2", []df.DataFrame{&dataframe, &dataframe2}, map[string]string{
+		queryDataFrames("select count(*) from t1,t2", []df.DataFrame{dataframe, dataframe2}, map[string]string{
 			ConfigEngineStorage: "pq",
 		})
 	}

@@ -1,0 +1,17 @@
+<root>
+    <element a="1">
+        <b>2</b>
+        <c>c1</c>
+        <d>d1</d>
+    </element>
+    <element a="3">
+        <b>4</b>
+        <c>c2</c>
+        <d>d,2</d>
+    </element>
+    <element a="5">
+        <b></b>
+        <c></c>
+        <d>d2</d>
+    </element>
+</root>

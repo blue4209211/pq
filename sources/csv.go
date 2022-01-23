@@ -33,7 +33,9 @@ func (t *csvDataSource) Name() string {
 }
 
 func (t *csvDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
-	return &csvDataSourceReader{reader: reader, args: args}, nil
+	csvReader := csvDataSourceReader{args: args}
+	err := csvReader.init(reader)
+	return &csvReader, err
 }
 
 func (t *csvDataSource) Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error) {
@@ -49,26 +51,18 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 	csvWriter := csv.NewWriter(writer)
 	defer csvWriter.Flush()
 
-	seprator, err := getColSeprator(t.args)
+	seprator, err := csvGetColSeprator(t.args)
 	if err != nil {
 		return
 	}
 	csvWriter.Comma = seprator
-	dataArr, err := t.data.Data()
-	if err != nil {
-		return
-	}
-
-	isHeader, err := isHeaderEnabled(t.args)
+	isHeader, err := csvIsHeaderEnabled(t.args)
 	if err != nil {
 		return
 	}
 
 	if isHeader {
-		schema, err := t.data.Schema()
-		if err != nil {
-			return err
-		}
+		schema := t.data.Schema()
 		cols := make([]string, len(schema))
 
 		for i, c := range schema {
@@ -78,9 +72,10 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 	}
 
 	format, err := df.GetFormat("string")
-	for _, rowInterface := range dataArr {
-		row := make([]string, len(rowInterface))
-		for i, r := range rowInterface {
+	for i := 0; i < int(t.data.Len()); i++ {
+		rowInterface := t.data.Get(i)
+		row := make([]string, rowInterface.Len())
+		for i, r := range rowInterface.Data() {
 			str, _ := format.Convert(r)
 			row[i] = str.(string)
 		}
@@ -90,18 +85,12 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 }
 
 type csvDataSourceReader struct {
-	reader   io.Reader
 	args     map[string]string
 	records  [][]string
 	isHeader bool
 }
 
-func (t *csvDataSourceReader) Schema() (columns []df.Column, err error) {
-	err = t.init()
-	if err != nil {
-		return
-	}
-
+func (t *csvDataSourceReader) Schema() (columns []df.Column) {
 	columns = make([]df.Column, len(t.records[0]))
 	f, _ := df.GetFormat("string")
 	for i, col := range t.records[0] {
@@ -114,12 +103,7 @@ func (t *csvDataSourceReader) Schema() (columns []df.Column, err error) {
 	return
 }
 
-func (t *csvDataSourceReader) Data() (data [][]interface{}, err error) {
-	err = t.init()
-	if err != nil {
-		return
-	}
-
+func (t *csvDataSourceReader) Data() (data [][]interface{}) {
 	index := 0
 	if t.isHeader {
 		index = 1
@@ -138,12 +122,9 @@ func (t *csvDataSourceReader) Data() (data [][]interface{}, err error) {
 	return
 }
 
-func (t *csvDataSourceReader) init() (err error) {
-	if t.records != nil {
-		return nil
-	}
-	csvReader := csv.NewReader(t.reader)
-	seprator, err := getColSeprator(t.args)
+func (t *csvDataSourceReader) init(reader io.Reader) (err error) {
+	csvReader := csv.NewReader(reader)
+	seprator, err := csvGetColSeprator(t.args)
 	if err != nil {
 		return
 	}
@@ -154,7 +135,7 @@ func (t *csvDataSourceReader) init() (err error) {
 	}
 	t.records = records
 
-	isHeader, err := isHeaderEnabled(t.args)
+	isHeader, err := csvIsHeaderEnabled(t.args)
 	if err != nil {
 		return
 	}
@@ -163,7 +144,7 @@ func (t *csvDataSourceReader) init() (err error) {
 	return
 }
 
-func isHeaderEnabled(args map[string]string) (header bool, err error) {
+func csvIsHeaderEnabled(args map[string]string) (header bool, err error) {
 	headerStr, ok := args[ConfigCsvHeader]
 	header = true
 	if ok {
@@ -176,7 +157,7 @@ func isHeaderEnabled(args map[string]string) (header bool, err error) {
 	return
 }
 
-func getColSeprator(args map[string]string) (sep rune, err error) {
+func csvGetColSeprator(args map[string]string) (sep rune, err error) {
 	seprator, ok := args[ConfigCsvSep]
 	if !ok {
 		seprator = ","

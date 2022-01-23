@@ -44,21 +44,10 @@ func (t *sqliteQueryEngine) createTable(tableName string, cols []df.Column) (err
 
 func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
-	cols, err := dataFrame.Schema()
-	if err != nil {
-		return err
-	}
-	data, err := dataFrame.Data()
-	if err != nil {
-		return err
-	}
-
-	if len(data) == 0 {
+	cols := dataFrame.Schema()
+	if dataFrame.Len() == 0 {
 		return
 	}
-
-	valueStrings := make([]string, 0, len(data))
-	valueArgs := make([]interface{}, 0, len(data)*len(cols))
 
 	colString := ""
 	quesString := ""
@@ -71,28 +60,37 @@ func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 	colString = colString[0 : len(colString)-1]
 	quesString = quesString[0 : len(quesString)-1]
 
-	for _, d := range data {
-		valueStrings = append(valueStrings, "("+quesString+")")
-		valueArgs = append(valueArgs, d...)
-	}
-	stmt := fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES %s", dataFrame.Name(), colString, strings.Join(valueStrings, ","))
+	batchSize := 1000
+	totalRecords := int(dataFrame.Len())
 
-	_, err = t.db.Exec(stmt, valueArgs...)
+	for i := 0; i < totalRecords; i = i + batchSize {
+		valueStrings := make([]string, 0, batchSize)
+		valueArgs := make([]interface{}, 0, batchSize*len(cols))
+
+		for j := i; j < (i+batchSize) && j < totalRecords; j++ {
+			valueStrings = append(valueStrings, "("+quesString+")")
+			valueArgs = append(valueArgs, dataFrame.Get(j).Data()...)
+		}
+		stmt := fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES %s", dataFrame.Name(), colString, strings.Join(valueStrings, ","))
+
+		_, err = t.db.Exec(stmt, valueArgs...)
+
+		if err != nil {
+			return err
+		}
+	}
 
 	return err
 }
 
 func (t *sqliteQueryEngine) RegisterTable(dataFrame df.DataFrame) error {
 
-	cols, err := dataFrame.Schema()
-	if err != nil {
-		return err
-	}
+	cols := dataFrame.Schema()
 	if len(cols) == 0 {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	err = t.createTable(dataFrame.Name(), cols)
+	err := t.createTable(dataFrame.Name(), cols)
 	if err != nil {
 		return err
 	}
@@ -126,13 +124,13 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 	for i, c := range sqlCols {
 		dfFormat, err := df.GetFormat(sqlColTypes[i].DatabaseTypeName())
 		if err != nil {
-			log.Debug("sql format error for - %s, %s, %s", c, sqlColTypes[i].DatabaseTypeName(), err)
+			log.Debugf("sql format error for - %s, %s, %s", c, sqlColTypes[i].DatabaseTypeName(), err)
 			dfFormat, err = df.GetFormat("string")
 		}
 		cols[i] = df.Column{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]interface{}, 0, 10)
+	dataRows := make([][]interface{}, 0, 100)
 
 	for rows.Next() {
 		dataRowPtrs := make([]interface{}, len(sqlCols))
@@ -162,7 +160,7 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 	}
 
 	inMemoryDf := df.NewInmemoryDataframe(cols, dataRows)
-	result = &inMemoryDf
+	result = inMemoryDf
 	return
 }
 
@@ -185,12 +183,26 @@ func newSQLiteEngine(config map[string]string, data []df.DataFrame) (engine quer
 		format = "memory"
 	}
 	if format == "memory" {
-		db, err = sql.Open("sqlite3", ":memory:")
+		if !moduleRegistered {
+			sql.Register("sqlite3_pq", &sqlite3.SQLiteDriver{
+				ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+					if err := conn.RegisterFunc("text_extract", textExtract, true); err != nil {
+						return err
+					}
+					return nil
+				},
+			})
+			moduleRegistered = true
+		}
+		db, err = sql.Open("sqlite3_pq", ":memory:")
 		engine = &sqliteQueryEngine{db: db}
 	} else if format == "pq" {
 		if !moduleRegistered {
 			sql.Register("sqlite3_pq", &sqlite3.SQLiteDriver{
 				ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+					if err := conn.RegisterFunc("text_extract", textExtract, true); err != nil {
+						return err
+					}
 					return conn.CreateModule("pq", &module)
 				},
 			})

@@ -38,7 +38,7 @@ Run Query on File patterns (requires aliasing else throws error)
 pq -output=/tmp/response.json 'select * from p1' /data/*/*/*.json#p1 -
 ```
 
-Read data from nexted json
+Read data from nested json
 ```
 echo '[{"a":"1", "b":true,"c":1, "d":[1,2,3], "e": "[{\"ea\":1, \"eb\":2}, {\"ea\":3, \"eb\":4}]"}]' | pq  'select json_extract(value, "$.ea") as ea from stdin, json_each(stdin.e)' -
 ```
@@ -82,6 +82,27 @@ pq --help
     - Single Char seprator or \t is supported
     - By default all data-type is treated as string
 
+### xml
+- Format
+    - Requires element to be specified in configuration, if not defined then will use `element` as default
+    - Attributes are specified by appending `_` in the start of attribute name
+    - By default all data-type is treated as string
+
+### parquet
+- Format
+    - Basic types supported
+    - Int96, ByteArray And FixedByteArray are converted to string
+    - Written data is not compressed
+
+
+### log
+- Format
+    - Exposes two columns`data`, `line` which can be used for searching data, data is not stored in memory and parsed at runtime
+
+## Addtitional Functions
+
+### text_extract
+exposes `text_extract` function which can be used for extracting data from the column `text_extract(data, index, [seprator])`
 
 ## Supported Args
 
@@ -123,15 +144,10 @@ make test
 - As supported by sqllite3 with json1 extension
 
 ## TODO
-- performance improvements
-    - Benechmark existing perf
-    - Improve performance
 - better support for json
-    - store json object instead of strings
-    - Autodetetct json formatting
+    - Autodetetct json formatting (improvements in parser)
 - more source types
     - parquet
-    - xml
     - avro
 - handling on unstructured data (logfiles)
     - full text search

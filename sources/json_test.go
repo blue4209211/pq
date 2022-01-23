@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blue4209211/pq/df"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +21,7 @@ func TestJSONDataSourceReader(t *testing.T) {
 	jsonReader, err := source.Reader(strings.NewReader(jsonString), map[string]string{})
 	assert.NoError(t, err)
 
-	schema, err := jsonReader.Schema()
+	schema := jsonReader.Schema()
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(schema))
@@ -32,7 +33,7 @@ func TestJSONDataSourceReader(t *testing.T) {
 	assert.Equal(t, "string", schema[3].Format.Name())
 	assert.Equal(t, "d", schema[3].Name)
 	assert.Equal(t, "string", schema[3].Format.Name())
-	data, err := jsonReader.Data()
+	data := jsonReader.Data()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
 	assert.Equal(t, 1.0, data[0][0])
@@ -55,7 +56,7 @@ func TestJSONDataSourceReader(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	schema, err = jsonReader.Schema()
+	schema = jsonReader.Schema()
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(schema))
@@ -67,7 +68,7 @@ func TestJSONDataSourceReader(t *testing.T) {
 	assert.Equal(t, "string", schema[3].Format.Name())
 	assert.Equal(t, "d", schema[3].Name)
 	assert.Equal(t, "string", schema[3].Format.Name())
-	data, err = jsonReader.Data()
+	data = jsonReader.Data()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
 	assert.Equal(t, 1.0, data[0][0])
@@ -87,17 +88,15 @@ func TestJSONDataSourceWriter(t *testing.T) {
 	jsonReader, err := source.Reader(strings.NewReader(jsonString), map[string]string{})
 	assert.NoError(t, err)
 
-	dataframe := NewDatasourceDataFrame("df_1", jsonReader)
+	dataframe := df.NewInmemoryDataframeWithName("df_1", jsonReader.Schema(), jsonReader.Data())
 	assert.Equal(t, dataframe.Name(), "df_1")
 
-	writer, err := source.Writer(&dataframe, map[string]string{
+	writer, err := source.Writer(dataframe, map[string]string{
 		ConfigJSONSingleLine: "false",
 	})
 	buff := new(strings.Builder)
 	writer.Write(buff)
 	assert.Equal(t, jsonString, buff.String())
-
-	t.Log()
 }
 
 func BenchmarkJSONParsing(b *testing.B) {
@@ -109,10 +108,24 @@ func BenchmarkJSONParsing(b *testing.B) {
 		jsonStringData = jsonStringData + "\n" + jsonString
 	}
 
-	for i := 0; i < b.N; i++ {
-		jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-		jsonReader.Schema()
-		jsonReader.Data()
-	}
+	b.Run("perf-alldata", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{
+				ConfigJSONSingleLine: "false",
+			})
+			jsonReader.Schema()
+			jsonReader.Data()
+		}
+	})
+
+	b.Run("perf-singleline", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{
+				ConfigJSONSingleLine: "true",
+			})
+			jsonReader.Schema()
+			jsonReader.Data()
+		}
+	})
 
 }

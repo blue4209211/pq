@@ -13,19 +13,19 @@ type intFormat struct {
 	name string
 }
 
-func (self intFormat) String() string {
-	return self.Name()
+func (t intFormat) String() string {
+	return t.Name()
 }
 
-func (self intFormat) Name() string {
-	return self.name
+func (t intFormat) Name() string {
+	return t.name
 }
 
-func (self intFormat) Type() reflect.Kind {
+func (t intFormat) Type() reflect.Kind {
 	return reflect.Int64
 }
 
-func (self intFormat) Convert(i interface{}) (interface{}, error) {
+func (t intFormat) Convert(i interface{}) (interface{}, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -36,19 +36,19 @@ type stringFormat struct {
 	name string
 }
 
-func (self stringFormat) String() string {
-	return self.Name()
+func (t stringFormat) String() string {
+	return t.Name()
 }
 
-func (self stringFormat) Name() string {
-	return self.name
+func (t stringFormat) Name() string {
+	return t.name
 }
 
-func (self stringFormat) Type() reflect.Kind {
+func (t stringFormat) Type() reflect.Kind {
 	return reflect.String
 }
 
-func (self stringFormat) Convert(i interface{}) (interface{}, error) {
+func (t stringFormat) Convert(i interface{}) (interface{}, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -59,19 +59,19 @@ type boolFormat struct {
 	name string
 }
 
-func (self boolFormat) String() string {
-	return self.Name()
+func (t boolFormat) String() string {
+	return t.Name()
 }
 
-func (self boolFormat) Name() string {
-	return self.name
+func (t boolFormat) Name() string {
+	return t.name
 }
 
-func (self boolFormat) Type() reflect.Kind {
+func (t boolFormat) Type() reflect.Kind {
 	return reflect.Bool
 }
 
-func (self boolFormat) Convert(i interface{}) (interface{}, error) {
+func (t boolFormat) Convert(i interface{}) (interface{}, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -82,19 +82,19 @@ type doubleFormat struct {
 	name string
 }
 
-func (self doubleFormat) String() string {
-	return self.Name()
+func (t doubleFormat) String() string {
+	return t.Name()
 }
 
-func (self doubleFormat) Name() string {
-	return self.name
+func (t doubleFormat) Name() string {
+	return t.name
 }
 
-func (self doubleFormat) Type() reflect.Kind {
+func (t doubleFormat) Type() reflect.Kind {
 	return reflect.Float64
 }
 
-func (self doubleFormat) Convert(i interface{}) (interface{}, error) {
+func (t doubleFormat) Convert(i interface{}) (interface{}, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -106,25 +106,31 @@ func GetFormatFromKind(t reflect.Kind) (format DataFrameFormat, err error) {
 	return GetFormat(t.String())
 }
 
-var intFormatObj intFormat = intFormat{name: "integer"}
-var stringFormatObj stringFormat = stringFormat{name: "string"}
-var doubleFormatObj doubleFormat = doubleFormat{name: "double"}
-var boolFormatObj boolFormat = boolFormat{name: "boolean"}
+// IntegerFormat integer format
+var IntegerFormat intFormat = intFormat{name: "integer"}
+
+// StringFormat string format
+var StringFormat stringFormat = stringFormat{name: "string"}
+
+// DoubleFormat double format
+var DoubleFormat doubleFormat = doubleFormat{name: "double"}
+
+// BoolFormat bool format
+var BoolFormat boolFormat = boolFormat{name: "boolean"}
 
 // GetFormat returns format based on type
 func GetFormat(t string) (format DataFrameFormat, err error) {
 	t = strings.ToLower(t)
 	if t == "string" || t == "text" {
-		format = stringFormatObj
+		format = StringFormat
 	} else if t == "float64" || t == "float32" || t == "double" {
-		format = doubleFormatObj
+		format = DoubleFormat
 	} else if t == "integer" || t == "int8" || t == "int16" || t == "int32" || t == "int64" || t == "uint8" || t == "uint16" || t == "uint32" || t == "uint64" || t == "int" || t == "uint" {
-		format = intFormatObj
+		format = IntegerFormat
 	} else if t == "bool" || t == "boolean" {
-		format = boolFormatObj
+		format = BoolFormat
 	} else {
 		err = errors.New(t)
-
 	}
 	return format, err
 }

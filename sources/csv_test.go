@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blue4209211/pq/df"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +26,7 @@ func TestCSVDataSourceReader(t *testing.T) {
 	csvReader, err := source.Reader(strings.NewReader(csvString), map[string]string{})
 	assert.NoError(t, err)
 
-	schema, err := csvReader.Schema()
+	schema := csvReader.Schema()
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(schema))
@@ -37,7 +38,7 @@ func TestCSVDataSourceReader(t *testing.T) {
 	assert.Equal(t, "string", schema[3].Format.Name())
 	assert.Equal(t, "d", schema[3].Name)
 	assert.Equal(t, "string", schema[3].Format.Name())
-	data, err := csvReader.Data()
+	data := csvReader.Data()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
 	assert.Equal(t, "1", data[0][0])
@@ -65,7 +66,7 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	schema, err := csvReader.Schema()
+	schema := csvReader.Schema()
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(schema))
@@ -77,7 +78,7 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 	assert.Equal(t, "string", schema[3].Format.Name())
 	assert.Equal(t, "c3", schema[3].Name)
 	assert.Equal(t, "string", schema[3].Format.Name())
-	data, err := csvReader.Data()
+	data := csvReader.Data()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
 
@@ -86,9 +87,6 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 		ConfigCsvHeader: "false",
 		ConfigCsvSep:    "^^",
 	})
-	assert.NoError(t, err)
-
-	schema, err = csvReader.Schema()
 	assert.Error(t, err)
 }
 
@@ -107,8 +105,8 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err := source.Reader(strings.NewReader(csvString), configs)
 	assert.NoError(t, err)
-	dataframe := NewDatasourceDataFrame("df_1", csvReader)
-	writer, err := source.Writer(&dataframe, configs)
+	dataframe := df.NewInmemoryDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	writer, err := source.Writer(dataframe, configs)
 	buff := new(strings.Builder)
 	writer.Write(buff)
 
@@ -125,8 +123,8 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err = source.Reader(strings.NewReader(csvStringWithHeader), configs)
 	assert.NoError(t, err)
-	dataframe = NewDatasourceDataFrame("df_1", csvReader)
-	writer, err = source.Writer(&dataframe, configs)
+	dataframe = df.NewInmemoryDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	writer, err = source.Writer(dataframe, configs)
 	buff = new(strings.Builder)
 	writer.Write(buff)
 
@@ -146,10 +144,12 @@ func BenchmarkCSVParsing(b *testing.B) {
 		csvStringData = csvStringData + "\n" + csvString
 	}
 
-	for i := 0; i < b.N; i++ {
-		csvReader, _ := source.Reader(strings.NewReader(csvStringData), map[string]string{})
-		csvReader.Schema()
-		csvReader.Data()
-	}
+	b.Run("perf-alldata", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			csvReader, _ := source.Reader(strings.NewReader(csvStringData), map[string]string{})
+			csvReader.Schema()
+			csvReader.Data()
+		}
+	})
 
 }

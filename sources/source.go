@@ -11,15 +11,17 @@ import (
 // DataFrameSource Provides interface for all the data sources
 type DataFrameSource interface {
 	Name() string
+	// TODO remove reader, use filepaths, currently hard to decide when to close reader
 	Reader(reader io.Reader, args map[string]string) (DataFrameReader, error)
+	// TODO remove reader, use filepaths
 	Writer(data df.DataFrame, args map[string]string) (DataFrameWriter, error)
 	Args() map[string]string
 }
 
 // DataFrameReader Provides interface to Read data/schema from source
 type DataFrameReader interface {
-	Schema() ([]df.Column, error)
-	Data() ([][]interface{}, error)
+	Schema() []df.Column
+	Data() [][]interface{}
 }
 
 // DataFrameWriter Writes dataframe to write
@@ -35,6 +37,10 @@ func GetSource(fmt string) (src DataFrameSource, err error) {
 		return &csvDataSource{}, err
 	} else if fmt == "json" {
 		return &jsonDataSource{}, err
+	} else if fmt == "xml" {
+		return &xmlDataSource{}, err
+	} else if fmt == "parquet" {
+		return &parquetDataSource{}, err
 	} else if fmt == "-" || fmt == "std" {
 		return &stdDataSource{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/log"
@@ -22,10 +23,19 @@ type queryEngine interface {
 }
 
 func queryDataFrames(query string, dfs []df.DataFrame, config map[string]string) (data df.DataFrame, err error) {
+	startTime := time.Now()
+
+	defer func() {
+		log.Debug("Query Execution Time ", time.Since(startTime).String())
+	}()
+
+	log.Debug("Starting Querying enging")
 	engine, err := newSQLiteEngine(config, dfs)
+
 	if err != nil {
 		return data, err
 	}
+
 	defer engine.Close()
 
 	if len(dfs) <= 1 {
@@ -85,6 +95,10 @@ func getFileDetails(fileName string) (path string, name string, ext string, comr
 		ext = "csv"
 	} else if strings.Index(path, ".json") >= 0 {
 		ext = "json"
+	} else if strings.Index(path, ".xml") >= 0 {
+		ext = "xml"
+	} else if strings.Index(path, ".parquet") >= 0 {
+		ext = "parquet"
 	}
 
 	if strings.Index(path, ".gz") >= 0 {
@@ -148,11 +162,14 @@ func QueryFiles(query string, fileOrDrs []string, config map[string]string) (dat
 		}
 
 		var mergedDf df.DataFrame
+		startTime := time.Now()
+		log.Debug("Reading data from FS - ", fileOrDirName)
 		if len(files) <= 1 {
 			mergedDf, err = readFilesToDataframeSync(fileOrDirName, files, &config)
 		} else {
 			mergedDf, err = readFilesToDataframeAsync(fileOrDirName, files, &config)
 		}
+		log.Debugf("Completed data read from FS (%s) in (%s) ", fileOrDirName, time.Since(startTime).String())
 		if err != nil {
 			return data, err
 		}
@@ -174,7 +191,7 @@ func readFilesToDataframeSync(fileOrDirName string, files []string, config *map[
 		}
 
 		if ext == "" {
-			log.Debug("unable to detect fileType for (%s), falling back to json", f)
+			log.Debugf("unable to detect fileType for (%s), falling back to json", f)
 			ext = "json"
 		}
 
@@ -242,7 +259,7 @@ func readFilesToDataframeSync(fileOrDirName string, files []string, config *map[
 			dfsFiles = append(dfsFiles, ds)
 		}
 	}
-	return mergeDfs(fileOrDirName, dfsFiles...)
+	return df.NewMergeDataframe(fileOrDirName, dfsFiles...)
 }
 
 type asyncReaderResult struct {
@@ -251,13 +268,15 @@ type asyncReaderResult struct {
 }
 
 func readFilesToDataframeAsync(fileOrDirName string, files []string, config *map[string]string) (data df.DataFrame, err error) {
-	jobs := make(chan string, 5)
 	// TODO fornow static value and we are not reading data in seprate channel
-	// this will hang is files are more than 100
-	results := make(chan asyncReaderResult, 100)
+	if len(files) > 200 {
+		return data, errors.New("More than 200 files are not supported")
+	}
+	jobs := make(chan string, len(files))
+	results := make(chan asyncReaderResult, len(files))
 	wg := new(sync.WaitGroup)
 
-	for w := 1; w <= len(files); w++ {
+	for w := 0; w < 5; w++ {
 		wg.Add(1)
 		go readFileToDataframeAsyncWorker(jobs, results, wg, config)
 	}
@@ -276,7 +295,7 @@ func readFilesToDataframeAsync(fileOrDirName string, files []string, config *map
 		}
 		dfsFiles = append(dfsFiles, ds.data)
 	}
-	return mergeDfs(fileOrDirName, dfsFiles...)
+	return df.NewMergeDataframe(fileOrDirName, dfsFiles...)
 }
 
 func readFileToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncReaderResult, wg *sync.WaitGroup, config *map[string]string) {
@@ -291,9 +310,10 @@ func readFileToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRead
 		}
 
 		if ext == "" {
-			log.Debug("unable to detect fileType for (%s), falling back to json", f)
 			ext = "json"
 		}
+
+		log.Debugf("reading file path(%s), name(%s), ext(%s), compression(%s)", path, name, ext, compression)
 
 		if path == "-" {
 			ext1, ok := (*config)["fmt.std.type"]
@@ -368,40 +388,6 @@ func readFileToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRead
 
 }
 
-func mergeDfs(name string, dfs ...df.DataFrame) (data df.DataFrame, err error) {
-
-	if len(dfs) == 0 {
-		return data, errors.New("Empty data")
-	}
-
-	cols, err := dfs[0].Schema()
-	if err != nil {
-		return
-	}
-
-	var records [][]interface{}
-	if len(dfs) == 1 {
-		records, err = dfs[0].Data()
-		if err != nil {
-			return
-		}
-	} else {
-		records = make([][]interface{}, 0)
-
-		for _, df := range dfs {
-			dfRecords, err := df.Data()
-			if err != nil {
-				return data, err
-			}
-			records = append(records, dfRecords...)
-		}
-	}
-
-	inMemoryDf := df.NewInmemoryDataframeWithName(name, cols, records)
-	data = &inMemoryDf
-	return
-}
-
 func getDataframeFromSource(name string, ext string, reader io.Reader, config *map[string]string) (data df.DataFrame, err error) {
 	streamSource, err := sources.GetSource(ext)
 	if err != nil {
@@ -411,13 +397,6 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 	if err != nil {
 		return data, err
 	}
-	dataframe := sources.NewDatasourceDataFrame(name, dataframeReader)
-	_, err = dataframe.Schema()
-
-	if err != nil {
-		return data, err
-	}
-
-	data = &dataframe
-	return
+	datsourceDf := df.NewInmemoryDataframeWithName(name, dataframeReader.Schema(), dataframeReader.Data())
+	return datsourceDf, nil
 }

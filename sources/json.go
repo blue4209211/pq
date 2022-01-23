@@ -5,36 +5,36 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/ioutil"
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/blue4209211/pq/df"
 )
 
-func readJSONByLine(reader io.Reader) (objMapList []map[string]interface{}, err error) {
+func jsonReadByLine(reader io.Reader) (objMapList []map[string]interface{}, err error) {
 	bufferedReader := bufio.NewReader(reader)
-	jobs := make(chan string, 5)
-	results := make(chan asyncJSONReadResult, 100)
+	jobs := make(chan []byte, 1000)
+	results := make(chan jsonAsyncReadResult, 1000)
 	wg := new(sync.WaitGroup)
-	objMapListChannel := make(chan asyncJSONReadResult, 1)
+	objMapListChannel := make(chan jsonAsyncReadResult, 1)
 	defer close(objMapListChannel)
 
-	for w := 0; w < 3; w++ {
+	for w := 0; w < 5; w++ {
 		wg.Add(1)
-		go readJSONByArrayAsync(jobs, results, wg)
+		go jsonReadByArrayAsync(jobs, results, wg)
 	}
 
-	go resultCollector(objMapListChannel, results)
+	go jsonResultCollector(objMapListChannel, results)
 
 	// in somecases line size gets bigger than default scanner settings
 	// so using reader to handle those scenarios
-	jsonText := ""
+	jsonData := make([]byte, 0, 10000)
 	for err == nil {
 		jsonTextArr, isPrefix, err := bufferedReader.ReadLine()
-		jsonText = jsonText + string(jsonTextArr)
+		jsonData = append(jsonData, jsonTextArr...)
 		if isPrefix {
 			continue
 		}
@@ -42,8 +42,8 @@ func readJSONByLine(reader io.Reader) (objMapList []map[string]interface{}, err 
 			break
 		}
 
-		jobs <- jsonText
-		jsonText = ""
+		jobs <- jsonData
+		jsonData = make([]byte, 0, 10000)
 	}
 
 	close(jobs)
@@ -55,51 +55,46 @@ func readJSONByLine(reader io.Reader) (objMapList []map[string]interface{}, err 
 	return objMapList, errors.New("Unable to read data")
 }
 
-type asyncJSONReadResult struct {
+type jsonAsyncReadResult struct {
 	data []map[string]interface{}
 	err  error
 }
 
-func resultCollector(collector chan<- asyncJSONReadResult, results <-chan asyncJSONReadResult) {
+func jsonResultCollector(collector chan<- jsonAsyncReadResult, results <-chan jsonAsyncReadResult) {
 	objMapList := make([]map[string]interface{}, 0)
 	for r := range results {
 		if r.err != nil {
-			collector <- asyncJSONReadResult{data: objMapList, err: r.err}
+			collector <- jsonAsyncReadResult{data: objMapList, err: r.err}
 			break
 		} else {
 			objMapList = append(objMapList, r.data...)
 		}
 	}
 
-	collector <- asyncJSONReadResult{data: objMapList, err: nil}
+	collector <- jsonAsyncReadResult{data: objMapList, err: nil}
 }
 
-func readJSONByArrayAsync(jobs <-chan string, results chan<- asyncJSONReadResult, wg *sync.WaitGroup) {
+func jsonReadByArrayAsync(jobs <-chan []byte, results chan<- jsonAsyncReadResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for data := range jobs {
-		r, e := readJSONByArray(data)
-		results <- asyncJSONReadResult{data: r, err: e}
+		r, e := jsonReadToArray(data, jsonIsArray(data))
+		results <- jsonAsyncReadResult{data: r, err: e}
 	}
 
 }
 
-func readJSONByArray(jsonText string) (objMapList []map[string]interface{}, err error) {
-	isArray := false
-	if strings.Index(jsonText, "[") == 0 {
-		isArray = true
-	}
-	byetArr := []byte(jsonText)
+func jsonReadToArray(byteArr []byte, isArray bool) (objMapList []map[string]interface{}, err error) {
 	if isArray {
 		objMapList = make([]map[string]interface{}, 0)
-		err = json.Unmarshal(byetArr, &objMapList)
+		err = json.Unmarshal(byteArr, &objMapList)
 		return
 	}
 	objMap := make(map[string]interface{})
 	objMapList = make([]map[string]interface{}, 1)
-	err = json.Unmarshal(byetArr, &objMap)
+	err = json.Unmarshal(byteArr, &objMap)
 	if err != nil {
-		return
+		return objMapList, err
 	}
 	objMapList[0] = objMap
 
@@ -129,7 +124,9 @@ func (t *jsonDataSource) Writer(data df.DataFrame, args map[string]string) (Data
 }
 
 func (t *jsonDataSource) Reader(reader io.Reader, args map[string]string) (DataFrameReader, error) {
-	return &jsonDataSourceReader{reader: reader, args: args}, nil
+	jsonReader := jsonDataSourceReader{args: args}
+	err := jsonReader.init(reader)
+	return &jsonReader, err
 }
 
 type jsonDataSourceWriter struct {
@@ -138,26 +135,18 @@ type jsonDataSourceWriter struct {
 }
 
 func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
-	records, err := t.data.Data()
-	if err != nil {
-		return
-	}
-
-	schema, err := t.data.Schema()
-	if err != nil {
-		return
-	}
-
-	jsonRecords := make([]map[string]interface{}, len(records))
-	for index, row := range records {
+	schema := t.data.Schema()
+	jsonRecords := make([]map[string]interface{}, t.data.Len())
+	for index := 0; index < int(t.data.Len()); index++ {
+		row := t.data.Get(index)
 		obj := make(map[string]interface{})
 		for i, c := range schema {
-			obj[c.Name] = row[i]
+			obj[c.Name] = row.Data()[i]
 		}
 		jsonRecords[index] = obj
 	}
 
-	singlelineParse, err := isSingleLineParse(t.args)
+	singlelineParse, err := jsonIsSingleLineParse(t.args)
 	if err != nil {
 		return err
 	}
@@ -178,55 +167,42 @@ func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
 }
 
 type jsonDataSourceReader struct {
-	reader  io.Reader
 	args    map[string]string
 	cols    []df.Column
 	records [][]interface{}
 }
 
-func (t *jsonDataSourceReader) Schema() (columns []df.Column, err error) {
-	err = t.init()
-	if err != nil {
-		return columns, err
-	}
-	return t.cols, err
+func (t *jsonDataSourceReader) Schema() (columns []df.Column) {
+	return t.cols
 }
 
-func (t *jsonDataSourceReader) Data() (data [][]interface{}, err error) {
-	err = t.init()
-	if err != nil {
-		return data, err
-	}
-
-	return t.records, err
-
+func (t *jsonDataSourceReader) Data() (data [][]interface{}) {
+	return t.records
 }
 
-func (t *jsonDataSourceReader) readJSON() (objMapList []map[string]interface{}, err error) {
+func (t *jsonDataSourceReader) readJSON(reader io.Reader) (objMapList []map[string]interface{}, err error) {
 
-	singlelineParse, err := isSingleLineParse(t.args)
+	singlelineParse, err := jsonIsSingleLineParse(t.args)
 	if err != nil {
 		return objMapList, err
 	}
 	if singlelineParse {
-		return readJSONByLine(t.reader)
+		return jsonReadByLine(reader)
 	}
-	buf := new(strings.Builder)
-	_, err = io.Copy(buf, t.reader)
+	buf, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return
 	}
-	jsonStr := buf.String()
-	return readJSONByArray(jsonStr)
-
+	return jsonReadToArray(buf, jsonIsArray(buf))
 }
 
-func (t *jsonDataSourceReader) init() (err error) {
-	if len(t.cols) != 0 {
-		return err
-	}
+func jsonIsArray(data []byte) (isArray bool) {
+	return data[0] == '['
+}
 
-	objMapList, err := t.readJSON()
+func (t *jsonDataSourceReader) init(reader io.Reader) (err error) {
+
+	objMapList, err := t.readJSON(reader)
 	if err != nil {
 		return err
 	}
@@ -290,7 +266,7 @@ func (t *jsonDataSourceReader) init() (err error) {
 	return err
 }
 
-func isSingleLineParse(config map[string]string) (singlelineParse bool, err error) {
+func jsonIsSingleLineParse(config map[string]string) (singlelineParse bool, err error) {
 	singleline, ok := config[ConfigJSONSingleLine]
 	singlelineParse = true
 	if ok {

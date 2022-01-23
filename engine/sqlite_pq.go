@@ -30,15 +30,12 @@ func (t *sqlitePQQueryEngine) RegisterTable(dataFrame df.DataFrame) error {
 
 	t.module.data = append(t.module.data, dataFrame)
 
-	cols, err := dataFrame.Schema()
-	if err != nil {
-		return err
-	}
+	cols := dataFrame.Schema()
 	if len(cols) == 0 {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	err = t.createTable(dataFrame.Name(), cols)
+	err := t.createTable(dataFrame.Name(), cols)
 	if err != nil {
 		return err
 	}
@@ -85,11 +82,8 @@ func (t *pqModule) Create(c *sqlite3.SQLiteConn, args []string) (sqlite3.VTab, e
 	for _, d := range t.data {
 		if d.Name() == args[2] {
 
-			schema, err := d.Schema()
-			if err != nil {
-				return nil, err
-			}
-			err = t.createTable(c, d.Name(), schema)
+			schema := d.Schema()
+			err := t.createTable(c, d.Name(), schema)
 			if err != nil {
 				return nil, err
 			}
@@ -111,17 +105,7 @@ type pqTable struct {
 }
 
 func (t *pqTable) Open() (cur sqlite3.VTabCursor, err error) {
-	data, err := (*t.data).Data()
-	if err != nil {
-		return cur, err
-	}
-	schema, err := (*t.data).Schema()
-	if err != nil {
-		return cur, err
-	}
-	count := len(data)
-
-	return &pqCursor{0, &data, &schema, count}, nil
+	return &pqCursor{0, t.data}, nil
 }
 
 func (t *pqTable) BestIndex(cstl []sqlite3.InfoConstraint, obl []sqlite3.InfoOrderBy) (*sqlite3.IndexResult, error) {
@@ -148,16 +132,14 @@ func (t *pqTable) Disconnect() error { return nil }
 func (t *pqTable) Destroy() error    { return nil }
 
 type pqCursor struct {
-	index  int
-	data   *[][]interface{}
-	schema *[]df.Column
-	count  int
+	index int
+	data  *df.DataFrame
 }
 
 func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
-	cType := (*t.schema)[col]
+	cType := (*t.data).Schema()[col]
 	//i, _ := cType.Format.Convert((*t.data)[t.index][col])
-	i := (*t.data)[t.index][col]
+	i := (*t.data).Get(t.index).Data()[col]
 	if i == nil {
 		c.ResultNull()
 		return err
@@ -188,23 +170,24 @@ func (t *pqCursor) Filter(idxNum int, idxStr string, vals []interface{}) error {
 		idx[i], _ = strconv.Atoi(s)
 	}
 
-	var data = make([][]interface{}, 0, t.count)
-	for _, d := range *t.data {
+	var data = make([][]interface{}, 0, (*t.data).Len())
+	for j := 0; j < int((*t.data).Len()); j++ {
+		d := (*t.data).Get(j)
 		matched := true
 		for i, c := range idx {
-			if d[c] != vals[i] {
+			if d.Data()[c] != vals[i] {
 				matched = false
 				break
 			}
 		}
 		if matched {
-			data = append(data, d)
+			data = append(data, d.Data())
 		}
 	}
 
-	t.data = &data
+	d := df.NewInmemoryDataframe((*t.data).Schema(), data)
+	t.data = &d
 	t.index = 0
-	t.count = len(data)
 	return nil
 }
 
@@ -214,7 +197,7 @@ func (t *pqCursor) Next() error {
 }
 
 func (t *pqCursor) EOF() bool {
-	return t.index >= t.count
+	return t.index >= int((*t.data).Len())
 }
 
 func (t *pqCursor) Rowid() (int64, error) {
