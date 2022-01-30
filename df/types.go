@@ -102,7 +102,7 @@ func (t doubleFormat) Convert(i interface{}) (interface{}, error) {
 }
 
 // GetFormatFromKind returns format based on kind
-func GetFormatFromKind(t reflect.Kind) (format DataFrameFormat, err error) {
+func GetFormatFromKind(t reflect.Kind) (format DataFrameSeriesFormat, err error) {
 	return GetFormat(t.String())
 }
 
@@ -119,7 +119,7 @@ var DoubleFormat doubleFormat = doubleFormat{name: "double"}
 var BoolFormat boolFormat = boolFormat{name: "boolean"}
 
 // GetFormat returns format based on type
-func GetFormat(t string) (format DataFrameFormat, err error) {
+func GetFormat(t string) (format DataFrameSeriesFormat, err error) {
 	t = strings.ToLower(t)
 	if t == "string" || t == "text" {
 		format = StringFormat
@@ -209,7 +209,7 @@ func i2double(v interface{}) (f float64, err error) {
 	switch vt {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		rv := reflect.ValueOf(v)
-		f = rv.Float()
+		f = float64(rv.Int())
 	case reflect.Float32, reflect.Float64:
 		rv := reflect.ValueOf(v)
 		f = rv.Float()
@@ -253,4 +253,42 @@ func i2bool(v interface{}) (b bool, err error) {
 		err = errors.New("unsupported type - " + vt.String())
 	}
 	return b, err
+}
+
+type inMemorySchema struct {
+	cols []Column
+}
+
+func (t *inMemorySchema) Columns() []Column {
+	return t.cols
+}
+func (t *inMemorySchema) GetByName(s string) (c Column, e error) {
+	for _, c := range t.cols {
+		if strings.ToLower(c.Name) == strings.ToLower(s) {
+			return c, e
+		}
+	}
+	return c, errors.New("Column Not Found")
+}
+
+func (t *inMemorySchema) GetIndexByName(s string) (index int, e error) {
+	for i, c := range t.cols {
+		if strings.ToLower(c.Name) == strings.ToLower(s) {
+			return i, e
+		}
+	}
+	return index, errors.New("Column Not Found")
+}
+
+func (t *inMemorySchema) Get(i int) Column {
+	return t.cols[i]
+}
+
+func (t *inMemorySchema) Len() int {
+	return len(t.cols)
+}
+
+// NewSchema returns new schema based on given columns
+func NewSchema(cols []Column) DataFrameSchema {
+	return &inMemorySchema{cols: cols}
 }

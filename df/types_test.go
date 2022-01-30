@@ -124,3 +124,21 @@ func TestBoolType(t *testing.T) {
 	assert.Nil(t, c)
 
 }
+
+func TestNewSchema(t *testing.T) {
+	s := NewSchema([]Column{
+		{Name: "c1", Format: IntegerFormat},
+		{Name: "c2", Format: DoubleFormat},
+		{Name: "c3", Format: StringFormat},
+		{Name: "c4", Format: BoolFormat},
+	})
+
+	c, e := s.GetByName("c1")
+	assert.Nil(t, e)
+	assert.Equal(t, "c1", c.Name)
+	c, e = s.GetByName("c11")
+	assert.Error(t, e)
+
+	assert.Equal(t, "c3", s.Get(2).Name)
+	assert.Equal(t, 4, s.Len())
+}

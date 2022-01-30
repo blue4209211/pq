@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/apache/arrow/go/v7 v7.0.0-20220126012103-c5f400461f6d
+	github.com/goccy/go-json v0.9.4 // indirect
 	github.com/klauspost/compress v1.14.2 // indirect
 	github.com/mattn/go-sqlite3 v1.14.10
 	github.com/stretchr/testify v1.7.0

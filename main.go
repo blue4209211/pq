@@ -3,16 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
-	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/engine"
-	"github.com/blue4209211/pq/log"
-	"github.com/blue4209211/pq/sources"
+	"github.com/blue4209211/pq/internal/engine"
+	"github.com/blue4209211/pq/internal/log"
+	"github.com/blue4209211/pq/internal/sources"
 )
 
 func main() {
@@ -87,41 +85,15 @@ func main() {
 
 	log.Debug("files - ", fileNames)
 
-	df, err := engine.QueryFiles(query, fileNames, inputConfig)
+	df, err := QuerySources(query, inputConfig, fileNames...)
 	if err != nil {
 		log.Error("Error - ", err)
 		os.Exit(1)
 	}
 
-	writeRespose(df, outputConfig, *confOutputStdType, *confOutputfile)
+	err = WriteSource(df, outputConfig, *confOutputfile)
 
-}
-
-func writeRespose(data df.DataFrame, config map[string]string, format string, outputFile string) (err error) {
-
-	var writerBuf io.Writer
-	if outputFile != "" && outputFile != "-" {
-		file, err := os.Create(outputFile)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		writerBuf = file
-	} else {
-		writerBuf = os.Stdout
-	}
-
-	source, err := sources.GetSource(format)
 	if err != nil {
-		log.Info("Unable to Get Source = ", err)
+		log.Error(err)
 	}
-	writer, err := source.Writer(data, config)
-	if err != nil {
-		log.Info("Unable to Get Source Writer = ", err)
-	}
-	err = writer.Write(writerBuf)
-	if err != nil {
-		log.Error("Unable to Write Response ", err)
-	}
-	return
 }
