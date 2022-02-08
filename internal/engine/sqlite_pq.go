@@ -10,6 +10,7 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/fns"
+	"github.com/blue4209211/pq/internal/log"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -39,6 +40,8 @@ func (t *sqlitePQQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 	if err != nil {
 		return err
 	}
+
+	log.Debug("registred df - ", dataFrame.Name(), err)
 
 	return err
 }
@@ -128,8 +131,20 @@ func opToString(o sqlite3.Op) string {
 		return "match"
 	case sqlite3.OpREGEXP:
 		return "regexp"
+	case 68:
+		return "isnot"
+	case 69:
+		return "not"
+	case 70:
+		return "notnull"
+	case 71:
+		return "isnull"
+	case 72:
+		return "is"
+	// case 150:
+	// 	return "func"
 	default:
-		panic("not supported " + strconv.Itoa(int(o)))
+		return ""
 	}
 }
 
@@ -140,7 +155,13 @@ func (t *pqTable) BestIndex(cstl []sqlite3.InfoConstraint, obl []sqlite3.InfoOrd
 	for c, cst := range cstl {
 		if cst.Usable {
 			used[c] = true
-			idxStr = idxStr + strconv.Itoa(cst.Column) + ":" + opToString(cst.Op) + ","
+			opStr := opToString(cst.Op)
+			if opStr == "" {
+				log.Warn("No operator found for - ", cstl, obl)
+				idxStr = ""
+				break
+			}
+			idxStr = idxStr + strconv.Itoa(cst.Column) + ":" + opStr + ","
 		}
 	}
 
@@ -200,8 +221,6 @@ type filterOp struct {
 
 func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []interface{}) error {
 
-	fmt.Println("filter", filterOrderStr, vals)
-
 	if filterOrderStr == "" {
 		t.index = 0
 		return nil
@@ -224,8 +243,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []interface{})
 			f := true
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {
-				case "=":
+				case "is", "=":
 					f = f && (dfr.Get(colOp.idx) == vals[i])
+				case "isnot", "not":
+					f = f && (dfr.Get(colOp.idx) != vals[i])
+				case "isnull":
+					f = f && (dfr.Get(colOp.idx) == nil)
+				case "notnull":
+					f = f && (dfr.Get(colOp.idx) != nil)
 				case "match":
 					f = f && (fns.Matches(vals[i].(string), dfr.Get(colOp.idx).(string)))
 				case "regexp":

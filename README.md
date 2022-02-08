@@ -66,6 +66,13 @@ pq --help
 - default format is json
 - to specify different format use config `-input.std.type=<supported type>` or `-output.std.type=<supported type>`
 
+### db
+- Postgres - postgresql://user:pass@localhost/mydatabase/?sslmode=disable
+- Mysql - mysql://user:pass@localhost/dbname
+- SQlite3 - sqlite:/path/to/file.db
+
+
+
 ## Supported Formats
 
 ### json
@@ -94,41 +101,47 @@ pq --help
     - Int96, ByteArray And FixedByteArray are converted to string
     - Written data is not compressed
 
-
-### log
+### log/text
 - Format
     - Exposes two columns`data`, `line` which can be used for searching data, data is not stored in memory and parsed at runtime
 
-## Addtitional Functions
-
-### text_extract
-exposes `text_extract` function which can be used for extracting data from the column `text_extract(data, index, [seprator])`
 
 ## Supported Args
 
 ```
 Usage of pq:
-
-  -input.csv.header
+  -engine.storage string
+        Logger - memory/file (default "pq")
+  -input.csv.hasHeader
         First Line as Header (default true)
   -input.csv.sep string
         CSV File Seprator (default ",")
-  -input.json.singleline
-        Parse JSON in multiline mode
+  -input.db.query string
+        Rdbms Query
+  -input.json.objectOnEachLine
+        Parse JSON in multiline mode (default true)
   -input.std.type string
         Format for Reading from Std(console) (default "json")
-  -output.csv.header
-        First Line as Header (default true)
-  -output.csv.sep string
-        CSV File Seprator (default ",")
-  -output.json.singleline
-        Parse JSON in multiline mode
-  -output.std.type string
-        Format for Writing to Std(console) (default "json")
+  -input.xml.elementName string
+        XML Element to use for Parsing XML file (default "element")
+  -input.xml.objectOnEachLine
+        Read Xml element from each line (default true)
   -logger string
         Logger - debug/info/warning/error (default "info")
   -output string
         Resoult Output, Defaults to Stdout (default "-")
+  -output.csv.hasHeader
+        First Line as Header (default true)
+  -output.csv.sep string
+        CSV File Seprator (default ",")
+  -output.json.objectOnEachLine
+        Parse JSON in multiline mode (default true)
+  -output.std.type string
+        Format for Writing to Std(console) (default "json")
+  -output.xml.elementName string
+        XML Element to use for Writing XML file (default "element")
+  -output.xml.objectOnEachLine
+        Write 1 row per each line (default true)
 ```
 
 
@@ -143,14 +156,25 @@ make test
 ## Supported SQL Functions
 - As supported by sqllite3 with json1 extension
 
-## TODO
+### Addtitional Functions
+
+#### text_extract
+exposes `text_extract` function which can be used for extracting data from the column `text_extract(data, index, [seprator])`
+
+
+
+## Improvements
+- More tests on Parquet
+- More tests on rdbms
+- TODO testcases for operator impls in pq
 - better support for json
-    - Autodetetct json formatting (improvements in parser)
-- more source types
-    - parquet
-    - avro
-- handling on unstructured data (logfiles)
-    - full text search
+    - Autodetetct json formatting, currently we need additional args to detect certain configs (improvements in parser)
+
+
+## TODO (no specific order)
+- stats function for basic exploration
+- interactive mode so that we dont have to query same file multiple times
 - read from external source systems
-    - s3
-    - dynamodb
+    - s3/http
+- imporve query performance
+- lazy read of files so that we can query on large files

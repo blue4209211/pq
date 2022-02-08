@@ -10,7 +10,9 @@ import (
 
 	"github.com/blue4209211/pq/internal/engine"
 	"github.com/blue4209211/pq/internal/log"
-	"github.com/blue4209211/pq/internal/sources"
+	"github.com/blue4209211/pq/internal/sources/files"
+	"github.com/blue4209211/pq/internal/sources/rdbms"
+	"github.com/blue4209211/pq/internal/sources/std"
 )
 
 func main() {
@@ -21,19 +23,20 @@ func main() {
 		log.Debug("Execution Time ", elaspedTime)
 	}()
 
-	confInputCSVSep := flag.String("input."+sources.ConfigCsvSep, ",", "CSV File Seprator")
-	confInputCSVHeader := flag.Bool("input."+sources.ConfigCsvHeader, true, "First Line as Header")
-	confInputJSONSingleLine := flag.Bool("input."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
-	confInputStdType := flag.String("input."+sources.ConfigStdType, "json", "Format for Reading from Std(console)")
-	confInputXmlElementName := flag.String("input."+sources.ConfigXMLElementName, "element", "XML Element to use for Parsing XML file")
-	confInputXmlSingleLine := flag.Bool("input."+sources.ConfigXMLSingleLine, true, "Read Xml element from each line")
+	confInputCSVSep := flag.String("input."+files.ConfigCsvSep, ",", "CSV File Seprator")
+	confInputCSVHeader := flag.Bool("input."+files.ConfigCsvHeader, true, "First Line as Header")
+	confInputJSONSingleLine := flag.Bool("input."+files.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
+	confInputStdType := flag.String("input."+std.ConfigStdType, "json", "Format for Reading from Std(console)")
+	confInputXMLElementName := flag.String("input."+files.ConfigXMLElementName, "element", "XML Element to use for Parsing XML file")
+	confInputXMLSingleLine := flag.Bool("input."+files.ConfigXMLSingleLine, true, "Read Xml element from each line")
+	confDBQuery := flag.String("input."+rdbms.ConfigDBQuery, "", "Rdbms Query")
 
-	confOutputStdType := flag.String("output."+sources.ConfigStdType, "json", "Format for Writing to Std(console)")
-	confOutputCSVSep := flag.String("output."+sources.ConfigCsvSep, ",", "CSV File Seprator")
-	confOutputCSVHeader := flag.Bool("output."+sources.ConfigCsvHeader, true, "First Line as Header")
-	confOutputJSONSingleLine := flag.Bool("output."+sources.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
-	confOutputXmlElementName := flag.String("output."+sources.ConfigXMLElementName, "element", "XML Element to use for Writing XML file")
-	confOutputXmlSingleLine := flag.Bool("output."+sources.ConfigXMLSingleLine, true, "Write 1 row per each line")
+	confOutputStdType := flag.String("output."+std.ConfigStdType, "json", "Format for Writing to Std(console)")
+	confOutputCSVSep := flag.String("output."+files.ConfigCsvSep, ",", "CSV File Seprator")
+	confOutputCSVHeader := flag.Bool("output."+files.ConfigCsvHeader, true, "First Line as Header")
+	confOutputJSONSingleLine := flag.Bool("output."+files.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
+	confOutputXMLElementName := flag.String("output."+files.ConfigXMLElementName, "element", "XML Element to use for Writing XML file")
+	confOutputXMLSingleLine := flag.Bool("output."+files.ConfigXMLSingleLine, true, "Write 1 row per each line")
 
 	confOutputfile := flag.String("output", "-", "Resoult Output, Defaults to Stdout")
 	confLoggerName := flag.String("logger", "info", "Logger - debug/info/warning/error")
@@ -54,22 +57,23 @@ func main() {
 	query := remainingArgs[0]
 	fileNames := remainingArgs[1:]
 	inputConfig := map[string]string{}
-	inputConfig[sources.ConfigCsvSep] = *confInputCSVSep
-	inputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confInputCSVHeader)
-	inputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
-	inputConfig[sources.ConfigStdType] = *confInputStdType
+	inputConfig[files.ConfigCsvSep] = *confInputCSVSep
+	inputConfig[files.ConfigCsvHeader] = strconv.FormatBool(*confInputCSVHeader)
+	inputConfig[files.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
+	inputConfig[std.ConfigStdType] = *confInputStdType
 	inputConfig[engine.ConfigEngineStorage] = *confEngineStorage
-	inputConfig[sources.ConfigXMLElementName] = *confInputXmlElementName
-	inputConfig[sources.ConfigXMLSingleLine] = strconv.FormatBool(*confInputXmlSingleLine)
+	inputConfig[files.ConfigXMLElementName] = *confInputXMLElementName
+	inputConfig[files.ConfigXMLSingleLine] = strconv.FormatBool(*confInputXMLSingleLine)
+	inputConfig[rdbms.ConfigDBQuery] = *confDBQuery
 
 	outputConfig := map[string]string{}
-	outputConfig[sources.ConfigCsvSep] = *confOutputCSVSep
-	outputConfig[sources.ConfigCsvHeader] = strconv.FormatBool(*confOutputCSVHeader)
-	outputConfig[sources.ConfigJSONSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
-	outputConfig[sources.ConfigStdType] = *confOutputStdType
+	outputConfig[files.ConfigCsvSep] = *confOutputCSVSep
+	outputConfig[files.ConfigCsvHeader] = strconv.FormatBool(*confOutputCSVHeader)
+	outputConfig[files.ConfigJSONSingleLine] = strconv.FormatBool(*confOutputJSONSingleLine)
+	outputConfig[std.ConfigStdType] = *confOutputStdType
 	outputConfig[engine.ConfigEngineStorage] = *confEngineStorage
-	outputConfig[sources.ConfigXMLElementName] = *confOutputXmlElementName
-	outputConfig[sources.ConfigXMLSingleLine] = strconv.FormatBool(*confOutputXmlSingleLine)
+	outputConfig[files.ConfigXMLElementName] = *confOutputXMLElementName
+	outputConfig[files.ConfigXMLSingleLine] = strconv.FormatBool(*confOutputXMLSingleLine)
 
 	log.Debug("input configs - ", inputConfig)
 	for i, f := range fileNames {

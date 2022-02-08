@@ -141,6 +141,7 @@ func i2str(v interface{}) (str string, err error) {
 	}
 
 	vt := reflect.TypeOf(v).Kind()
+
 	switch vt {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		rv := reflect.ValueOf(v)
@@ -194,6 +195,14 @@ func i2int(v interface{}) (i int64, err error) {
 		} else {
 			return i, err
 		}
+	case reflect.Slice:
+		byteArray := v.([]byte)
+		i, err := strconv.Atoi(string(byteArray))
+		if err != nil {
+			return int64(i), err
+		}
+		return int64(i), err
+
 	default:
 		err = errors.New("unsupported type - " + vt.String())
 	}
@@ -249,6 +258,18 @@ func i2bool(v interface{}) (b bool, err error) {
 		} else {
 			err = errors.New("unsupported numeric value - " + fmt.Sprint(f))
 		}
+	case reflect.Slice:
+		byteArray := v.([]byte)
+		i, err := strconv.Atoi(string(byteArray))
+		if err != nil {
+			return b, err
+		}
+		if i == 1 {
+			b = true
+		} else if i == 0 {
+			b = false
+		}
+
 	default:
 		err = errors.New("unsupported type - " + vt.String())
 	}

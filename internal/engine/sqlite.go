@@ -92,12 +92,19 @@ func (t *sqliteQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
+	log.Debug("Creating df - ", dataFrame.Name(), schema.Columns())
+
 	err := t.createTable(dataFrame.Name(), schema.Columns())
 	if err != nil {
 		return err
 	}
 
+	log.Debug("Inserting  df - ", dataFrame.Name(), err)
+
 	err = t.insertData(dataFrame)
+
+	log.Debug("Registered df - ", dataFrame.Name(), err)
+
 	return err
 }
 
@@ -238,7 +245,7 @@ func newSQLiteEngine(config map[string]string, data []df.DataFrame) (engine quer
 		}
 		engine = &sqliteQueryEngine{db: db, dbFile: dataFile}
 	} else {
-		err = errors.New("Unknown Format - " + format)
+		err = errors.New("Unknown Engine Format - " + format)
 	}
 	return
 }

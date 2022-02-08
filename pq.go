@@ -9,21 +9,21 @@ import (
 
 // QuerySources Create Dataframe based on given sources
 func QuerySources(query string, config map[string]string, srcs ...string) (data df.DataFrame, err error) {
-	dfs, err := sources.ReadDataFrames(srcs, config)
+	dfs, err := sources.ReadDataFrames(config, srcs...)
 	if err != nil {
 		return data, err
 	}
 	return engine.QueryDataFrames(query, dfs, config)
 }
 
-// QuerySources Create Dataframe based on given sources
+// QueryDataFrames Create Dataframe based on given sources
 func QueryDataFrames(query string, config map[string]string, dfs ...df.DataFrame) (data df.DataFrame, err error) {
 	return engine.QueryDataFrames(query, dfs, config)
 }
 
 // ReadSources Create Dataframe based on given schema and data
 func ReadSources(config map[string]string, srcs ...string) (data []df.DataFrame, err error) {
-	return sources.ReadDataFrames(srcs, config)
+	return sources.ReadDataFrames(config, srcs...)
 }
 
 // WriteSource Write Dataframe to Given Source

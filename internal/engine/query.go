@@ -14,7 +14,7 @@ type queryEngine interface {
 	Close()
 }
 
-// QueryFiles on given files or directories
+// QueryDataFrames on given files or directories
 func QueryDataFrames(query string, dfs []df.DataFrame, config map[string]string) (data df.DataFrame, err error) {
 	startTime := time.Now()
 
@@ -31,35 +31,44 @@ func QueryDataFrames(query string, dfs []df.DataFrame, config map[string]string)
 
 	defer engine.Close()
 
-	if len(dfs) <= 1 {
-		err = engine.RegisterDataFrame(dfs[0])
+	for _, d := range dfs {
+		err = engine.RegisterDataFrame(d)
 		if err != nil {
 			return data, err
 		}
-	} else {
-		jobs := make(chan df.DataFrame, len(dfs))
-		results := make(chan error, len(dfs))
-		wg := new(sync.WaitGroup)
-
-		for w := 1; w <= len(dfs); w++ {
-			wg.Add(1)
-			go registerDfAsync(&engine, jobs, results, wg, &config)
-		}
-
-		for _, f := range dfs {
-			jobs <- f
-		}
-
-		close(jobs)
-		wg.Wait()
-		close(results)
-
-		for e := range results {
-			if e != nil {
-				return data, e
-			}
-		}
 	}
+
+	// some kind of DB issue which is not working correctly when  using multiple channels
+
+	// if len(dfs) <= 1 {
+	// 	err = engine.RegisterDataFrame(dfs[0])
+	// 	if err != nil {
+	// 		return data, err
+	// 	}
+	// } else {
+	// 	jobs := make(chan df.DataFrame, len(dfs))
+	// 	results := make(chan error, len(dfs))
+	// 	wg := new(sync.WaitGroup)
+
+	// 	for w := 0; w < len(dfs); w++ {
+	// 		wg.Add(1)
+	// 		go registerDfAsync(&engine, jobs, results, wg, &config)
+	// 	}
+
+	// 	for _, f := range dfs {
+	// 		jobs <- f
+	// 	}
+
+	// 	close(jobs)
+	// 	wg.Wait()
+	// 	close(results)
+
+	// 	for e := range results {
+	// 		if e != nil {
+	// 			return data, e
+	// 		}
+	// 	}
+	// }
 
 	return engine.Query(query)
 }

@@ -1,7 +1,6 @@
 package inmemory
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/blue4209211/pq/df"
@@ -31,7 +30,6 @@ func TestInMemoryDfColOps(t *testing.T) {
 	assert.Equal(t, "c44", data2.Schema().Get(3).Name)
 
 	data2 = data2.RemoveColumnByName("c44")
-	fmt.Println(data2)
 	assert.Equal(t, 3, data2.Schema().Len())
 
 }
