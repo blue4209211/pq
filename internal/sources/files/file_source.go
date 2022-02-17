@@ -15,6 +15,7 @@ import (
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/inmemory"
 	"github.com/blue4209211/pq/internal/log"
+	"github.com/golang/snappy"
 )
 
 // StreamSource Provides interface for all the data sources
@@ -29,7 +30,7 @@ type StreamSource interface {
 
 type StreamReader interface {
 	Schema() []df.Column
-	Data() [][]interface{}
+	Data() [][]any
 }
 
 // StreamWriter Writes dataframe to write
@@ -207,6 +208,8 @@ func getFileDetails(fileName string) (path string, name string, format string, c
 		comrpression = "gz"
 	} else if strings.Index(path, ".zip") >= 0 {
 		comrpression = "zip"
+	} else if strings.Index(path, ".snappy") >= 0 {
+		comrpression = "snappy"
 	}
 
 	return
@@ -256,6 +259,20 @@ func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRe
 				break
 			}
 
+			ds, err := getDataframeFromSource(name, ext, reader, config)
+			if err != nil {
+				results <- asyncReaderResult{err: err}
+				break
+			}
+			results <- asyncReaderResult{data: ds}
+		} else if compression == "snappy" {
+			f, err := os.Open(path)
+			if err != nil {
+				results <- asyncReaderResult{err: err}
+				break
+			}
+			defer f.Close()
+			reader := snappy.NewReader(f)
 			ds, err := getDataframeFromSource(name, ext, reader, config)
 			if err != nil {
 				results <- asyncReaderResult{err: err}

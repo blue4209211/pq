@@ -103,16 +103,16 @@ func (t *csvDataSourceReader) Schema() (columns []df.Column) {
 	return
 }
 
-func (t *csvDataSourceReader) Data() (data [][]interface{}) {
+func (t *csvDataSourceReader) Data() (data [][]any) {
 	index := 0
 	if t.isHeader {
 		index = 1
 	}
 
-	data = make([][]interface{}, len(t.records)-index)
+	data = make([][]any, len(t.records)-index)
 
 	for i, record := range t.records[index:] {
-		row := make([]interface{}, len(record))
+		row := make([]any, len(record))
 		for j, cell := range record {
 			row[j] = cell
 		}

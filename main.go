@@ -26,6 +26,7 @@ func main() {
 	confInputCSVSep := flag.String("input."+files.ConfigCsvSep, ",", "CSV File Seprator")
 	confInputCSVHeader := flag.Bool("input."+files.ConfigCsvHeader, true, "First Line as Header")
 	confInputJSONSingleLine := flag.Bool("input."+files.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")
+	confInputJSONRootNode := flag.String("input."+files.ConfigJSONRootNode, "", "RootNode to use for JSON")
 	confInputStdType := flag.String("input."+std.ConfigStdType, "json", "Format for Reading from Std(console)")
 	confInputXMLElementName := flag.String("input."+files.ConfigXMLElementName, "element", "XML Element to use for Parsing XML file")
 	confInputXMLSingleLine := flag.Bool("input."+files.ConfigXMLSingleLine, true, "Read Xml element from each line")
@@ -60,6 +61,7 @@ func main() {
 	inputConfig[files.ConfigCsvSep] = *confInputCSVSep
 	inputConfig[files.ConfigCsvHeader] = strconv.FormatBool(*confInputCSVHeader)
 	inputConfig[files.ConfigJSONSingleLine] = strconv.FormatBool(*confInputJSONSingleLine)
+	inputConfig[files.ConfigJSONRootNode] = *confInputJSONRootNode
 	inputConfig[std.ConfigStdType] = *confInputStdType
 	inputConfig[engine.ConfigEngineStorage] = *confEngineStorage
 	inputConfig[files.ConfigXMLElementName] = *confInputXMLElementName

@@ -13,7 +13,7 @@ func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, e
 		return output, errors.New("Empty data")
 	}
 
-	var records [][]interface{}
+	var records [][]any
 	if len(dfs) == 1 {
 		output = dfs[0].Rename(name, false)
 	} else {
@@ -22,7 +22,7 @@ func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, e
 		for _, d := range dfs {
 			cnt = cnt + int(d.Len())
 		}
-		records = make([][]interface{}, cnt, cnt)
+		records = make([][]any, cnt, cnt)
 
 		mergeIndx := 0
 		for _, df := range dfs {

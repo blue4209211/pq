@@ -23,7 +23,7 @@ const SortOrderDESC SortOrder = 1
 type DataFrameSeriesFormat interface {
 	Name() string
 	Type() reflect.Kind
-	Convert(i interface{}) (interface{}, error)
+	Convert(i any) (any, error)
 }
 
 type SortByIndex struct {
@@ -57,8 +57,8 @@ type DataFrame interface {
 	ForEach(function func(DataFrameRow))
 	Sort(order ...SortByIndex) DataFrame
 	SortByName(order ...SortByName) DataFrame
-	Map(schema []Column, function func(DataFrameRow) []interface{}) DataFrame
-	FlatMap(schema []Column, function func(DataFrameRow) [][]interface{}) DataFrame
+	Map(schema []Column, function func(DataFrameRow) []any) DataFrame
+	FlatMap(schema []Column, function func(DataFrameRow) [][]any) DataFrame
 	Filter(function func(DataFrameRow) bool) DataFrame
 	Limit(offset int, size int) DataFrame
 }
@@ -67,12 +67,12 @@ type DataFrame interface {
 type DataFrameSeries interface {
 	Schema() DataFrameSeriesFormat
 	Len() int64
-	Get(index int64) interface{}
-	ForEach(f func(interface{}))
+	Get(index int64) any
+	ForEach(f func(any))
 	Sort(order SortOrder) DataFrameSeries
-	Map(schema DataFrameSeriesFormat, function func(interface{}) interface{}) DataFrameSeries
-	FlatMap(schema DataFrameSeriesFormat, function func(interface{}) []interface{}) DataFrameSeries
-	Filter(function func(interface{}) bool) DataFrameSeries
+	Map(schema DataFrameSeriesFormat, function func(any) any) DataFrameSeries
+	FlatMap(schema DataFrameSeriesFormat, function func(any) []any) DataFrameSeries
+	Filter(function func(any) bool) DataFrameSeries
 	Limit(offset int, size int) DataFrameSeries
 	Distinct() DataFrameSeries
 }
@@ -80,9 +80,9 @@ type DataFrameSeries interface {
 // DataFrameRow Type representing row data of Dataframe
 type DataFrameRow interface {
 	Schema() DataFrameSchema
-	Get(i int) interface{}
-	GetByName(s string) interface{}
-	Data() []interface{}
+	Get(i int) any
+	GetByName(s string) any
+	Data() []any
 	Len() int
 }
 

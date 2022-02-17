@@ -11,7 +11,7 @@ import (
 
 type inmemoryDataFrameSeries struct {
 	schema df.DataFrameSeriesFormat
-	data   []interface{}
+	data   []any
 }
 
 func (t *inmemoryDataFrameSeries) Schema() df.DataFrameSeriesFormat {
@@ -22,18 +22,18 @@ func (t *inmemoryDataFrameSeries) Len() int64 {
 	return int64(len(t.data))
 }
 
-func (t *inmemoryDataFrameSeries) Get(i int64) interface{} {
+func (t *inmemoryDataFrameSeries) Get(i int64) any {
 	return t.data[i]
 }
 
-func (t *inmemoryDataFrameSeries) ForEach(f func(interface{})) {
+func (t *inmemoryDataFrameSeries) ForEach(f func(any)) {
 	for _, d := range t.data {
 		f(d)
 	}
 }
 
-func (t *inmemoryDataFrameSeries) Filter(f func(interface{}) bool) df.DataFrameSeries {
-	data := make([]interface{}, 0, len(t.data))
+func (t *inmemoryDataFrameSeries) Filter(f func(any) bool) df.DataFrameSeries {
+	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		if f(d) {
 			data = append(data, d)
@@ -42,16 +42,16 @@ func (t *inmemoryDataFrameSeries) Filter(f func(interface{}) bool) df.DataFrameS
 	return NewSeries(data, t.schema)
 }
 
-func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(interface{}) interface{}) df.DataFrameSeries {
-	data := make([]interface{}, 0, len(t.data))
+func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(any) any) df.DataFrameSeries {
+	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		data = append(data, f(d))
 	}
 	return NewSeries(data, s)
 }
 
-func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(interface{}) []interface{}) df.DataFrameSeries {
-	data := make([]interface{}, 0, len(t.data))
+func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(any) []any) df.DataFrameSeries {
+	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		data = append(data, f(d)...)
 	}
@@ -60,7 +60,7 @@ func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(int
 
 //TODO use maps{}
 func (t *inmemoryDataFrameSeries) Distinct() df.DataFrameSeries {
-	data := make([]interface{}, 0, len(t.data))
+	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		found := false
 		for _, v := range data {
@@ -81,7 +81,7 @@ func (t *inmemoryDataFrameSeries) Limit(offset int, size int) df.DataFrameSeries
 }
 
 func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
-	d := make([]interface{}, len(t.data), len(t.data))
+	d := make([]any, len(t.data), len(t.data))
 	for i, e := range t.data {
 		d[i] = e
 	}
@@ -132,13 +132,13 @@ func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
 }
 
 // NewSeries returns a column of given type
-func NewSeries(data []interface{}, columnType df.DataFrameSeriesFormat) df.DataFrameSeries {
+func NewSeries(data []any, columnType df.DataFrameSeriesFormat) df.DataFrameSeries {
 	return &inmemoryDataFrameSeries{schema: columnType, data: data}
 }
 
 // NewStringSeries returns a column of type string
 func NewStringSeries(data []string) df.DataFrameSeries {
-	d := make([]interface{}, len(data))
+	d := make([]any, len(data))
 	for i, e := range data {
 		d[i] = e
 	}
@@ -147,7 +147,7 @@ func NewStringSeries(data []string) df.DataFrameSeries {
 
 // NewIntSeries returns a column of type int
 func NewIntSeries(data []int64) df.DataFrameSeries {
-	d := make([]interface{}, len(data))
+	d := make([]any, len(data))
 	for i, e := range data {
 		d[i] = e
 	}
@@ -156,7 +156,7 @@ func NewIntSeries(data []int64) df.DataFrameSeries {
 
 // NewBoolSeries returns a column of type bool
 func NewBoolSeries(data []bool) df.DataFrameSeries {
-	d := make([]interface{}, len(data))
+	d := make([]any, len(data))
 	for i, e := range data {
 		d[i] = e
 	}
@@ -165,7 +165,7 @@ func NewBoolSeries(data []bool) df.DataFrameSeries {
 
 // NewDoubleSeries returns a column of type double
 func NewDoubleSeries(data []float64) df.DataFrameSeries {
-	d := make([]interface{}, len(data))
+	d := make([]any, len(data))
 	for i, e := range data {
 		d[i] = e
 	}

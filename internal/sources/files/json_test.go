@@ -13,6 +13,20 @@ func TestJSONDataSource(t *testing.T) {
 	assert.Equal(t, source.Name(), "json")
 }
 
+func TestCustomJSONParser(t *testing.T) {
+	jsonString := `[{"a":1, "b":2.0, "c":"c11\"234", "d":false, "e":[1,2,3], "f":{"k":1}, "g":null}]`
+	objMapList, err := jsonReadToArray([]byte(jsonString), true, "")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(objMapList))
+	assert.Equal(t, float64(1), objMapList[0]["a"])
+	assert.Equal(t, float64(2.0), objMapList[0]["b"])
+	assert.Equal(t, `c11"234`, objMapList[0]["c"])
+	assert.Equal(t, false, objMapList[0]["d"])
+	assert.Equal(t, "[1,2,3]", objMapList[0]["e"])
+	assert.Equal(t, `{"k":1}`, objMapList[0]["f"])
+	assert.Equal(t, nil, objMapList[0]["g"])
+}
+
 func TestJSONDataSourceReader(t *testing.T) {
 	source := jsonDataSource{}
 

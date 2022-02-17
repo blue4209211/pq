@@ -33,7 +33,7 @@ func (t *textDataSource) Writer(data df.DataFrame, args map[string]string) (w St
 
 type textDataSourceReader struct {
 	args     map[string]string
-	records  [][]interface{}
+	records  [][]any
 	isHeader bool
 }
 
@@ -46,13 +46,13 @@ func (t *textDataSourceReader) Schema() (columns []df.Column) {
 	return textSchema
 }
 
-func (t *textDataSourceReader) Data() (data [][]interface{}) {
+func (t *textDataSourceReader) Data() (data [][]any) {
 	return t.records
 }
 
 func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 	bufferedReader := bufio.NewReader(reader)
-	t.records = make([][]interface{}, 0, 1000)
+	t.records = make([][]any, 0, 1000)
 
 	// in somecases line size gets bigger than default scanner settings
 	// so using reader to handle those scenarios
@@ -66,13 +66,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 		}
 		if err == io.EOF {
 			if len(textData) > 0 {
-				rowData := []interface{}{
+				rowData := []any{
 					string(textData) + string(textArr), cnt,
 				}
 				t.records = append(t.records, rowData)
 				textData = textData[:0]
 			} else if len(textArr) > 0 {
-				rowData := []interface{}{
+				rowData := []any{
 					string(textArr), cnt,
 				}
 				t.records = append(t.records, rowData)
@@ -81,13 +81,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 		}
 
 		if len(textData) > 0 {
-			rowData := []interface{}{
+			rowData := []any{
 				string(textData) + string(textArr), cnt,
 			}
 			t.records = append(t.records, rowData)
 			textData = textData[:0]
 		} else {
-			rowData := []interface{}{
+			rowData := []any{
 				string(textArr), cnt,
 			}
 			t.records = append(t.records, rowData)

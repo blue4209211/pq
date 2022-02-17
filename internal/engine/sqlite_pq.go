@@ -219,7 +219,7 @@ type filterOp struct {
 	schema df.DataFrameSeriesFormat
 }
 
-func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []interface{}) error {
+func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 
 	if filterOrderStr == "" {
 		t.index = 0

@@ -52,57 +52,57 @@ func SetLogger(logger string) (err error) {
 	return
 }
 
-// Debugf print debug logs
-func Debugf(format string, args ...interface{}) {
+// Debugf print debug any
+func Debugf(format string, args ...any) {
 	if isDebugEnabled {
 		debugLogger.Printf(format, args...)
 	}
 }
 
-// Debug print debug logs
-func Debug(args ...interface{}) {
+// Debug print debug any
+func Debug(args ...any) {
 	if isDebugEnabled {
 		debugLogger.Print(args...)
 	}
 }
 
-// Infof print info logs
-func Infof(format string, args ...interface{}) {
+// Infof print info any
+func Infof(format string, args ...any) {
 	if isInfoEnabled {
 		infoLogger.Printf(format, args...)
 	}
 }
 
-// Info print info logs
-func Info(args ...interface{}) {
+// Info print info any
+func Info(args ...any) {
 	if isInfoEnabled {
 		infoLogger.Print(args...)
 	}
 }
 
-// Warnf print warn logs
-func Warnf(format string, args ...interface{}) {
+// Warnf print warn any
+func Warnf(format string, args ...any) {
 	if isWarningEnabled {
 		warningLogger.Printf(format, args...)
 	}
 }
 
-// Warn print warn logs
-func Warn(args ...interface{}) {
+// Warn print warn any
+func Warn(args ...any) {
 	if isWarningEnabled {
 		warningLogger.Print(args...)
 	}
 }
 
-// Error print error logs
-func Error(args ...interface{}) {
+// Error print error any
+func Error(args ...any) {
 	if isErrorEnabled {
 		errorLogger.Print(args...)
 	}
 }
 
-// Errorf print error logs with format
-func Errorf(format string, args ...interface{}) {
+// Errorf print error any with format
+func Errorf(format string, args ...any) {
 	if isErrorEnabled {
 		errorLogger.Printf(format, args...)
 	}

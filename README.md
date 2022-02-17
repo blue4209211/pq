@@ -81,7 +81,8 @@ pq --help
     - JSON source can have newline seprated JSON array/object
     - Empty values gets converted to default for example empty value of null numeric column will become 0
     - numeric columns translates to float64
-- Nested JSON is supported
+- Nested JSON is supported using json functions
+- rootNode can be provided to read nested Object
 
 ### csv
 - Format
@@ -169,7 +170,6 @@ exposes `text_extract` function which can be used for extracting data from the c
 - TODO testcases for operator impls in pq
 - better support for json
     - Autodetetct json formatting, currently we need additional args to detect certain configs (improvements in parser)
-
 
 ## TODO (no specific order)
 - stats function for basic exploration

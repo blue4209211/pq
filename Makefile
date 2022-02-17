@@ -9,7 +9,9 @@ benchmark:
 	go test -bench=. -count=5 -benchmem -tags "json1 vtable" -run=^$  ./... | tee testresults/testperf.txt
 
 build: test
+	go vet -tags "json1 vtable"
 	go build -tags "json1 vtable"
 
 install: test
+	go vet -tags "json1 vtable"
 	go install -tags "json1 vtable"

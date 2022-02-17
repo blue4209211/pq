@@ -67,7 +67,7 @@ func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
 	for i := 0; i < totalRecords; i = i + batchSize {
 		valueStrings := make([]string, 0, batchSize)
-		valueArgs := make([]interface{}, 0, batchSize*schema.Len())
+		valueArgs := make([]any, 0, batchSize*schema.Len())
 
 		for j := i; j < (i+batchSize) && j < totalRecords; j++ {
 			valueStrings = append(valueStrings, "("+quesString+")")
@@ -139,12 +139,12 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 		cols[i] = df.Column{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]interface{}, 0, 100)
+	dataRows := make([][]any, 0, 100)
 
 	for rows.Next() {
-		dataRowPtrs := make([]interface{}, len(sqlCols))
+		dataRowPtrs := make([]any, len(sqlCols))
 		for i := range dataRowPtrs {
-			var dataCell interface{}
+			var dataCell any
 			dataRowPtrs[i] = &dataCell
 		}
 		err = rows.Scan(dataRowPtrs...)
@@ -152,9 +152,9 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 			return
 		}
 
-		dataRow := make([]interface{}, len(sqlCols))
+		dataRow := make([]any, len(sqlCols))
 		for i, cellPtr := range dataRowPtrs {
-			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*interface{})))
+			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*any)))
 			if err != nil {
 				return result, err
 			}

@@ -16,19 +16,19 @@ func TestNewStringSeries(t *testing.T) {
 	s := NewStringSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i interface{}) bool {
+	sf := s.Filter(func(i any) bool {
 		return i == "abc"
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i interface{}) interface{} {
+	sm := s.Map(df.StringFormat, func(i any) any {
 		return i.(string) + "1"
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+"1", sm.Get(1))
 
-	sfm := s.FlatMap(df.StringFormat, func(i interface{}) []interface{} {
-		return []interface{}{
+	sfm := s.FlatMap(df.StringFormat, func(i any) []any {
+		return []any{
 			i.(string) + "1",
 			i.(string) + "2",
 		}
@@ -52,19 +52,19 @@ func TestNewIntSeries(t *testing.T) {
 	s := NewIntSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i interface{}) bool {
+	sf := s.Filter(func(i any) bool {
 		return i == int64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i interface{}) interface{} {
+	sm := s.Map(df.StringFormat, func(i any) any {
 		return i.(int64) + 10
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+10, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i interface{}) []interface{} {
-		return []interface{}{
+	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
+		return []any{
 			i.(int64) + 10,
 			i.(int64) + 20,
 		}
@@ -87,19 +87,19 @@ func TestNewBoolSeries(t *testing.T) {
 	s := NewBoolSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i interface{}) bool {
+	sf := s.Filter(func(i any) bool {
 		return i == true
 	})
 	assert.Equal(t, int64(3), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i interface{}) interface{} {
+	sm := s.Map(df.StringFormat, func(i any) any {
 		return !i.(bool)
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, true, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i interface{}) []interface{} {
-		return []interface{}{
+	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
+		return []any{
 			i.(bool),
 			i.(bool),
 		}
@@ -123,19 +123,19 @@ func TestNewDoubleSeries(t *testing.T) {
 	s := NewDoubleSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i interface{}) bool {
+	sf := s.Filter(func(i any) bool {
 		return i == float64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i interface{}) interface{} {
+	sm := s.Map(df.StringFormat, func(i any) any {
 		return i.(float64) + 10
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+10, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i interface{}) []interface{} {
-		return []interface{}{
+	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
+		return []any{
 			i.(float64) + 10,
 			i.(float64) + 20,
 		}

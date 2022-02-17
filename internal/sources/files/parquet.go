@@ -18,7 +18,7 @@ import (
 	"github.com/blue4209211/pq/internal/log"
 )
 
-func parquetReadByLine(reader io.Reader) (schema []df.Column, data [][]interface{}, err error) {
+func parquetReadByLine(reader io.Reader) (schema []df.Column, data [][]any, err error) {
 	bufferedReader := bufio.NewReader(reader)
 	jobs := make(chan string, 5)
 	results := make(chan parquetAsyncReadResult, 100)
@@ -61,13 +61,13 @@ func parquetReadByLine(reader io.Reader) (schema []df.Column, data [][]interface
 
 type parquetAsyncReadResult struct {
 	schema []df.Column
-	data   [][]interface{}
+	data   [][]any
 	err    error
 }
 
 func parquetResultCollector(collector chan<- parquetAsyncReadResult, results <-chan parquetAsyncReadResult) {
 	var schema []df.Column
-	records := make([][]interface{}, 0)
+	records := make([][]any, 0)
 	for r := range results {
 		if r.err != nil {
 			collector <- parquetAsyncReadResult{err: r.err}
@@ -94,7 +94,7 @@ func parquetReadByArrayAsync(jobs <-chan string, results chan<- parquetAsyncRead
 
 }
 
-func parquetReadToArray(parquetText string) (schema []df.Column, data [][]interface{}, err error) {
+func parquetReadToArray(parquetText string) (schema []df.Column, data [][]any, err error) {
 	parquetReader, err := file.NewParquetReader(bytes.NewReader([]byte(parquetText)))
 	if err != nil {
 		log.Error("unable to read parquet", err)
@@ -103,9 +103,9 @@ func parquetReadToArray(parquetText string) (schema []df.Column, data [][]interf
 	defer parquetReader.Close()
 
 	dfSchema := make([]df.Column, parquetReader.MetaData().Schema.NumColumns())
-	dataArr := make([][]interface{}, parquetReader.NumRows())
+	dataArr := make([][]any, parquetReader.NumRows())
 	for i := int64(0); i < parquetReader.NumRows(); i++ {
-		dataArr[i] = make([]interface{}, parquetReader.MetaData().Schema.NumColumns())
+		dataArr[i] = make([]any, parquetReader.MetaData().Schema.NumColumns())
 	}
 
 	for r := 0; r < parquetReader.NumRowGroups(); r++ {
@@ -286,7 +286,7 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 			defValues[idx] = 1
 		}
 
-		var writerValue interface{}
+		var writerValue any
 
 		switch dfSchema.Get(col).Format.Type() {
 		case reflect.Int64:
@@ -341,19 +341,19 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 type parquetDataSourceReader struct {
 	args    map[string]string
 	cols    []df.Column
-	records [][]interface{}
+	records [][]any
 }
 
 func (t *parquetDataSourceReader) Schema() (columns []df.Column) {
 	return t.cols
 }
 
-func (t *parquetDataSourceReader) Data() (data [][]interface{}) {
+func (t *parquetDataSourceReader) Data() (data [][]any) {
 	return t.records
 
 }
 
-func (t *parquetDataSourceReader) readParquet(reader io.Reader) (schema []df.Column, data [][]interface{}, err error) {
+func (t *parquetDataSourceReader) readParquet(reader io.Reader) (schema []df.Column, data [][]any, err error) {
 
 	singlelineParse, err := parquetIsSingleLineParse(t.args)
 	if err != nil {
@@ -396,7 +396,7 @@ func parquetIsSingleLineParse(config map[string]string) (singlelineParse bool, e
 	return
 }
 
-func parquetWriteBatchValues(writer file.ColumnChunkWriter, vals interface{}, defLevels, repLevels []int16) (int64, error) {
+func parquetWriteBatchValues(writer file.ColumnChunkWriter, vals any, defLevels, repLevels []int16) (int64, error) {
 
 	switch w := writer.(type) {
 	case *file.Int32ColumnChunkWriter:
@@ -428,7 +428,7 @@ func parquetWriteBatchValues(writer file.ColumnChunkWriter, vals interface{}, de
 	}
 }
 
-func parquetReadBatch(reader file.ColumnChunkReader, batch int64, valueOut interface{}, valuesRead int64, defLevels, repLevels []int16) int64 {
+func parquetReadBatch(reader file.ColumnChunkReader, batch int64, valueOut any, valuesRead int64, defLevels, repLevels []int16) int64 {
 	switch r := reader.(type) {
 	case *file.Int32ColumnChunkReader:
 		_, read, _ := r.ReadBatch(batch, valueOut.([]int32)[valuesRead:], defLevels, repLevels)

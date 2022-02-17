@@ -81,7 +81,7 @@ func (t *DataSource) Write(data df.DataFrame, path string, args map[string]strin
 	return errors.New("Unsupported")
 }
 
-func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]interface{}, err error) {
+func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, err error) {
 	preparedQuery, err := db.Prepare(query)
 	if err != nil {
 		return schema, data, err
@@ -114,12 +114,12 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]inter
 		cols[i] = df.Column{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]interface{}, 0, 100)
+	dataRows := make([][]any, 0, 100)
 
 	for rows.Next() {
-		dataRowPtrs := make([]interface{}, len(sqlCols))
+		dataRowPtrs := make([]any, len(sqlCols))
 		for i := range dataRowPtrs {
-			var dataCell interface{}
+			var dataCell any
 			dataRowPtrs[i] = &dataCell
 		}
 		err = rows.Scan(dataRowPtrs...)
@@ -127,9 +127,9 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]inter
 			return schema, data, err
 		}
 
-		dataRow := make([]interface{}, len(sqlCols))
+		dataRow := make([]any, len(sqlCols))
 		for i, cellPtr := range dataRowPtrs {
-			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*interface{})))
+			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*any)))
 			if err != nil {
 				return schema, data, err
 			}

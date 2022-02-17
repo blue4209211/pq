@@ -23,7 +23,7 @@ func TestParquetDataSource(t *testing.T) {
 
 func TestParquetDataSourceReader(t *testing.T) {
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"a": []int64{1, 2, 3},
 		"b": []float64{1.0, 2.0, 3.0},
 		"c": []string{"c1", "c2", ""},
@@ -119,7 +119,7 @@ func TestParquetDataSourceReader(t *testing.T) {
 }
 
 func TestParquetDataSourceWriter(t *testing.T) {
-	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}}, [][]interface{}{
+	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}}, [][]any{
 		{int64(1), float64(1.0)},
 		{int64(2), float64(2.0)},
 		{int64(3), float64(3.0)},
@@ -151,10 +151,10 @@ func TestParquetDataSourceWriter(t *testing.T) {
 
 func BenchmarkParquetParsing(b *testing.B) {
 
-	records := make([][]interface{}, 1000, 1000)
+	records := make([][]any, 1000, 1000)
 
 	for i := range records {
-		records[i] = []interface{}{int64(1), float64(1.0), "abc", true}
+		records[i] = []any{int64(1), float64(1.0), "abc", true}
 	}
 
 	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}}, records)

@@ -25,7 +25,7 @@ func (t intFormat) Type() reflect.Kind {
 	return reflect.Int64
 }
 
-func (t intFormat) Convert(i interface{}) (interface{}, error) {
+func (t intFormat) Convert(i any) (any, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -48,7 +48,7 @@ func (t stringFormat) Type() reflect.Kind {
 	return reflect.String
 }
 
-func (t stringFormat) Convert(i interface{}) (interface{}, error) {
+func (t stringFormat) Convert(i any) (any, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -71,7 +71,7 @@ func (t boolFormat) Type() reflect.Kind {
 	return reflect.Bool
 }
 
-func (t boolFormat) Convert(i interface{}) (interface{}, error) {
+func (t boolFormat) Convert(i any) (any, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -94,7 +94,7 @@ func (t doubleFormat) Type() reflect.Kind {
 	return reflect.Float64
 }
 
-func (t doubleFormat) Convert(i interface{}) (interface{}, error) {
+func (t doubleFormat) Convert(i any) (any, error) {
 	if i == nil {
 		return i, nil
 	}
@@ -135,7 +135,7 @@ func GetFormat(t string) (format DataFrameSeriesFormat, err error) {
 	return format, err
 }
 
-func i2str(v interface{}) (str string, err error) {
+func i2str(v any) (str string, err error) {
 	if v == nil {
 		return str, err
 	}
@@ -170,7 +170,7 @@ func i2str(v interface{}) (str string, err error) {
 	return str, err
 }
 
-func i2int(v interface{}) (i int64, err error) {
+func i2int(v any) (i int64, err error) {
 	if v == nil {
 		return i, err
 	}
@@ -210,7 +210,7 @@ func i2int(v interface{}) (i int64, err error) {
 	return i, err
 }
 
-func i2double(v interface{}) (f float64, err error) {
+func i2double(v any) (f float64, err error) {
 	if v == nil {
 		return f, err
 	}
@@ -237,7 +237,7 @@ func i2double(v interface{}) (f float64, err error) {
 	return f, err
 }
 
-func i2bool(v interface{}) (b bool, err error) {
+func i2bool(v any) (b bool, err error) {
 	if v == nil {
 		return b, err
 	}

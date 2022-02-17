@@ -15,7 +15,7 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
-func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map[string]interface{}, err error) {
+func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map[string]any, err error) {
 	bufferedReader := bufio.NewReader(reader)
 	jobs := make(chan string, 5)
 	results := make(chan xmlAsyncReadResult, 100)
@@ -57,12 +57,12 @@ func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map
 }
 
 type xmlAsyncReadResult struct {
-	data []map[string]interface{}
+	data []map[string]any
 	err  error
 }
 
 func xmlResultCollector(collector chan<- xmlAsyncReadResult, results <-chan xmlAsyncReadResult) {
-	objMapList := make([]map[string]interface{}, 0)
+	objMapList := make([]map[string]any, 0)
 	for r := range results {
 		if r.err != nil {
 			collector <- xmlAsyncReadResult{data: objMapList, err: r.err}
@@ -86,8 +86,8 @@ func xmlReadByArrayAsync(jobs <-chan string, results chan<- xmlAsyncReadResult, 
 }
 
 type xmlCustomMarsher struct {
-	data        []map[string]interface{}
-	currentData map[string]interface{}
+	data        []map[string]any
+	currentData map[string]any
 	elName      string
 }
 
@@ -108,7 +108,7 @@ func (c *xmlCustomMarsher) UnmarshalXML(d *xml.Decoder, start xml.StartElement) 
 					c.currentData = nil
 				}
 				if c.currentData == nil {
-					c.currentData = make(map[string]interface{})
+					c.currentData = make(map[string]any)
 					for _, a := range tt.Attr {
 						c.currentData["_"+a.Name.Local] = a.Value
 					}
@@ -133,9 +133,9 @@ func (c *xmlCustomMarsher) UnmarshalXML(d *xml.Decoder, start xml.StartElement) 
 	return nil
 }
 
-func xmlReadToArray(xmlText string, config map[string]string) (objMapList []map[string]interface{}, err error) {
+func xmlReadToArray(xmlText string, config map[string]string) (objMapList []map[string]any, err error) {
 	byetArr := []byte(xmlText)
-	customMarshaller := xmlCustomMarsher{elName: config[ConfigXMLElementName], data: make([]map[string]interface{}, 0)}
+	customMarshaller := xmlCustomMarsher{elName: config[ConfigXMLElementName], data: make([]map[string]any, 0)}
 	err = xml.Unmarshal(byetArr, &customMarshaller)
 	if err != nil {
 		return customMarshaller.data, err
@@ -220,18 +220,18 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 type xmlDataSourceReader struct {
 	args    map[string]string
 	cols    []df.Column
-	records [][]interface{}
+	records [][]any
 }
 
 func (t *xmlDataSourceReader) Schema() (columns []df.Column) {
 	return t.cols
 }
 
-func (t *xmlDataSourceReader) Data() (data [][]interface{}) {
+func (t *xmlDataSourceReader) Data() (data [][]any) {
 	return t.records
 }
 
-func (t *xmlDataSourceReader) readXML(reader io.Reader) (objMapList []map[string]interface{}, err error) {
+func (t *xmlDataSourceReader) readXML(reader io.Reader) (objMapList []map[string]any, err error) {
 
 	singlelineParse, err := xmlIsSingleLineParse(t.args)
 	if err != nil {
@@ -291,11 +291,11 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 		index = index + 1
 	}
 
-	t.records = make([][]interface{}, len(objMapList))
+	t.records = make([][]any, len(objMapList))
 
 	for i, objMap := range objMapList {
 
-		row := make([]interface{}, len(t.cols))
+		row := make([]any, len(t.cols))
 
 		for j, c := range t.cols {
 			if v, ok := objMap[c.Name]; ok {

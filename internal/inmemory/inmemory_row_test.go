@@ -10,7 +10,7 @@ import (
 
 func TestNewDataFrameRow(t *testing.T) {
 
-	data := []interface{}{1, 2.0, "abc", false}
+	data := []any{1, 2.0, "abc", false}
 	r := NewDataFrameRow(df.NewSchema([]df.Column{
 		{Name: "c1", Format: df.IntegerFormat},
 		{Name: "c2", Format: df.DoubleFormat},

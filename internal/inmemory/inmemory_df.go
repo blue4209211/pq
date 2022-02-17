@@ -12,7 +12,7 @@ import (
 type inmemoryDataFrame struct {
 	name   string
 	schema df.DataFrameSchema
-	data   [][]interface{}
+	data   [][]any
 }
 
 func (t *inmemoryDataFrame) Schema() df.DataFrameSchema {
@@ -29,9 +29,9 @@ func (t *inmemoryDataFrame) Rename(name string, inplace bool) df.DataFrame {
 		return t
 	}
 
-	data := make([][]interface{}, t.Len())
+	data := make([][]any, t.Len())
 	for i, r := range t.data {
-		r2 := make([]interface{}, len(r))
+		r2 := make([]any, len(r))
 		copy(r2, r)
 		data[i] = r2
 	}
@@ -39,7 +39,7 @@ func (t *inmemoryDataFrame) Rename(name string, inplace bool) df.DataFrame {
 }
 
 func (t *inmemoryDataFrame) Column(i int) df.DataFrameSeries {
-	series := make([]interface{}, t.Len(), t.Len())
+	series := make([]any, t.Len(), t.Len())
 	for j, e := range t.data {
 		series[j] = e[i]
 	}
@@ -80,7 +80,7 @@ func (t *inmemoryDataFrame) AddColumn(name string, series df.DataFrameSeries) (d
 	cols := make([]df.Column, 0, t.schema.Len()+1)
 	cols = append(cols, t.schema.Columns()...)
 	cols = append(cols, df.Column{Name: name, Format: series.Schema()})
-	data := make([][]interface{}, len(cols), len(cols))
+	data := make([][]any, len(cols), len(cols))
 	for i, e := range t.data {
 		data[i] = append(e, series.Get(int64(i)))
 	}
@@ -91,9 +91,9 @@ func (t *inmemoryDataFrame) RemoveColumn(index int) df.DataFrame {
 	cols := make([]df.Column, 0, t.schema.Len()-1)
 	cols = append(cols, t.schema.Columns()[:index]...)
 	cols = append(cols, t.schema.Columns()[index+1:]...)
-	data := make([][]interface{}, t.Len(), t.Len())
+	data := make([][]any, t.Len(), t.Len())
 	for i, e := range t.data {
-		row := make([]interface{}, 0, t.schema.Len()-1)
+		row := make([]any, 0, t.schema.Len()-1)
 		row = append(row, e[:index]...)
 		row = append(row, e[index+1:]...)
 		data[i] = row
@@ -122,9 +122,9 @@ func (t *inmemoryDataFrame) RenameColumn(index int, name string, inplace bool) (
 		t.schema = df.NewSchema(cols)
 		return t, nil
 	}
-	data := make([][]interface{}, len(cols), len(cols))
+	data := make([][]any, len(cols), len(cols))
 	for i, e := range t.data {
-		r := make([]interface{}, len(cols))
+		r := make([]any, len(cols))
 		copy(r, e)
 		data[i] = r
 	}
@@ -145,9 +145,9 @@ func (t *inmemoryDataFrame) SelectColumn(index ...int) (d df.DataFrame, e error)
 		cols = append(cols, t.Schema().Get(c))
 	}
 
-	data := make([][]interface{}, t.Len())
+	data := make([][]any, t.Len())
 	for i, v := range t.data {
-		r := make([]interface{}, 0, len(index))
+		r := make([]any, 0, len(index))
 		for _, c := range index {
 			r = append(r, v[c])
 		}
@@ -172,14 +172,14 @@ func (t *inmemoryDataFrame) SelectColumnByName(col ...string) (d df.DataFrame, e
 }
 
 func (t *inmemoryDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
-	data := make([][]interface{}, t.Len())
+	data := make([][]any, t.Len())
 	for i, r := range t.data {
-		r2 := make([]interface{}, len(r))
+		r2 := make([]any, len(r))
 		copy(r2, r)
 		data[i] = r2
 	}
 
-	isLessFunc := func(f df.Column, order df.SortOrder, c1 interface{}, c2 interface{}) bool {
+	isLessFunc := func(f df.Column, order df.SortOrder, c1 any, c2 any) bool {
 		if f.Format.Type() == reflect.Int64 {
 			if order == df.SortOrderASC {
 				return c1.(int64) < c2.(int64)
@@ -234,9 +234,9 @@ func (t *inmemoryDataFrame) SortByName(order ...df.SortByName) df.DataFrame {
 	return t.Sort(idexes...)
 }
 
-func (t *inmemoryDataFrame) Map(cols []df.Column, f func(df.DataFrameRow) []interface{}) df.DataFrame {
+func (t *inmemoryDataFrame) Map(cols []df.Column, f func(df.DataFrameRow) []any) df.DataFrame {
 
-	data := make([][]interface{}, t.Len())
+	data := make([][]any, t.Len())
 	for i, r := range t.data {
 		data[i] = f(NewDataFrameRow(t.schema, r))
 	}
@@ -244,8 +244,8 @@ func (t *inmemoryDataFrame) Map(cols []df.Column, f func(df.DataFrameRow) []inte
 	return NewDataframe(cols, data)
 }
 
-func (t *inmemoryDataFrame) FlatMap(cols []df.Column, f func(df.DataFrameRow) [][]interface{}) df.DataFrame {
-	data := make([][]interface{}, 0, t.Len())
+func (t *inmemoryDataFrame) FlatMap(cols []df.Column, f func(df.DataFrameRow) [][]any) df.DataFrame {
+	data := make([][]any, 0, t.Len())
 	for _, r := range t.data {
 		data = append(data, f(NewDataFrameRow(t.schema, r))...)
 	}
@@ -254,7 +254,7 @@ func (t *inmemoryDataFrame) FlatMap(cols []df.Column, f func(df.DataFrameRow) []
 }
 
 func (t *inmemoryDataFrame) Filter(f func(df.DataFrameRow) bool) df.DataFrame {
-	data := make([][]interface{}, 0, t.Len())
+	data := make([][]any, 0, t.Len())
 	for _, r := range t.data {
 		if f(NewDataFrameRow(t.schema, r)) {
 			data = append(data, r)
@@ -271,21 +271,21 @@ func (t *inmemoryDataFrame) Limit(offset int, size int) df.DataFrame {
 var dfCounter = 0
 
 // NewDataframe Create Dataframe based on given schema and data
-func NewDataframe(cols []df.Column, data [][]interface{}) df.DataFrame {
+func NewDataframe(cols []df.Column, data [][]any) df.DataFrame {
 	dfCounter = dfCounter + 1
 	return NewDataframeWithName("df_"+strconv.Itoa(dfCounter), cols, data)
 }
 
 // NewDataframeWithName Create Dataframe based on given name, schema and data
-func NewDataframeWithName(name string, cols []df.Column, data [][]interface{}) df.DataFrame {
+func NewDataframeWithName(name string, cols []df.Column, data [][]any) df.DataFrame {
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: data}
 }
 
 // NewDataframeWithNameFromSeries Create Dataframe based on given name, schema and data
 func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.DataFrameSeries) df.DataFrame {
-	dfData := make([][]interface{}, 0, 10)
+	dfData := make([][]any, 0, 10)
 	for i := int64(0); i < data[0].Len(); i++ {
-		r := make([]interface{}, len(colNames))
+		r := make([]any, len(colNames))
 		for j := 0; j < len(colNames); j++ {
 			r[j] = data[j].Get(i)
 		}

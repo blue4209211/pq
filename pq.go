@@ -32,12 +32,12 @@ func WriteSource(data df.DataFrame, config map[string]string, src string) (err e
 }
 
 // NewDataframe Create Dataframe based on given schema and data
-func NewDataframe(cols []df.Column, data [][]interface{}) df.DataFrame {
+func NewDataframe(cols []df.Column, data [][]any) df.DataFrame {
 	return inmemory.NewDataframe(cols, data)
 }
 
 // NewDataframeWithName Create Dataframe based on given name, schema and data
-func NewDataframeWithName(name string, cols []df.Column, data [][]interface{}) df.DataFrame {
+func NewDataframeWithName(name string, cols []df.Column, data [][]any) df.DataFrame {
 	return inmemory.NewDataframeWithName(name, cols, data)
 }
 
@@ -67,6 +67,6 @@ func NewDoubleSeries(data []float64) df.DataFrameSeries {
 }
 
 // NewDataFrameRow returns new Row based on schema and data
-func NewDataFrameRow(schema df.DataFrameSchema, data []interface{}) df.DataFrameRow {
+func NewDataFrameRow(schema df.DataFrameSchema, data []any) df.DataFrameRow {
 	return inmemory.NewDataFrameRow(schema, data)
 }
