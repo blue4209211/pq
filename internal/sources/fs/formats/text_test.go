@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"strings"
@@ -8,12 +8,12 @@ import (
 )
 
 func TestTextDataSource(t *testing.T) {
-	source := textDataSource{}
+	source := TextDataSource{}
 	assert.Equal(t, source.Name(), "text")
 }
 
 func TestTextDataSourceReader(t *testing.T) {
-	source := textDataSource{}
+	source := TextDataSource{}
 	textString := `abcd
 efgh
 ijkl`
@@ -42,7 +42,7 @@ ijkl`
 }
 
 func BenchmarkTextParsing(b *testing.B) {
-	source := textDataSource{}
+	source := TextDataSource{}
 	textString := `abc def geh ijk lmn opq rst uvw xyz`
 
 	textStringData := textString

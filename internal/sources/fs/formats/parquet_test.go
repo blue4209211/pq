@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 )
 
 func TestParquetDataSource(t *testing.T) {
-	source := parquetDataSource{}
+	source := ParquetDataSource{}
 	assert.Equal(t, source.Name(), "parquet")
 }
 
@@ -89,7 +89,7 @@ func TestParquetDataSourceReader(t *testing.T) {
 	t.Log(rowGroupWriter.NumRows())
 	t.Log(rowGroupWriter.TotalBytesWritten())
 
-	source := parquetDataSource{}
+	source := ParquetDataSource{}
 	parquetReader, err := source.Reader(bytes.NewReader(buff.Bytes()), map[string]string{
 		ConfigParquetSingleLine: "false",
 	})
@@ -125,7 +125,7 @@ func TestParquetDataSourceWriter(t *testing.T) {
 		{int64(3), float64(3.0)},
 	})
 
-	source := parquetDataSource{}
+	source := ParquetDataSource{}
 	writer, err := source.Writer(dataframe, map[string]string{
 		ConfigParquetSingleLine: "false",
 	})
@@ -159,7 +159,7 @@ func BenchmarkParquetParsing(b *testing.B) {
 
 	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}}, records)
 
-	source := parquetDataSource{}
+	source := ParquetDataSource{}
 	writer, _ := source.Writer(dataframe, map[string]string{
 		ConfigParquetSingleLine: "false",
 	})

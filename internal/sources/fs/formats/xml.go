@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"bufio"
@@ -154,22 +154,22 @@ var xmlConfig = map[string]string{
 	ConfigXMLElementName: "",
 }
 
-type xmlDataSource struct {
+type XmlDataSource struct {
 }
 
-func (t *xmlDataSource) Args() map[string]string {
+func (t *XmlDataSource) Args() map[string]string {
 	return xmlConfig
 }
 
-func (t *xmlDataSource) Name() string {
+func (t *XmlDataSource) Name() string {
 	return "xml"
 }
 
-func (t *xmlDataSource) Writer(data df.DataFrame, args map[string]string) (StreamWriter, error) {
+func (t *XmlDataSource) Writer(data df.DataFrame, args map[string]string) (FormatWriter, error) {
 	return &xmlDataSourceWriter{data: data, args: args}, nil
 }
 
-func (t *xmlDataSource) Reader(reader io.Reader, args map[string]string) (StreamReader, error) {
+func (t *XmlDataSource) Reader(reader io.Reader, args map[string]string) (FormatReader, error) {
 	xmlReader := xmlDataSourceReader{args: args}
 	err := xmlReader.init(reader)
 	return &xmlReader, err

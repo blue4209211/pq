@@ -8,7 +8,7 @@ import (
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/inmemory"
 	"github.com/blue4209211/pq/internal/sources"
-	"github.com/blue4209211/pq/internal/sources/files"
+	"github.com/blue4209211/pq/internal/sources/fs/formats"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,8 +56,8 @@ func TestQuerySingleCSVFile(t *testing.T) {
 
 func TestQuerySingleJSONFile(t *testing.T) {
 	dataframe, err := queryFiles("select * from json1", []string{"../../testdata/json1.json"}, map[string]string{
-		files.ConfigJSONSingleLine: "false",
-		ConfigEngineStorage:        "memory",
+		formats.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "memory",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
@@ -71,9 +71,9 @@ func TestQuerySingleJSONFile(t *testing.T) {
 
 func TestQuerySingleXMLFile(t *testing.T) {
 	dataframe, err := queryFiles("select * from xml1", []string{"../../testdata/xml1.xml"}, map[string]string{
-		files.ConfigXMLSingleLine:  "false",
-		files.ConfigXMLElementName: "element",
-		ConfigEngineStorage:        "memory",
+		formats.ConfigXMLSingleLine:  "false",
+		formats.ConfigXMLElementName: "element",
+		ConfigEngineStorage:          "memory",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
@@ -87,8 +87,8 @@ func TestQuerySingleXMLFile(t *testing.T) {
 
 func TestQuerySingleParquetFile(t *testing.T) {
 	dataframe, err := queryFiles("select * from parquet1", []string{"../../testdata/parquet1.parquet"}, map[string]string{
-		files.ConfigParquetSingleLine: "false",
-		ConfigEngineStorage:           "memory",
+		formats.ConfigParquetSingleLine: "false",
+		ConfigEngineStorage:             "memory",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
@@ -149,7 +149,7 @@ func TestQueryCompressedFile(t *testing.T) {
 }
 
 func BenchmarkDataframeQuery(b *testing.B) {
-	source, _ := files.GetStreamHandler("json")
+	source, _ := formats.GetFormatHandler("json")
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
 	jsonStringData := jsonString
@@ -170,7 +170,7 @@ func BenchmarkDataframeQuery(b *testing.B) {
 }
 
 func BenchmarkMultipleDataframeQuery(b *testing.B) {
-	source, _ := files.GetStreamHandler("json")
+	source, _ := formats.GetFormatHandler("json")
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
 	jsonStringData := jsonString

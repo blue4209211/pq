@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"bufio"
@@ -10,24 +10,24 @@ import (
 
 var textConfig = map[string]string{}
 
-type textDataSource struct {
+type TextDataSource struct {
 }
 
-func (t *textDataSource) Args() map[string]string {
+func (t *TextDataSource) Args() map[string]string {
 	return textConfig
 }
 
-func (t *textDataSource) Name() string {
+func (t *TextDataSource) Name() string {
 	return "text"
 }
 
-func (t *textDataSource) Reader(reader io.Reader, args map[string]string) (StreamReader, error) {
+func (t *TextDataSource) Reader(reader io.Reader, args map[string]string) (FormatReader, error) {
 	textReader := textDataSourceReader{args: args}
 	err := textReader.init(reader)
 	return &textReader, err
 }
 
-func (t *textDataSource) Writer(data df.DataFrame, args map[string]string) (w StreamWriter, err error) {
+func (t *TextDataSource) Writer(data df.DataFrame, args map[string]string) (w FormatWriter, err error) {
 	return w, errors.New("Unsupported")
 }
 

@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"strings"
@@ -9,12 +9,12 @@ import (
 )
 
 func TestCSVDataSourceName(t *testing.T) {
-	source := csvDataSource{}
+	source := CsvDataSource{}
 	assert.Equal(t, source.Name(), "csv")
 }
 
 func TestCSVDataSourceReader(t *testing.T) {
-	source := csvDataSource{}
+	source := CsvDataSource{}
 
 	csvString :=
 		`a,b,c,d
@@ -52,7 +52,7 @@ func TestCSVDataSourceReader(t *testing.T) {
 }
 
 func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
-	source := csvDataSource{}
+	source := CsvDataSource{}
 
 	csvString :=
 		`1	2	"c1"	"d1"
@@ -91,7 +91,7 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 }
 
 func TestCSVDataSourceWriter(t *testing.T) {
-	source := csvDataSource{}
+	source := CsvDataSource{}
 
 	csvString :=
 		`1	2	c1	d1
@@ -134,7 +134,7 @@ func TestCSVDataSourceWriter(t *testing.T) {
 
 func BenchmarkCSVParsing(b *testing.B) {
 
-	source := csvDataSource{}
+	source := CsvDataSource{}
 	csvString := `1,2,"c1","d1"
 3,4,"c2","d,2"
 5,,"","d2"`

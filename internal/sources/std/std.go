@@ -5,7 +5,7 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/inmemory"
-	"github.com/blue4209211/pq/internal/sources/files"
+	"github.com/blue4209211/pq/internal/sources/fs/formats"
 )
 
 // ConfigStdType source format for StdIn/Out
@@ -29,7 +29,7 @@ func (t *DataSource) Read(url string, args map[string]string) (data df.DataFrame
 	if !ok {
 		streamFormat = "json"
 	}
-	handler, err := files.GetStreamHandler(streamFormat)
+	handler, err := formats.GetFormatHandler(streamFormat)
 	if err != nil {
 		return data, err
 	}
@@ -47,7 +47,7 @@ func (t *DataSource) Write(data df.DataFrame, path string, args map[string]strin
 	if !ok {
 		streamFormat = "json"
 	}
-	handler, err := files.GetStreamHandler(streamFormat)
+	handler, err := formats.GetFormatHandler(streamFormat)
 	if err != nil {
 		return err
 	}

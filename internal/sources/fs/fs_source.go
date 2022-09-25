@@ -1,10 +1,11 @@
-package files
+package fs
 
 import (
 	"archive/zip"
 	"compress/gzip"
 	"errors"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,45 +16,10 @@ import (
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/inmemory"
 	"github.com/blue4209211/pq/internal/log"
+	"github.com/blue4209211/pq/internal/sources/fs/formats"
+	"github.com/blue4209211/pq/internal/sources/fs/vfs"
 	"github.com/golang/snappy"
 )
-
-// StreamSource Provides interface for all the data sources
-type StreamSource interface {
-	Name() string
-	// TODO remove reader, use filepaths, currently hard to decide when to close reader
-	Reader(reader io.Reader, args map[string]string) (StreamReader, error)
-	// TODO remove reader, use filepaths
-	Writer(data df.DataFrame, args map[string]string) (StreamWriter, error)
-	Args() map[string]string
-}
-
-type StreamReader interface {
-	Schema() []df.Column
-	Data() [][]any
-}
-
-// StreamWriter Writes dataframe to write
-type StreamWriter interface {
-	Write(writer io.Writer) error
-}
-
-// GetStreamHandler Factory method to get source based on given string
-func GetStreamHandler(fmt string) (src StreamSource, err error) {
-	fmt = strings.ToLower(fmt)
-
-	if fmt == "csv" {
-		return &csvDataSource{}, err
-	} else if fmt == "json" {
-		return &jsonDataSource{}, err
-	} else if fmt == "xml" {
-		return &xmlDataSource{}, err
-	} else if fmt == "parquet" {
-		return &parquetDataSource{}, err
-	} else {
-		return &textDataSource{}, err
-	}
-}
 
 // DataSource files datasource handler
 type DataSource struct {
@@ -61,7 +27,7 @@ type DataSource struct {
 
 //IsSupported IsSupported returns supported protocols by file sources
 func (t *DataSource) IsSupported(protocol string) bool {
-	return protocol == "file" || protocol == "csv" || protocol == "xml" || protocol == "json" || protocol == "parquet" || protocol == "text" || protocol == "log"
+	return protocol == "file" || protocol == "gs" || protocol == "s3" || protocol == "csv" || protocol == "xml" || protocol == "json" || protocol == "parquet" || protocol == "text" || protocol == "log"
 }
 
 func updateConfigFromSourceURL(sourceURL string, config map[string]string) map[string]string {
@@ -76,7 +42,7 @@ func updateConfigFromSourceURL(sourceURL string, config map[string]string) map[s
 	}
 
 	for k, v := range parsedURL.Query() {
-		if v == nil || len(v) == 0 {
+		if len(v) == 0 {
 			updatedConfig[k] = ""
 		} else {
 			updatedConfig[k] = v[0]
@@ -92,31 +58,42 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 	if err != nil {
 		return data, err
 	}
+
+	filesystem, err := vfs.GetVFS(sourceURL)
+	if err != nil {
+		return data, err
+	}
+
 	var files []string
 
-	fileInfo, fileStateErr := os.Stat(fileOrDirPath)
+	file, err := filesystem.Open(fileOrDirPath)
+	if err != nil {
+		return data, err
+	}
+	fileInfo, fileStateErr := file.Stat()
+
 	if fileStateErr == nil {
 		if fileInfo.IsDir() {
-			err = filepath.Walk(fileOrDirPath, func(path string, info os.FileInfo, err error) error {
-				if !info.IsDir() {
-					files = append(files, path)
-				}
-				return nil
-			})
+			dirEntries, err := fs.ReadDir(filesystem, fileOrDirPath)
 			if err != nil {
 				return data, err
+			}
+			for _, de := range dirEntries {
+				if de.Type().IsRegular() {
+					files = append(files, de.Name())
+				}
 			}
 		} else {
 			files = []string{fileOrDirPath}
 		}
 	} else {
-		files, err = filepath.Glob(fileOrDirPath)
+		files, err = fs.Glob(filesystem, fileOrDirPath)
 		if err != nil {
 			return data, err
 		}
 
-		if len(files) > 0 && strings.Index(sourceURL, "#") == -1 {
-			return data, errors.New("Regex is defined as filePath but missing alias name, use # to define alias name")
+		if len(files) > 0 && !strings.Contains(sourceURL, "#") {
+			return data, errors.New("regex is defined as filePath but missing alias name, use # to define alias name")
 		}
 
 	}
@@ -129,9 +106,9 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 	startTime := time.Now()
 	log.Debug("Reading data from FS - ", fileOrDirName)
 	if len(files) <= 1 {
-		mergedDf, err = readSourcesToDataframeSync(fileOrDirName, files, &config)
+		mergedDf, err = readSourcesToDataframeSync(filesystem, fileOrDirName, files, &config)
 	} else {
-		mergedDf, err = readSourcesToDataframeAsync(fileOrDirName, files, &config)
+		mergedDf, err = readSourcesToDataframeAsync(filesystem, fileOrDirName, files, &config)
 	}
 	log.Debugf("Completed data read from FS (%s) in (%s) ", fileOrDirName, time.Since(startTime).String())
 	if err != nil {
@@ -145,7 +122,7 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 func (t *DataSource) Write(data df.DataFrame, path string, config map[string]string) (err error) {
 	config = updateConfigFromSourceURL(path, config)
 	fileOrDirPath, _, ext, _, err := getFileDetails(path)
-	dfs, err := GetStreamHandler(ext)
+	dfs, err := formats.GetFormatHandler(ext)
 	if err != nil {
 		return err
 	}
@@ -154,7 +131,12 @@ func (t *DataSource) Write(data df.DataFrame, path string, config map[string]str
 		return err
 	}
 
-	f, err := os.Create(fileOrDirPath)
+	fs, err := vfs.GetVFS(path)
+	if err != nil {
+		return err
+	}
+
+	f, err := fs.Create(fileOrDirPath)
 	if err != nil {
 		return err
 	}
@@ -164,7 +146,7 @@ func (t *DataSource) Write(data df.DataFrame, path string, config map[string]str
 }
 
 func getDataframeFromSource(name string, ext string, reader io.Reader, config *map[string]string) (data df.DataFrame, err error) {
-	streamSource, err := GetStreamHandler(ext)
+	streamSource, err := formats.GetFormatHandler(ext)
 	if err != nil {
 		return data, err
 	}
@@ -183,6 +165,10 @@ func getFileDetails(fileName string) (path string, name string, format string, c
 		format = parsedURL.Scheme
 	}
 
+	if parsedURL.Query().Has("format") {
+		format = parsedURL.Query().Get("format")
+	}
+
 	path = parsedURL.Path
 	if parsedURL.Fragment != "" {
 		name = parsedURL.Fragment
@@ -191,31 +177,31 @@ func getFileDetails(fileName string) (path string, name string, format string, c
 	}
 
 	if format == "" {
-		if strings.Index(path, ".csv") >= 0 || strings.Index(path, ".tsv") >= 0 {
+		if strings.Contains(path, ".csv") || strings.Contains(path, ".tsv") {
 			format = "csv"
-		} else if strings.Index(path, ".json") >= 0 {
+		} else if strings.Contains(path, ".json") {
 			format = "json"
-		} else if strings.Index(path, ".xml") >= 0 {
+		} else if strings.Contains(path, ".xml") {
 			format = "xml"
-		} else if strings.Index(path, ".parquet") >= 0 {
+		} else if strings.Contains(path, ".parquet") {
 			format = "parquet"
-		} else if strings.Index(path, ".txt") >= 0 || strings.Index(path, ".text") >= 0 || strings.Index(path, ".log") >= 0 {
+		} else if strings.Contains(path, ".txt") || strings.Contains(path, ".text") || strings.Contains(path, ".log") {
 			format = "text"
 		}
 	}
 
-	if strings.Index(path, ".gz") >= 0 {
+	if strings.Contains(path, ".gz") {
 		comrpression = "gz"
-	} else if strings.Index(path, ".zip") >= 0 {
+	} else if strings.Contains(path, ".zip") {
 		comrpression = "zip"
-	} else if strings.Index(path, ".snappy") >= 0 {
+	} else if strings.Contains(path, ".snappy") {
 		comrpression = "snappy"
 	}
 
 	return
 }
 
-func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncReaderResult, wg *sync.WaitGroup, config *map[string]string) {
+func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncReaderResult, wg *sync.WaitGroup, config *map[string]string, filesystem vfs.VFS) {
 	defer wg.Done()
 
 	for f := range jobs {
@@ -247,7 +233,7 @@ func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRe
 			}
 			results <- asyncReaderResult{data: ds}
 		} else if compression == "gz" {
-			f, err := os.Open(path)
+			f, err := filesystem.Open(path)
 			if err != nil {
 				results <- asyncReaderResult{err: err}
 				break
@@ -266,7 +252,7 @@ func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRe
 			}
 			results <- asyncReaderResult{data: ds}
 		} else if compression == "snappy" {
-			f, err := os.Open(path)
+			f, err := filesystem.Open(path)
 			if err != nil {
 				results <- asyncReaderResult{err: err}
 				break
@@ -301,7 +287,7 @@ func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRe
 				results <- asyncReaderResult{data: ds}
 			}
 		} else {
-			f, err := os.Open(path)
+			f, err := filesystem.Open(path)
 			if err != nil {
 				results <- asyncReaderResult{err: err}
 				break
@@ -324,10 +310,10 @@ type asyncReaderResult struct {
 	err  error
 }
 
-func readSourcesToDataframeAsync(aliasName string, sources []string, config *map[string]string) (data df.DataFrame, err error) {
+func readSourcesToDataframeAsync(filesystem vfs.VFS, aliasName string, sources []string, config *map[string]string) (data df.DataFrame, err error) {
 	// TODO fornow static value and we are not reading data in seprate channel
 	if len(sources) > 200 {
-		return data, errors.New("More than 200 files are not supported")
+		return data, errors.New("more than 200 files are not supported")
 	}
 	jobs := make(chan string, len(sources))
 	results := make(chan asyncReaderResult, len(sources))
@@ -335,7 +321,7 @@ func readSourcesToDataframeAsync(aliasName string, sources []string, config *map
 
 	for w := 0; w < 5; w++ {
 		wg.Add(1)
-		go readSourceToDataframeAsyncWorker(jobs, results, wg, config)
+		go readSourceToDataframeAsyncWorker(jobs, results, wg, config, filesystem)
 	}
 
 	for _, f := range sources {
@@ -355,7 +341,7 @@ func readSourcesToDataframeAsync(aliasName string, sources []string, config *map
 	return inmemory.NewMergeDataframe(aliasName, dfsFiles...)
 }
 
-func readSourcesToDataframeSync(aliasName string, sources []string, config *map[string]string) (data df.DataFrame, err error) {
+func readSourcesToDataframeSync(filesystem vfs.VFS, aliasName string, sources []string, config *map[string]string) (data df.DataFrame, err error) {
 
 	dfsFiles := make([]df.DataFrame, 0, len(sources))
 	for _, f := range sources {
@@ -371,7 +357,7 @@ func readSourcesToDataframeSync(aliasName string, sources []string, config *map[
 		}
 
 		if compression == "gz" {
-			f, err := os.Open(path)
+			f, err := filesystem.Open(path)
 			if err != nil {
 				return data, err
 			}
@@ -407,7 +393,7 @@ func readSourcesToDataframeSync(aliasName string, sources []string, config *map[
 
 			}
 		} else {
-			f, err := os.Open(path)
+			f, err := filesystem.Open(path)
 			if err != nil {
 				return data, err
 			}

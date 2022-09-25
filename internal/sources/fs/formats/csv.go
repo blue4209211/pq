@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"encoding/csv"
@@ -21,24 +21,24 @@ var csvConfig = map[string]string{
 	ConfigCsvSep:    ",",
 }
 
-type csvDataSource struct {
+type CsvDataSource struct {
 }
 
-func (t *csvDataSource) Args() map[string]string {
+func (t *CsvDataSource) Args() map[string]string {
 	return csvConfig
 }
 
-func (t *csvDataSource) Name() string {
+func (t *CsvDataSource) Name() string {
 	return "csv"
 }
 
-func (t *csvDataSource) Reader(reader io.Reader, args map[string]string) (StreamReader, error) {
+func (t *CsvDataSource) Reader(reader io.Reader, args map[string]string) (FormatReader, error) {
 	csvReader := csvDataSourceReader{args: args}
 	err := csvReader.init(reader)
 	return &csvReader, err
 }
 
-func (t *csvDataSource) Writer(data df.DataFrame, args map[string]string) (StreamWriter, error) {
+func (t *CsvDataSource) Writer(data df.DataFrame, args map[string]string) (FormatWriter, error) {
 	return &csvDataSourceWriter{data: data, args: args}, nil
 }
 

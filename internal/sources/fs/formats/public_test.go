@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"testing"
@@ -7,11 +7,11 @@ import (
 )
 
 func TestGetSource(t *testing.T) {
-	source, err := GetStreamHandler("json")
+	source, err := GetFormatHandler("json")
 	assert.Nil(t, err)
 	assert.Equal(t, "json", source.Name())
 
-	source, err = GetStreamHandler("json1")
+	source, err = GetFormatHandler("json1")
 	assert.Nil(t, err)
 	assert.Equal(t, "text", source.Name())
 }

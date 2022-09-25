@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestJSONDataSource(t *testing.T) {
-	source := jsonDataSource{}
+	source := JsonDataSource{}
 	assert.Equal(t, source.Name(), "json")
 }
 
@@ -28,7 +28,7 @@ func TestCustomJSONParser(t *testing.T) {
 }
 
 func TestJSONDataSourceReader(t *testing.T) {
-	source := jsonDataSource{}
+	source := JsonDataSource{}
 
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
@@ -94,7 +94,7 @@ func TestJSONDataSourceReader(t *testing.T) {
 }
 
 func TestJSONDataSourceWriter(t *testing.T) {
-	source := jsonDataSource{}
+	source := JsonDataSource{}
 
 	jsonString := `[{"a":1,"b":2,"c":"c1","d":"d1"},{"a":3,"b":4,"c":"c2","d":"d,2"},{"a":5,"b":null,"c":"","d":"d2"}]
 `
@@ -114,7 +114,7 @@ func TestJSONDataSourceWriter(t *testing.T) {
 }
 
 func BenchmarkJSONParsing(b *testing.B) {
-	source := jsonDataSource{}
+	source := JsonDataSource{}
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
 	jsonStringData := jsonString
