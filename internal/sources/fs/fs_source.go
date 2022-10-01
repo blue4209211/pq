@@ -129,7 +129,7 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 
 func (t *DataSource) Write(data df.DataFrame, path string, config map[string]string) (err error) {
 	config = updateConfigFromSourceURL(path, config)
-	fileOrDirPath, _, ext, _, err := getFileDetails(path)
+	_, name, ext, _, err := getFileDetails(path)
 	dfs, err := formats.GetFormatHandler(ext)
 	if err != nil {
 		return err
@@ -143,8 +143,10 @@ func (t *DataSource) Write(data df.DataFrame, path string, config map[string]str
 	if err != nil {
 		return err
 	}
-
-	f, err := fs.Create(fileOrDirPath)
+	if ext != "" {
+		name = name + "." + ext
+	}
+	f, err := fs.Create(name)
 	if err != nil {
 		return err
 	}
@@ -169,7 +171,7 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 func getFileDetails(fileName string) (path string, name string, format string, comrpression string, err error) {
 
 	parsedURL, err := url.Parse(fileName)
-	if parsedURL.Scheme != "" && parsedURL.Scheme != "file" {
+	if parsedURL.Scheme != "" && parsedURL.Scheme != "file" && parsedURL.Scheme != "s3" && parsedURL.Scheme != "gs" {
 		format = parsedURL.Scheme
 	}
 

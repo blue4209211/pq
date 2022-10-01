@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,7 +21,11 @@ func NewGSFS(u *url.URL) (VFS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &gsFS{root: client.Bucket(u.Host), ctx: ctx}, nil
+	prefix := path.Dir(u.Path)
+	if strings.Index(prefix, "/") == 0 {
+		prefix = prefix[1:]
+	}
+	return &gsFS{root: client.Bucket(u.Host), ctx: ctx, prefix: prefix}, nil
 }
 
 type gsFS struct {
@@ -31,7 +36,7 @@ type gsFS struct {
 }
 
 func (f *gsFS) Create(name string) (io.WriteCloser, error) {
-	return nil, nil
+	return f.writeFile(path.Join(f.prefix, name))
 }
 
 func (fsys *gsFS) dirExists(name string) bool {
@@ -47,44 +52,49 @@ func (fsys *gsFS) dirExists(name string) bool {
 	return true
 }
 
-func (fsys *gsFS) getFile(name string) (*File, error) {
+func (fsys *gsFS) readFile(name string) (f *File, err error) {
 	obj := fsys.root.Object(name)
 	r, err := obj.NewReader(fsys.ctx)
 	if err != nil {
-		return nil, fsys.errorWrap(err)
+		return f, fsys.errorWrap(err)
 	}
-
-	w := obj.NewWriter(fsys.ctx)
 
 	attrs, err := obj.Attrs(fsys.ctx)
 	if err != nil {
-		return nil, fsys.errorWrap(err)
+		return f, fsys.errorWrap(err)
 	}
 
-	return &File{reader: r, writer: w, attrs: attrs}, nil
+	return &File{reader: r, writer: nil, attrs: attrs}, nil
 }
 
-func (fsys *gsFS) Open(name string) (fs.File, error) {
+func (fsys *gsFS) writeFile(name string) (f *File, err error) {
+	obj := fsys.root.Object(name)
+	w := obj.NewWriter(fsys.ctx)
+
+	return &File{reader: nil, writer: w}, nil
+}
+
+func (f *gsFS) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
+	name = filepath.Join(f.prefix, name)
 
-	name = filepath.Join(fsys.prefix, name)
-	if fsys.dirExists(name) {
-		if fsys.bucketAttrs == nil {
-			attrs, err := fsys.root.Attrs(fsys.ctx)
+	if f.dirExists(name) {
+		if f.bucketAttrs == nil {
+			attrs, err := f.root.Attrs(f.ctx)
 			if err != nil {
-				return nil, fsys.errorWrap(err)
+				return nil, f.errorWrap(err)
 			}
-			fsys.bucketAttrs = attrs
+			f.bucketAttrs = attrs
 		}
-		return fsys.dir(name), nil
+		return f.dir(name), nil
 	}
 
-	return fsys.getFile(name)
+	return f.readFile(name)
 }
 
-func (fsys *gsFS) errorWrap(err error) error {
+func (f *gsFS) errorWrap(err error) error {
 	if errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist) {
 		err = fs.ErrNotExist
 	}
@@ -92,7 +102,7 @@ func (fsys *gsFS) errorWrap(err error) error {
 	return err
 }
 
-func (fsys *gsFS) dirIter(path string) *storage.ObjectIterator {
+func (f *gsFS) dirIter(path string) *storage.ObjectIterator {
 	if path == "." {
 		path = ""
 	}
@@ -101,11 +111,11 @@ func (fsys *gsFS) dirIter(path string) *storage.ObjectIterator {
 		path += "/"
 	}
 
-	return fsys.root.Objects(fsys.ctx, &storage.Query{Prefix: path, StartOffset: path, Delimiter: "/"})
+	return f.root.Objects(f.ctx, &storage.Query{Prefix: path, StartOffset: path, Delimiter: "/"})
 }
 
-func (fsys *gsFS) dir(path string) *dir {
-	return &dir{prefix: path, bucketCreatedAt: fsys.bucketAttrs.Created, iter: fsys.dirIter(path)}
+func (f *gsFS) dir(path string) *dir {
+	return &dir{prefix: path, bucketCreatedAt: f.bucketAttrs.Created, iter: f.dirIter(path)}
 }
 
 type File struct {
@@ -115,6 +125,9 @@ type File struct {
 }
 
 func (f *File) Stat() (fs.FileInfo, error) {
+	if f == nil {
+		return nil, errors.New("file doesnt exists")
+	}
 	return &fileInfo{attrs: f.attrs}, nil
 }
 
@@ -127,7 +140,13 @@ func (f *File) Write(p []byte) (int, error) {
 }
 
 func (f *File) Close() error {
-	return f.reader.Close()
+	if f.reader != nil {
+		return f.reader.Close()
+	}
+	if f.writer != nil {
+		return f.writer.Close()
+	}
+	return nil
 }
 
 func (f *File) ReadDir(count int) ([]fs.DirEntry, error) {
