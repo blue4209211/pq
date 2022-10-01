@@ -57,6 +57,7 @@ pq --help
 ## Supported Sources
 
 ### Files
+- supported file system, file:// (default), s3://, gs://
 - fileName (without extension) is treated as filename
 - file extension is used to determine file format
 - Gz compression is supported, filename should end with .gz to auto detect compression
@@ -167,6 +168,7 @@ exposes `text_extract` function which can be used for extracting data from the c
 ## Improvements
 - More tests on Parquet
 - More tests on rdbms
+- Tests for S3/GS
 - TODO testcases for operator impls in pq
 - better support for json
     - Autodetetct json formatting, currently we need additional args to detect certain configs (improvements in parser)
@@ -175,6 +177,6 @@ exposes `text_extract` function which can be used for extracting data from the c
 - stats function for basic exploration
 - interactive mode so that we dont have to query same file multiple times
 - read from external source systems
-    - s3/http
+    - sftp, http
 - imporve query performance
 - lazy read of files so that we can query on large files

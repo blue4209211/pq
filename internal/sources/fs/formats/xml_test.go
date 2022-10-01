@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"strings"
@@ -9,12 +9,12 @@ import (
 )
 
 func TestXMLDataSource(t *testing.T) {
-	source := xmlDataSource{}
+	source := XmlDataSource{}
 	assert.Equal(t, source.Name(), "xml")
 }
 
 func TestXMLDataSourceReader(t *testing.T) {
-	source := xmlDataSource{}
+	source := XmlDataSource{}
 	xmlString := `<root><element a="1"><b>2</b><c>c1</c><d>d1</d></element><element a="3"><b>4</b><c>c2</c><d>d,2</d></element><element a="5"><b></b><c></c><d>d2</d></element></root>`
 
 	xmlReader, err := source.Reader(strings.NewReader(xmlString), map[string]string{
@@ -94,7 +94,7 @@ func TestXMLDataSourceReader(t *testing.T) {
 }
 
 func TestXMLDataSourceWriter(t *testing.T) {
-	source := xmlDataSource{}
+	source := XmlDataSource{}
 
 	xmlString := `<root><element a="1"><b>2</b><c>c1</c><d>d1</d></element><element a="3"><b>4</b><c>c2</c><d>d,2</d></element><element a="5"><b></b><c></c><d>d2</d></element></root>
 `
@@ -119,7 +119,7 @@ func TestXMLDataSourceWriter(t *testing.T) {
 }
 
 func BenchmarkXMLParsing(b *testing.B) {
-	source := xmlDataSource{}
+	source := XmlDataSource{}
 	xmlString := `<root><element a="1"><b>2</b><c>c1</c><d>d1</d></element><element a="3"><b>4</b><c>c2</c><d>d,2</d></element><element a="5"><b></b><c></c><d>d2</d></element></root>`
 
 	xmlStringData := xmlString

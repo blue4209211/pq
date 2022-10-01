@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"bufio"
@@ -201,22 +201,22 @@ var jsonConfig = map[string]string{
 	ConfigJSONRootNode:   "",
 }
 
-type jsonDataSource struct {
+type JsonDataSource struct {
 }
 
-func (t *jsonDataSource) Args() map[string]string {
+func (t *JsonDataSource) Args() map[string]string {
 	return jsonConfig
 }
 
-func (t *jsonDataSource) Name() string {
+func (t *JsonDataSource) Name() string {
 	return "json"
 }
 
-func (t *jsonDataSource) Writer(data df.DataFrame, args map[string]string) (StreamWriter, error) {
+func (t *JsonDataSource) Writer(data df.DataFrame, args map[string]string) (FormatWriter, error) {
 	return &jsonDataSourceWriter{data: data, args: args}, nil
 }
 
-func (t *jsonDataSource) Reader(reader io.Reader, args map[string]string) (StreamReader, error) {
+func (t *JsonDataSource) Reader(reader io.Reader, args map[string]string) (FormatReader, error) {
 	jsonReader := jsonDataSourceReader{args: args}
 	err := jsonReader.init(reader)
 	return &jsonReader, err

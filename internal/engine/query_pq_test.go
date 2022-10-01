@@ -7,14 +7,14 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/internal/inmemory"
-	"github.com/blue4209211/pq/internal/sources/files"
+	"github.com/blue4209211/pq/internal/sources/fs/formats"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestQuerySortOpPQ(t *testing.T) {
 	dataframe, err := queryFiles("select * from json1 order by c1 desc", []string{"../../testdata/json1.json"}, map[string]string{
-		ConfigEngineStorage:        "pq",
-		files.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
+		formats.ConfigJSONSingleLine: "false",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(4), dataframe.Len())
@@ -23,29 +23,29 @@ func TestQuerySortOpPQ(t *testing.T) {
 
 func TestQueryFilterOpPQ(t *testing.T) {
 	dataframe, err := queryFiles("select * from json1 where c1 > 2.0 and c2 = 'c'", []string{"../../testdata/json1.json"}, map[string]string{
-		ConfigEngineStorage:        "pq",
-		files.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
+		formats.ConfigJSONSingleLine: "false",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), dataframe.Len())
 
 	dataframe, err = queryFiles("select * from json1 where c3 match 'a' ", []string{"../../testdata/json1.json"}, map[string]string{
-		ConfigEngineStorage:        "pq",
-		files.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
+		formats.ConfigJSONSingleLine: "false",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), dataframe.Len())
 
 	dataframe, err = queryFiles("select * from json1 where c3 like '%1' ", []string{"../../testdata/json1.json"}, map[string]string{
-		ConfigEngineStorage:        "pq",
-		files.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
+		formats.ConfigJSONSingleLine: "false",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), dataframe.Len())
 
 	dataframe, err = queryFiles("select * from json1 where c3 regexp '.*1' ", []string{"../../testdata/json1.json"}, map[string]string{
-		ConfigEngineStorage:        "pq",
-		files.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
+		formats.ConfigJSONSingleLine: "false",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), dataframe.Len())
@@ -88,8 +88,8 @@ func TestQuerySingleCSVFilePQ(t *testing.T) {
 
 func TestQuerySingleJSONFilePQ(t *testing.T) {
 	dataframe, err := queryFiles("select * from json1", []string{"../../testdata/json1.json"}, map[string]string{
-		files.ConfigJSONSingleLine: "false",
-		ConfigEngineStorage:        "pq",
+		formats.ConfigJSONSingleLine: "false",
+		ConfigEngineStorage:          "pq",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
@@ -112,20 +112,22 @@ func TestQueryMultiFilePQ(t *testing.T) {
 	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
+}
 
+func TestQueryRegexFilePQ(t *testing.T) {
 	// check patterns
-	dataframe, err = queryFiles("select * from multifiles", []string{"../../testdata/multiplefiles/*.csv#multifiles"}, map[string]string{
+	dataframe, err := queryFiles("select * from multifiles", []string{"../../testdata/multiplefiles/*.csv#multifiles"}, map[string]string{
 		ConfigEngineStorage: "pq",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
 	assert.Equal(t, int64(12), dataframe.Len())
-	schema = dataframe.Schema()
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
 }
 
-func TestQueryCompressedFilePQ(t *testing.T) {
+func TestQueryCompressedFileGzPQ(t *testing.T) {
 	// check gz
 	dataframe, err := queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.gz"}, map[string]string{
 		ConfigEngineStorage: "pq",
@@ -136,21 +138,23 @@ func TestQueryCompressedFilePQ(t *testing.T) {
 	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
+}
 
+func TestQueryCompressedFileZipPQ(t *testing.T) {
 	//zip
-	dataframe, err = queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.zip"}, map[string]string{
+	dataframe, err := queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.zip"}, map[string]string{
 		ConfigEngineStorage: "pq",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
 	assert.Equal(t, int64(12), dataframe.Len())
-	schema = dataframe.Schema()
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
 }
 
 func BenchmarkDataframeQueryPQ(b *testing.B) {
-	source, _ := files.GetStreamHandler("json")
+	source, _ := formats.GetFormatHandler("json")
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
 	jsonStringData := jsonString
@@ -173,7 +177,7 @@ func BenchmarkDataframeQueryPQ(b *testing.B) {
 }
 
 func BenchmarkMultipleDataframeQueryPQ(b *testing.B) {
-	source, _ := files.GetStreamHandler("json")
+	source, _ := formats.GetFormatHandler("json")
 	jsonString := `[{"a":1, "b":2, "c":"c1", "d":"d1"},{"a":3, "b":4, "c":"c2", "d":"d,2"},{"a":5, "b":null, "c":"", "d":"d2"}]`
 
 	jsonStringData := jsonString

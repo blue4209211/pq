@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/sources/files"
+	"github.com/blue4209211/pq/internal/sources/fs"
 	"github.com/blue4209211/pq/internal/sources/rdbms"
 	"github.com/blue4209211/pq/internal/sources/std"
 )
@@ -66,7 +66,7 @@ func ReadDataFrames(config map[string]string, sourceUrls ...string) (data []df.D
 }
 
 var sources = []DataFrameSource{
-	&files.DataSource{}, &rdbms.DataSource{}, &std.DataSource{},
+	&fs.DataSource{}, &rdbms.DataSource{}, &std.DataSource{},
 }
 
 //GetDataFrameSource returns DF source based on given sourceurl

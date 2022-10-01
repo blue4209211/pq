@@ -1,4 +1,4 @@
-package files
+package formats
 
 import (
 	"bufio"
@@ -224,22 +224,22 @@ var parquetConfig = map[string]string{
 	ConfigParquetSingleLine: "false",
 }
 
-type parquetDataSource struct {
+type ParquetDataSource struct {
 }
 
-func (t *parquetDataSource) Args() map[string]string {
+func (t *ParquetDataSource) Args() map[string]string {
 	return parquetConfig
 }
 
-func (t *parquetDataSource) Name() string {
+func (t *ParquetDataSource) Name() string {
 	return "parquet"
 }
 
-func (t *parquetDataSource) Writer(data df.DataFrame, args map[string]string) (StreamWriter, error) {
+func (t *ParquetDataSource) Writer(data df.DataFrame, args map[string]string) (FormatWriter, error) {
 	return &parquetDataSourceWriter{data: data, args: args}, nil
 }
 
-func (t *parquetDataSource) Reader(reader io.Reader, args map[string]string) (StreamReader, error) {
+func (t *ParquetDataSource) Reader(reader io.Reader, args map[string]string) (FormatReader, error) {
 	parquetReader := &parquetDataSourceReader{args: args}
 	err := parquetReader.init(reader)
 	return parquetReader, err
