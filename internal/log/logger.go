@@ -2,6 +2,7 @@ package log
 
 import (
 	"errors"
+	"flag"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -18,11 +19,17 @@ var infoLogger *log.Logger = log.New(pqLogWriter{}, "INFO: ", 0)
 var warningLogger *log.Logger = log.New(pqLogWriter{}, "WARNING: ", 0)
 var errorLogger *log.Logger = log.New(pqLogWriter{}, "ERROR: ", 0)
 
-var logger = InfoFormatName
-var isDebugEnabled = false
+var isDebugEnabled = true
 var isInfoEnabled = true
 var isWarningEnabled = true
 var isErrorEnabled = true
+
+func init() {
+	if flag.Lookup("test.v") != nil {
+		SetLogger("debug")
+		isDebugEnabled = true
+	}
+}
 
 // SetLogger sets logging level for logger
 func SetLogger(logger string) (err error) {

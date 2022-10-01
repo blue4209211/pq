@@ -5,32 +5,12 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	"github.com/blue4209211/pq/internal/log"
 )
-
-func pathForDirFS(u *url.URL) string {
-	if u.Path == "" {
-		return ""
-	}
-
-	rootPath := u.Path
-	if len(rootPath) >= 3 {
-		if rootPath[0] == '/' && rootPath[2] == ':' {
-			rootPath = rootPath[1:]
-		}
-	}
-
-	// a file:// URL with a host part should be interpreted as a UNC
-	switch u.Host {
-	case ".":
-		rootPath = "//./" + rootPath
-	case "":
-		// nothin'
-	default:
-		rootPath = "//" + u.Host + rootPath
-	}
-
-	return rootPath
-}
 
 type osFS struct {
 	root fs.FS
@@ -38,13 +18,29 @@ type osFS struct {
 }
 
 func NewOsFS(u *url.URL) (VFS, error) {
-	rootPath := pathForDirFS(u)
-	dirFS := os.DirFS(rootPath)
-	return &osFS{root: dirFS, base: rootPath}, nil
+	absPath, err := filepath.Abs(u.Path)
+	if err != nil {
+		return nil, err
+	}
+	fileinfo, err := os.Stat(absPath)
+	if err != nil && !strings.Contains(absPath, "*") {
+		return nil, err
+	}
+
+	var base string
+	if fileinfo != nil && fileinfo.IsDir() {
+		base = filepath.Dir(absPath)
+	} else {
+		base = filepath.Dir(absPath)
+	}
+
+	log.Debugf("using %s as basepath ", base)
+
+	return &osFS{root: os.DirFS(base), base: base}, nil
 }
 
 func (f *osFS) Create(name string) (io.WriteCloser, error) {
-	return os.Create(name)
+	return os.Create(path.Join(f.base, name))
 }
 
 func (f *osFS) Open(name string) (fs.File, error) {

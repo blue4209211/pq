@@ -112,20 +112,22 @@ func TestQueryMultiFilePQ(t *testing.T) {
 	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
+}
 
+func TestQueryRegexFilePQ(t *testing.T) {
 	// check patterns
-	dataframe, err = queryFiles("select * from multifiles", []string{"../../testdata/multiplefiles/*.csv#multifiles"}, map[string]string{
+	dataframe, err := queryFiles("select * from multifiles", []string{"../../testdata/multiplefiles/*.csv#multifiles"}, map[string]string{
 		ConfigEngineStorage: "pq",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
 	assert.Equal(t, int64(12), dataframe.Len())
-	schema = dataframe.Schema()
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
 }
 
-func TestQueryCompressedFilePQ(t *testing.T) {
+func TestQueryCompressedFileGzPQ(t *testing.T) {
 	// check gz
 	dataframe, err := queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.gz"}, map[string]string{
 		ConfigEngineStorage: "pq",
@@ -136,15 +138,17 @@ func TestQueryCompressedFilePQ(t *testing.T) {
 	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
+}
 
+func TestQueryCompressedFileZipPQ(t *testing.T) {
 	//zip
-	dataframe, err = queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.zip"}, map[string]string{
+	dataframe, err := queryFiles("select * from csv", []string{"../../testdata/compressed/csv.csv.zip"}, map[string]string{
 		ConfigEngineStorage: "pq",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, dataframe)
 	assert.Equal(t, int64(12), dataframe.Len())
-	schema = dataframe.Schema()
+	schema := dataframe.Schema()
 	assert.Equal(t, 3, schema.Len())
 	assert.Equal(t, schema.Get(0).Name, "c1")
 }

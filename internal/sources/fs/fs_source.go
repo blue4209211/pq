@@ -2,12 +2,14 @@ package fs
 
 import (
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"io"
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -54,7 +56,7 @@ func updateConfigFromSourceURL(sourceURL string, config map[string]string) map[s
 func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.DataFrame, err error) {
 	config = updateConfigFromSourceURL(sourceURL, config)
 
-	fileOrDirPath, fileOrDirName, _, _, err := getFileDetails(sourceURL)
+	filePath, fileOrDirName, _, _, err := getFileDetails(sourceURL)
 	if err != nil {
 		return data, err
 	}
@@ -64,30 +66,36 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 		return data, err
 	}
 
+	// vfs will be using base as parent path
+	if filePath != "" {
+		filePath = path.Base(filePath)
+	}
 	var files []string
 
-	file, err := filesystem.Open(fileOrDirPath)
-	if err != nil {
+	file, err := filesystem.Open(filePath)
+	if err != nil && !strings.Contains(filePath, "*") {
 		return data, err
 	}
-	fileInfo, fileStateErr := file.Stat()
-
-	if fileStateErr == nil {
+	var fileInfo fs.FileInfo
+	if file != nil {
+		fileInfo, err = file.Stat()
+	}
+	if err == nil {
 		if fileInfo.IsDir() {
-			dirEntries, err := fs.ReadDir(filesystem, fileOrDirPath)
+			dirEntries, err := fs.ReadDir(filesystem, fileInfo.Name())
 			if err != nil {
 				return data, err
 			}
 			for _, de := range dirEntries {
 				if de.Type().IsRegular() {
-					files = append(files, de.Name())
+					files = append(files, path.Join(fileInfo.Name(), de.Name()))
 				}
 			}
 		} else {
-			files = []string{fileOrDirPath}
+			files = []string{fileInfo.Name()}
 		}
-	} else {
-		files, err = fs.Glob(filesystem, fileOrDirPath)
+	} else if strings.Contains(filePath, "*") {
+		files, err = fs.Glob(filesystem, filePath)
 		if err != nil {
 			return data, err
 		}
@@ -104,7 +112,7 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 
 	var mergedDf df.DataFrame
 	startTime := time.Now()
-	log.Debug("Reading data from FS - ", fileOrDirName)
+	log.Debug("Reading data from FS - ", files)
 	if len(files) <= 1 {
 		mergedDf, err = readSourcesToDataframeSync(filesystem, fileOrDirName, files, &config)
 	} else {
@@ -266,7 +274,20 @@ func readSourceToDataframeAsyncWorker(jobs <-chan string, results chan<- asyncRe
 			}
 			results <- asyncReaderResult{data: ds}
 		} else if compression == "zip" {
-			zipReader, err := zip.OpenReader(path)
+			f, err := filesystem.Open(path)
+			if err != nil {
+				results <- asyncReaderResult{err: err}
+				break
+			}
+			defer f.Close()
+			buff := bytes.NewBuffer([]byte{})
+			_, err = io.Copy(buff, f)
+			if err != nil {
+				results <- asyncReaderResult{err: err}
+				break
+			}
+
+			zipReader, err := zip.NewReader(bytes.NewReader(buff.Bytes()), int64(buff.Len()))
 			if err != nil {
 				results <- asyncReaderResult{err: err}
 				break
@@ -374,7 +395,18 @@ func readSourcesToDataframeSync(filesystem vfs.VFS, aliasName string, sources []
 			dfsFiles = append(dfsFiles, ds)
 
 		} else if compression == "zip" {
-			zipReader, err := zip.OpenReader(path)
+			f, err := filesystem.Open(path)
+			if err != nil {
+				return data, err
+			}
+			defer f.Close()
+			buff := bytes.NewBuffer([]byte{})
+			_, err = io.Copy(buff, f)
+			if err != nil {
+				return data, err
+			}
+
+			zipReader, err := zip.NewReader(bytes.NewReader(buff.Bytes()), int64(buff.Len()))
 			if err != nil {
 				return data, err
 			}
