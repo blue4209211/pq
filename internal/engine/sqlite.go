@@ -235,7 +235,7 @@ func newSQLiteEngine(config map[string]string, data []df.DataFrame) (engine quer
 		}
 		engine = &sqlitePQQueryEngine{&module, db}
 	} else if format == "file" {
-		dataFile, err := ioutil.TempFile("", "pq.*.sq")
+		dataFile, err := ioutil.TempFile("", "pq.*.sql")
 		if err != nil {
 			return engine, err
 		}

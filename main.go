@@ -49,8 +49,8 @@ func main() {
 
 	remainingArgs := flag.Args()
 
-	if len(remainingArgs) < 2 {
-		fmt.Println("Usage: pq [-args] <query> <files...or using - for stdin>")
+	if len(remainingArgs) < 1 {
+		fmt.Println("Usage: pq [-args] <query> [files...or using - for stdin]")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
