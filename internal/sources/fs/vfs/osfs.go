@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/blue4209211/pq/internal/log"
 )
@@ -22,16 +21,17 @@ func NewOsFS(u *url.URL) (VFS, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileinfo, err := os.Stat(absPath)
-	if err != nil && !strings.Contains(absPath, "*") {
-		return nil, err
-	}
+	// fileinfo, err := os.Stat(absPath)
+	// if err != nil && !strings.Contains(absPath, "*") {
+	// 	return nil, err
+	// }
 
-	var base string
-	if fileinfo != nil && fileinfo.IsDir() {
-		base = filepath.Dir(absPath)
-	} else {
-		base = filepath.Dir(absPath)
+	base := filepath.Dir(absPath)
+
+	_, err = os.Stat(base)
+	if err != nil {
+		log.Debugf("%s basepath doesnt exists", base)
+		return nil, err
 	}
 
 	log.Debugf("using %s as basepath ", base)

@@ -56,7 +56,7 @@ func updateConfigFromSourceURL(sourceURL string, config map[string]string) map[s
 func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.DataFrame, err error) {
 	config = updateConfigFromSourceURL(sourceURL, config)
 
-	filePath, fileOrDirName, _, _, err := getFileDetails(sourceURL)
+	filePath, fileOrDirName, format, _, err := getFileDetails(sourceURL)
 	if err != nil {
 		return data, err
 	}
@@ -111,6 +111,13 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 	}
 
 	var mergedDf df.DataFrame
+
+	if format != "" {
+		for i := 0; i < len(files); i++ {
+			files[i] = files[i] + "?format=" + format
+		}
+	}
+
 	startTime := time.Now()
 	log.Debug("Reading data from FS - ", files)
 	if len(files) <= 1 {
@@ -169,7 +176,6 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 }
 
 func getFileDetails(fileName string) (path string, name string, format string, comrpression string, err error) {
-
 	parsedURL, err := url.Parse(fileName)
 	if parsedURL.Scheme != "" && parsedURL.Scheme != "file" && parsedURL.Scheme != "s3" && parsedURL.Scheme != "gs" {
 		format = parsedURL.Scheme
@@ -207,6 +213,8 @@ func getFileDetails(fileName string) (path string, name string, format string, c
 	} else if strings.Contains(path, ".snappy") {
 		comrpression = "snappy"
 	}
+
+	log.Debugf("File Details For (%s)- path(%s), name(%s), format(%s), compression(%s)", fileName, path, name, format, comrpression)
 
 	return
 }
