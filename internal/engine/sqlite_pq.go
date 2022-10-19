@@ -252,12 +252,24 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 				case "notnull":
 					f = f && (dfr.Get(colOp.idx) != nil)
 				case "match":
+					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
+						f = false
+					}
 					f = f && (fns.Matches(vals[i].(string), dfr.Get(colOp.idx).(string)))
 				case "regexp":
+					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
+						f = false
+					}
 					f = f && (fns.Regexp(vals[i].(string), dfr.Get(colOp.idx).(string)))
 				case "like":
+					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
+						f = false
+					}
 					f = f && (fns.Like(vals[i].(string), dfr.Get(colOp.idx).(string)))
 				case "glob":
+					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
+						f = false
+					}
 					f = f && (fns.Glob(dfr.Get(colOp.idx).(string), vals[i].(string)))
 				case "<":
 					if colOp.schema.Type() == reflect.Int64 {
