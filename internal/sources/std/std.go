@@ -1,6 +1,7 @@
 package std
 
 import (
+	"context"
 	"os"
 
 	"github.com/blue4209211/pq/df"
@@ -24,7 +25,7 @@ func (t *DataSource) IsSupported(protocol string) bool {
 	return protocol == "" || protocol == "std"
 }
 
-func (t *DataSource) Read(url string, args map[string]string) (data df.DataFrame, err error) {
+func (t *DataSource) Read(context context.Context, url string, args map[string]string) (data df.DataFrame, err error) {
 	streamFormat, ok := args[ConfigStdType]
 	if !ok {
 		streamFormat = "json"
@@ -42,7 +43,7 @@ func (t *DataSource) Read(url string, args map[string]string) (data df.DataFrame
 	return inmemory.NewDataframe(reader.Schema(), reader.Data()), err
 }
 
-func (t *DataSource) Write(data df.DataFrame, path string, args map[string]string) (err error) {
+func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, args map[string]string) (err error) {
 	streamFormat, ok := args[ConfigStdType]
 	if !ok {
 		streamFormat = "json"

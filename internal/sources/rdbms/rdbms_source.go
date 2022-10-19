@@ -1,6 +1,7 @@
 package rdbms
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/url"
@@ -32,7 +33,7 @@ func (t *DataSource) IsSupported(protocol string) bool {
 	return protocol == "mysql" || protocol == "maria" || protocol == "postgres" || protocol == "postgresql" || protocol == "sqlite"
 }
 
-func (t *DataSource) Read(dbURL string, args map[string]string) (data df.DataFrame, err error) {
+func (t *DataSource) Read(context context.Context, dbURL string, args map[string]string) (data df.DataFrame, err error) {
 	u, err := url.Parse(dbURL)
 	if err != nil {
 		return data, err
@@ -77,7 +78,7 @@ func (t *DataSource) Read(dbURL string, args map[string]string) (data df.DataFra
 
 }
 
-func (t *DataSource) Write(data df.DataFrame, path string, args map[string]string) (err error) {
+func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, args map[string]string) (err error) {
 	return errors.New("Unsupported")
 }
 
@@ -110,6 +111,10 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, 
 		if err != nil {
 			log.Debugf("sql format error for - %s, %s, %s", c, sqlColTypes[i].DatabaseTypeName(), err)
 			dfFormat, err = df.GetFormat("string")
+			if err != nil {
+				return schema, data, err
+			}
+
 		}
 		cols[i] = df.Column{Name: c, Format: dfFormat}
 	}
