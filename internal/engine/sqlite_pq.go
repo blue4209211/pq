@@ -36,7 +36,7 @@ func (t *sqlitePQQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	err := t.createTable(dataFrame.Name(), schema.Columns())
+	err := t.createTable(dataFrame.Name(), schema.Series())
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (t *sqlitePQQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 	return err
 }
 
-func (t *sqlitePQQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
+func (t *sqlitePQQueryEngine) createTable(tableName string, cols []df.SeriesSchema) (err error) {
 	sqlStmt := `create virtual table "%s" using pq (%s);`
 	columnStr := ""
 	for _, col := range cols {
@@ -64,7 +64,7 @@ type pqModule struct {
 	data []df.DataFrame
 }
 
-func (t *pqModule) createTable(c *sqlite3.SQLiteConn, tableName string, cols []df.Column) (err error) {
+func (t *pqModule) createTable(c *sqlite3.SQLiteConn, tableName string, cols []df.SeriesSchema) (err error) {
 	sqlStmt := `create table "%s" (%s);`
 	columnStr := ""
 	for _, col := range cols {
@@ -86,7 +86,7 @@ func (t *pqModule) Create(c *sqlite3.SQLiteConn, args []string) (sqlite3.VTab, e
 		if d.Name() == args[2] {
 
 			schema := d.Schema()
-			err := t.createTable(c, d.Name(), schema.Columns())
+			err := t.createTable(c, d.Name(), schema.Series())
 			if err != nil {
 				return nil, err
 			}
@@ -195,7 +195,7 @@ type pqCursor struct {
 func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 	cType := (*t.data).Schema().Get(col)
 	//i, _ := cType.Format.Convert((*t.data)[t.index][col])
-	i := (*t.data).Get(int64(t.index)).Data()[col]
+	i := (*t.data).GetRow(int64(t.index)).Data()[col]
 	if i == nil {
 		c.ResultNull()
 		return err
@@ -239,7 +239,7 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			colIdxAndOps[i] = filterOp{idx: idx, op: colIdxAndOp[1], schema: (*t.data).Schema().Get(idx).Format}
 		}
 
-		d := (*t.data).Filter(func(dfr df.DataFrameRow) bool {
+		d := (*t.data).FilterRow(func(dfr df.DataFrameRow) bool {
 			f := true
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {
@@ -356,7 +356,7 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			if colIdxAndOp[1] == "true" {
 				order = df.SortOrderDESC
 			}
-			orderOps[i] = df.SortByIndex{Column: idx, Order: order}
+			orderOps[i] = df.SortByIndex{Series: idx, Order: order}
 		}
 
 		d := (*t.data).Sort(orderOps...)

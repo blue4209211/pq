@@ -37,12 +37,12 @@ type textDataSourceReader struct {
 	isHeader bool
 }
 
-var textSchema []df.Column = []df.Column{
+var textSchema []df.SeriesSchema = []df.SeriesSchema{
 	{Name: "text", Format: df.StringFormat},
 	{Name: "rowNumber_", Format: df.IntegerFormat},
 }
 
-func (t *textDataSourceReader) Schema() (columns []df.Column) {
+func (t *textDataSourceReader) Schema() (columns []df.SeriesSchema) {
 	return textSchema
 }
 

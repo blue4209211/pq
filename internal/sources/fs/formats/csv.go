@@ -65,7 +65,7 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 		schema := t.data.Schema()
 		cols := make([]string, schema.Len())
 
-		for i, c := range schema.Columns() {
+		for i, c := range schema.Series() {
 			cols[i] = c.Name
 		}
 		csvWriter.Write(cols)
@@ -73,7 +73,7 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 
 	format, err := df.GetFormat("string")
 	for i := int64(0); i < t.data.Len(); i++ {
-		rowInterface := t.data.Get(i)
+		rowInterface := t.data.GetRow(i)
 		row := make([]string, rowInterface.Len())
 		for i, r := range rowInterface.Data() {
 			str, _ := format.Convert(r)
@@ -90,14 +90,14 @@ type csvDataSourceReader struct {
 	isHeader bool
 }
 
-func (t *csvDataSourceReader) Schema() (columns []df.Column) {
-	columns = make([]df.Column, len(t.records[0]))
+func (t *csvDataSourceReader) Schema() (columns []df.SeriesSchema) {
+	columns = make([]df.SeriesSchema, len(t.records[0]))
 	f, _ := df.GetFormat("string")
 	for i, col := range t.records[0] {
 		if t.isHeader {
-			columns[i] = df.Column{Name: col, Format: f}
+			columns[i] = df.SeriesSchema{Name: col, Format: f}
 		} else {
-			columns[i] = df.Column{Name: "c" + strconv.Itoa(i), Format: f}
+			columns[i] = df.SeriesSchema{Name: "c" + strconv.Itoa(i), Format: f}
 		}
 	}
 	return

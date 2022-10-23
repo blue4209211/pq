@@ -32,12 +32,12 @@ func WriteSource(data df.DataFrame, config map[string]string, src string) (err e
 }
 
 // NewDataframe Create Dataframe based on given schema and data
-func NewDataframe(cols []df.Column, data [][]any) df.DataFrame {
+func NewDataframe(cols []df.SeriesSchema, data [][]any) df.DataFrame {
 	return inmemory.NewDataframe(cols, data)
 }
 
 // NewDataframeWithName Create Dataframe based on given name, schema and data
-func NewDataframeWithName(name string, cols []df.Column, data [][]any) df.DataFrame {
+func NewDataframeWithName(name string, cols []df.SeriesSchema, data [][]any) df.DataFrame {
 	return inmemory.NewDataframeWithName(name, cols, data)
 }
 
@@ -69,4 +69,24 @@ func NewDoubleSeries(data []float64) df.DataFrameSeries {
 // NewDataFrameRow returns new Row based on schema and data
 func NewDataFrameRow(schema df.DataFrameSchema, data []any) df.DataFrameRow {
 	return inmemory.NewDataFrameRow(schema, data)
+}
+
+// NewDataFrameSeriesBoolValue returns new Series Value
+func NewDataFrameSeriesBoolValue(data bool) df.DataFrameSeriesValue {
+	return inmemory.NewDataFrameSeriesBoolValue(data)
+}
+
+// NewDataFrameSeriesBoolValue returns new Series Value
+func NewDataFrameSeriesDoubleValue(data float64) df.DataFrameSeriesValue {
+	return inmemory.NewDataFrameSeriesDoubleValue(data)
+}
+
+// NewDataFrameSeriesIntValue returns new Series Value
+func NewDataFrameSeriesIntValue(data int64) df.DataFrameSeriesValue {
+	return inmemory.NewDataFrameSeriesIntValue(data)
+}
+
+// NewDataFrameSeriesIntValue returns new Series Value
+func NewDataFrameSeriesStringValue(data string) df.DataFrameSeriesValue {
+	return inmemory.NewDataFrameSeriesStringValue(data)
 }

@@ -3,6 +3,7 @@ package inmemory
 import (
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/blue4209211/pq/df"
 )
@@ -10,11 +11,11 @@ import (
 //TODO create series for different types
 
 type inmemoryDataFrameSeries struct {
-	schema df.DataFrameSeriesFormat
+	schema df.SeriesSchema
 	data   []any
 }
 
-func (t *inmemoryDataFrameSeries) Schema() df.DataFrameSeriesFormat {
+func (t *inmemoryDataFrameSeries) Schema() df.SeriesSchema {
 	return t.schema
 }
 
@@ -22,40 +23,50 @@ func (t *inmemoryDataFrameSeries) Len() int64 {
 	return int64(len(t.data))
 }
 
-func (t *inmemoryDataFrameSeries) Get(i int64) any {
-	return t.data[i]
+func (t *inmemoryDataFrameSeries) Get(i int64) df.DataFrameSeriesValue {
+	return NewDataFrameSeriesValue(t.schema.Format, t.data[i])
 }
 
-func (t *inmemoryDataFrameSeries) ForEach(f func(any)) {
+func (t *inmemoryDataFrameSeries) ForEach(f func(df.DataFrameSeriesValue)) {
 	for _, d := range t.data {
-		f(d)
+		f(NewDataFrameSeriesValue(t.schema.Format, d))
 	}
 }
 
-func (t *inmemoryDataFrameSeries) Filter(f func(any) bool) df.DataFrameSeries {
+func (t *inmemoryDataFrameSeries) Filter(f func(df.DataFrameSeriesValue) bool) df.DataFrameSeries {
 	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
-		if f(d) {
+		if f(NewDataFrameSeriesValue(t.schema.Format, d)) {
 			data = append(data, d)
 		}
 	}
-	return NewSeries(data, t.schema)
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
 }
 
-func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(any) any) df.DataFrameSeries {
+func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue) df.DataFrameSeriesValue) df.DataFrameSeries {
 	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
-		data = append(data, f(d))
+		data = append(data, f(NewDataFrameSeriesValue(t.schema.Format, d)).Get())
 	}
 	return NewSeries(data, s)
 }
 
-func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(any) []any) df.DataFrameSeries {
+func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue) []df.DataFrameSeriesValue) df.DataFrameSeries {
 	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
-		data = append(data, f(d)...)
+		for _, k := range f(NewDataFrameSeriesValue(t.schema.Format, d)) {
+			data = append(data, k)
+		}
 	}
 	return NewSeries(data, s)
+}
+
+func (t *inmemoryDataFrameSeries) Reduce(f func(df.DataFrameSeriesValue, df.DataFrameSeriesValue) df.DataFrameSeriesValue, startValue df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+	finalValue := startValue
+	for _, d := range t.data {
+		finalValue = f(finalValue, NewDataFrameSeriesValue(t.schema.Format, d))
+	}
+	return finalValue
 }
 
 //TODO use maps{}
@@ -73,20 +84,25 @@ func (t *inmemoryDataFrameSeries) Distinct() df.DataFrameSeries {
 			data = append(data, d)
 		}
 	}
-	return NewSeries(data, t.schema)
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
+}
+
+func (t *inmemoryDataFrameSeries) Copy() df.DataFrameSeries {
+	v := make([]any, t.Len())
+	copy(v, t.data)
+
+	return NewNamedSeries(v, t.schema.Format, t.schema.Name+"_Copy")
 }
 
 func (t *inmemoryDataFrameSeries) Limit(offset int, size int) df.DataFrameSeries {
-	return NewSeries(t.data[offset:offset+size], t.schema)
+	return NewNamedSeries(t.data[offset:offset+size], t.schema.Format, t.schema.Name)
 }
 
 func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
-	d := make([]any, len(t.data), len(t.data))
-	for i, e := range t.data {
-		d[i] = e
-	}
+	d := make([]any, len(t.data))
+	copy(d, t.data)
 
-	if t.schema.Type() == reflect.Int64 {
+	if t.schema.Format.Type() == reflect.Int64 {
 		if order == df.SortOrderASC {
 			sort.Slice(d, func(i, j int) bool {
 				return d[i].(int64) < d[j].(int64)
@@ -96,7 +112,7 @@ func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
 				return d[i].(int64) > d[j].(int64)
 			})
 		}
-	} else if t.schema.Type() == reflect.Float64 {
+	} else if t.schema.Format.Type() == reflect.Float64 {
 		if order == df.SortOrderASC {
 			sort.Slice(d, func(i, j int) bool {
 				return d[i].(float64) < d[j].(float64)
@@ -106,7 +122,7 @@ func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
 				return d[i].(float64) > d[j].(float64)
 			})
 		}
-	} else if t.schema.Type() == reflect.String {
+	} else if t.schema.Format.Type() == reflect.String {
 		if order == df.SortOrderASC {
 			sort.Slice(d, func(i, j int) bool {
 				return d[i].(string) < d[j].(string)
@@ -116,24 +132,84 @@ func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
 				return d[i].(string) > d[j].(string)
 			})
 		}
-	} else if t.schema.Type() == reflect.Bool {
+	} else if t.schema.Format.Type() == reflect.Bool {
 		if order == df.SortOrderASC {
 			sort.Slice(d, func(i, j int) bool {
-				return d[i].(bool) == false
+				return !d[i].(bool)
 			})
 		} else {
 			sort.Slice(d, func(i, j int) bool {
-				return d[i].(bool) == true
+				return d[i].(bool)
 			})
 		}
 	}
 
-	return NewSeries(d, t.schema)
+	return NewNamedSeries(d, t.schema.Format, t.schema.Name)
+}
+
+func (t *inmemoryDataFrameSeries) Join(schema df.DataFrameSeriesFormat, series df.DataFrameSeries, jointype df.JoinType, f func(df.DataFrameSeriesValue, df.DataFrameSeriesValue) []df.DataFrameSeriesValue) (s df.DataFrameSeries) {
+	val := []df.DataFrameSeriesValue{}
+	if jointype == df.JoinLeft || jointype == df.JoinReft || jointype == df.JoinEqui {
+		min := int64(len(t.data))
+		if series.Len() < min {
+			min = series.Len()
+		}
+		for i := int64(0); i < min; i++ {
+			val = append(val, f(t.Get(i), series.Get(i))...)
+		}
+		if jointype == df.JoinLeft {
+			for i := int64(min); i < int64(len(t.data)); i++ {
+				val = append(val, f(t.Get(i), nil)...)
+			}
+		} else if jointype == df.JoinReft {
+			for i := int64(min); i < int64(len(t.data)); i++ {
+				val = append(val, f(nil, series.Get(i))...)
+			}
+		}
+	} else if jointype == df.JoinCross {
+		for i := int64(0); i < t.Len(); i++ {
+			for j := int64(0); j < series.Len(); j++ {
+				val = append(val, f(t.Get(i), series.Get(j))...)
+			}
+		}
+	}
+	return NewValueSeries(val, schema)
+}
+
+func (t *inmemoryDataFrameSeries) Append(s df.DataFrameSeries) df.DataFrameSeries {
+	if t.Schema().Format != s.Schema().Format {
+		panic("types are not same")
+	}
+	dv := make([]any, t.Len())
+	copy(dv, t.data)
+	for i := int64(0); i < s.Len(); i++ {
+		dv = append(dv, s.Get(i).Get())
+	}
+	return NewSeries(dv, t.schema.Format)
+}
+
+func (t *inmemoryDataFrameSeries) Group() df.DataFrameGroupedSeries {
+	return NewGroupedSeries(t)
+}
+
+//
+func NewNamedSeries(data []any, colFormat df.DataFrameSeriesFormat, colName string) df.DataFrameSeries {
+	colSchema := df.SeriesSchema{Name: colName, Format: colFormat}
+	return &inmemoryDataFrameSeries{schema: colSchema, data: data}
 }
 
 // NewSeries returns a column of given type
-func NewSeries(data []any, columnType df.DataFrameSeriesFormat) df.DataFrameSeries {
-	return &inmemoryDataFrameSeries{schema: columnType, data: data}
+func NewSeries(data []any, colSchema df.DataFrameSeriesFormat) df.DataFrameSeries {
+	return NewNamedSeries(data, colSchema, "")
+}
+
+// NewSeries returns a column of given type
+func NewValueSeries(data []df.DataFrameSeriesValue, colSchema df.DataFrameSeriesFormat) df.DataFrameSeries {
+	val := []any{}
+	for _, v := range data {
+		val = append(val, v.Get())
+	}
+	return NewNamedSeries(val, colSchema, "")
 }
 
 // NewStringSeries returns a column of type string
@@ -170,4 +246,13 @@ func NewDoubleSeries(data []float64) df.DataFrameSeries {
 		d[i] = e
 	}
 	return NewSeries(d, df.DoubleFormat)
+}
+
+// NewDoubleSeries returns a column of type double
+func NewDatetimeSeries(data []time.Time) df.DataFrameSeries {
+	d := make([]any, len(data))
+	for i, e := range data {
+		d[i] = e
+	}
+	return NewSeries(d, df.DateTimeFormat)
 }

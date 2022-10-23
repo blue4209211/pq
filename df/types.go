@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type intFormat struct {
@@ -101,6 +102,29 @@ func (t doubleFormat) Convert(i any) (any, error) {
 	return i2double(i)
 }
 
+type datetimeFormat struct {
+	name string
+}
+
+func (t datetimeFormat) String() string {
+	return t.Name()
+}
+
+func (t datetimeFormat) Name() string {
+	return t.name
+}
+
+func (t datetimeFormat) Type() reflect.Kind {
+	return reflect.Float64
+}
+
+func (t datetimeFormat) Convert(i any) (any, error) {
+	if i == nil {
+		return i, nil
+	}
+	return i2datetime(i)
+}
+
 // GetFormatFromKind returns format based on kind
 func GetFormatFromKind(t reflect.Kind) (format DataFrameSeriesFormat, err error) {
 	return GetFormat(t.String())
@@ -118,6 +142,9 @@ var DoubleFormat doubleFormat = doubleFormat{name: "double"}
 // BoolFormat bool format
 var BoolFormat boolFormat = boolFormat{name: "boolean"}
 
+// DateFormat bool format
+var DateTimeFormat datetimeFormat = datetimeFormat{name: "datetime"}
+
 // GetFormat returns format based on type
 func GetFormat(t string) (format DataFrameSeriesFormat, err error) {
 	t = strings.ToLower(t)
@@ -129,10 +156,22 @@ func GetFormat(t string) (format DataFrameSeriesFormat, err error) {
 		format = IntegerFormat
 	} else if t == "bool" || t == "boolean" {
 		format = BoolFormat
+	} else if t == "date" || t == "datetime" || t == "time" {
+		format = DateTimeFormat
 	} else {
 		err = errors.New(t)
 	}
 	return format, err
+}
+
+func i2datetime(v any) (datetime time.Time, err error) {
+	if v == nil {
+		return datetime, err
+	}
+	if reflect.TypeOf(v).String() == "time.Time" {
+		datetime = v.(time.Time)
+	}
+	return datetime, err
 }
 
 func i2str(v any) (str string, err error) {
@@ -277,31 +316,31 @@ func i2bool(v any) (b bool, err error) {
 }
 
 type inMemorySchema struct {
-	cols []Column
+	cols []SeriesSchema
 }
 
-func (t *inMemorySchema) Columns() []Column {
+func (t *inMemorySchema) Series() []SeriesSchema {
 	return t.cols
 }
-func (t *inMemorySchema) GetByName(s string) (c Column, e error) {
+func (t *inMemorySchema) GetByName(s string) (c SeriesSchema, e error) {
 	for _, c := range t.cols {
-		if strings.ToLower(c.Name) == strings.ToLower(s) {
+		if strings.EqualFold(c.Name, s) {
 			return c, e
 		}
 	}
-	return c, errors.New("Column Not Found")
+	return c, errors.New("column Not Found")
 }
 
 func (t *inMemorySchema) GetIndexByName(s string) (index int, e error) {
 	for i, c := range t.cols {
-		if strings.ToLower(c.Name) == strings.ToLower(s) {
+		if strings.EqualFold(c.Name, s) {
 			return i, e
 		}
 	}
-	return index, errors.New("Column Not Found")
+	return index, errors.New("column Not Found")
 }
 
-func (t *inMemorySchema) Get(i int) Column {
+func (t *inMemorySchema) Get(i int) SeriesSchema {
 	return t.cols[i]
 }
 
@@ -310,6 +349,6 @@ func (t *inMemorySchema) Len() int {
 }
 
 // NewSchema returns new schema based on given columns
-func NewSchema(cols []Column) DataFrameSchema {
+func NewSchema(cols []SeriesSchema) DataFrameSchema {
 	return &inMemorySchema{cols: cols}
 }

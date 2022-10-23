@@ -82,7 +82,7 @@ func (t *DataSource) Write(context context.Context, data df.DataFrame, path stri
 	return errors.New("Unsupported")
 }
 
-func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, err error) {
+func queryInternal(db *sql.DB, query string) (schema []df.SeriesSchema, data [][]any, err error) {
 	preparedQuery, err := db.Prepare(query)
 	if err != nil {
 		return schema, data, err
@@ -104,7 +104,7 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, 
 		return
 	}
 
-	cols := make([]df.Column, len(sqlCols))
+	cols := make([]df.SeriesSchema, len(sqlCols))
 
 	for i, c := range sqlCols {
 		dfFormat, err := df.GetFormat(sqlColTypes[i].DatabaseTypeName())
@@ -116,7 +116,7 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, 
 			}
 
 		}
-		cols[i] = df.Column{Name: c, Format: dfFormat}
+		cols[i] = df.SeriesSchema{Name: c, Format: dfFormat}
 	}
 
 	dataRows := make([][]any, 0, 100)

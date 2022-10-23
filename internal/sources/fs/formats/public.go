@@ -19,7 +19,7 @@ type FormatSource interface {
 
 // FormatReader Reads dataframe
 type FormatReader interface {
-	Schema() []df.Column
+	Schema() []df.SeriesSchema
 	Data() [][]any
 }
 

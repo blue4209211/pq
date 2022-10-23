@@ -231,9 +231,9 @@ func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
 	schema := t.data.Schema()
 	jsonRecords := make([]map[string]any, t.data.Len())
 	for index := int64(0); index < t.data.Len(); index++ {
-		row := t.data.Get(index)
+		row := t.data.GetRow(index)
 		obj := make(map[string]any)
-		for i, c := range schema.Columns() {
+		for i, c := range schema.Series() {
 			obj[c.Name] = row.Data()[i]
 		}
 		jsonRecords[index] = obj
@@ -261,11 +261,11 @@ func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
 
 type jsonDataSourceReader struct {
 	args    map[string]string
-	cols    []df.Column
+	cols    []df.SeriesSchema
 	records [][]any
 }
 
-func (t *jsonDataSourceReader) Schema() (columns []df.Column) {
+func (t *jsonDataSourceReader) Schema() (columns []df.SeriesSchema) {
 	return t.cols
 }
 
@@ -321,7 +321,7 @@ func (t *jsonDataSourceReader) init(reader io.Reader) (err error) {
 	}
 	sort.Strings(colMapKeys)
 
-	t.cols = make([]df.Column, len(colMap))
+	t.cols = make([]df.SeriesSchema, len(colMap))
 	index := 0
 	for _, k := range colMapKeys {
 		v := colMap[k]
@@ -337,7 +337,7 @@ func (t *jsonDataSourceReader) init(reader io.Reader) (err error) {
 		if err != nil {
 			return errors.New("json : unable to get format for - " + k + ", " + typeStr)
 		}
-		t.cols[index] = df.Column{Name: k, Format: dfFormat}
+		t.cols[index] = df.SeriesSchema{Name: k, Format: dfFormat}
 		index = index + 1
 	}
 

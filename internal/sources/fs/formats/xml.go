@@ -197,11 +197,11 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 		attrs := ""
 		nestElements := ""
 
-		for j, c := range schema.Columns() {
+		for j, c := range schema.Series() {
 			if strings.Index(c.Name, "_") == 0 {
-				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.Get(i).Data()[j])
+				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Data()[j])
 			} else {
-				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.Get(i).Data()[j], c.Name)
+				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Data()[j], c.Name)
 			}
 		}
 		writer.Write([]byte(fmt.Sprintf(rf, xmlElementName, attrs, nestElements, xmlElementName)))
@@ -219,11 +219,11 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 
 type xmlDataSourceReader struct {
 	args    map[string]string
-	cols    []df.Column
+	cols    []df.SeriesSchema
 	records [][]any
 }
 
-func (t *xmlDataSourceReader) Schema() (columns []df.Column) {
+func (t *xmlDataSourceReader) Schema() (columns []df.SeriesSchema) {
 	return t.cols
 }
 
@@ -271,7 +271,7 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 	}
 	sort.Strings(colMapKeys)
 
-	t.cols = make([]df.Column, len(colMap))
+	t.cols = make([]df.SeriesSchema, len(colMap))
 	index := 0
 	for _, k := range colMapKeys {
 		v := colMap[k]
@@ -287,7 +287,7 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 		if err != nil {
 			return errors.New("xml : unable to get format for - " + k + ", " + typeStr)
 		}
-		t.cols[index] = df.Column{Name: k, Format: dfFormat}
+		t.cols[index] = df.SeriesSchema{Name: k, Format: dfFormat}
 		index = index + 1
 	}
 

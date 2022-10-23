@@ -16,21 +16,21 @@ func TestNewStringSeries(t *testing.T) {
 	s := NewStringSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i any) bool {
-		return i == "abc"
+	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+		return i.Get() == "abc"
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i any) any {
-		return i.(string) + "1"
+	sm := s.Map(df.StringFormat, func(i df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+		return NewDataFrameSeriesStringValue(i.GetAsString() + "1")
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+"1", sm.Get(1))
 
-	sfm := s.FlatMap(df.StringFormat, func(i any) []any {
-		return []any{
-			i.(string) + "1",
-			i.(string) + "2",
+	sfm := s.FlatMap(df.StringFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
+		return []df.DataFrameSeriesValue{
+			NewDataFrameSeriesStringValue(i.GetAsString() + "1"),
+			NewDataFrameSeriesStringValue(i.GetAsString() + "2"),
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
@@ -52,21 +52,21 @@ func TestNewIntSeries(t *testing.T) {
 	s := NewIntSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i any) bool {
-		return i == int64(1)
+	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+		return i.GetAsInt() == int64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i any) any {
-		return i.(int64) + 10
+	sm := s.Map(df.IntegerFormat, func(i df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+		return NewDataFrameSeriesIntValue(i.GetAsInt() + 10)
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+10, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
-		return []any{
-			i.(int64) + 10,
-			i.(int64) + 20,
+	sfm := s.FlatMap(df.IntegerFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
+		return []df.DataFrameSeriesValue{
+			NewDataFrameSeriesIntValue(i.GetAsInt() + 10),
+			NewDataFrameSeriesIntValue(i.GetAsInt() + 20),
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
@@ -87,21 +87,21 @@ func TestNewBoolSeries(t *testing.T) {
 	s := NewBoolSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i any) bool {
-		return i == true
+	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+		return i.GetAsBool() == true
 	})
 	assert.Equal(t, int64(3), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i any) any {
-		return !i.(bool)
+	sm := s.Map(df.BoolFormat, func(i df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+		return NewDataFrameSeriesBoolValue(!i.GetAsBool())
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, true, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
-		return []any{
-			i.(bool),
-			i.(bool),
+	sfm := s.FlatMap(df.BoolFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
+		return []df.DataFrameSeriesValue{
+			NewDataFrameSeriesBoolValue(i.GetAsBool()),
+			NewDataFrameSeriesBoolValue(i.GetAsBool()),
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
@@ -123,21 +123,21 @@ func TestNewDoubleSeries(t *testing.T) {
 	s := NewDoubleSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i any) bool {
-		return i == float64(1)
+	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+		return i.GetAsDouble() == float64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())
 
-	sm := s.Map(df.StringFormat, func(i any) any {
-		return i.(float64) + 10
+	sm := s.Map(df.DoubleFormat, func(i df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+		return NewDataFrameSeriesDoubleValue(i.GetAsDouble() + 10)
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
 	assert.Equal(t, data[1]+10, sm.Get(1))
 
-	sfm := s.FlatMap(df.IntegerFormat, func(i any) []any {
-		return []any{
-			i.(float64) + 10,
-			i.(float64) + 20,
+	sfm := s.FlatMap(df.IntegerFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
+		return []df.DataFrameSeriesValue{
+			NewDataFrameSeriesDoubleValue(i.GetAsDouble() + 10),
+			NewDataFrameSeriesDoubleValue(i.GetAsDouble() + 10),
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())

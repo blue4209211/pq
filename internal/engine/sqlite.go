@@ -30,7 +30,7 @@ func getSqliteType(c df.DataFrameSeriesFormat) string {
 	return c.Name()
 }
 
-func (t *sqliteQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
+func (t *sqliteQueryEngine) createTable(tableName string, cols []df.SeriesSchema) (err error) {
 	sqlStmt := `create table "%s" (%s);`
 	columnStr := ""
 	for _, col := range cols {
@@ -54,7 +54,7 @@ func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 	colString := ""
 	quesString := ""
 
-	for _, col := range schema.Columns() {
+	for _, col := range schema.Series() {
 		colString = colString + "\"" + col.Name + "\","
 		quesString = quesString + "?,"
 	}
@@ -71,7 +71,7 @@ func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
 		for j := i; j < (i+batchSize) && j < totalRecords; j++ {
 			valueStrings = append(valueStrings, "("+quesString+")")
-			valueArgs = append(valueArgs, dataFrame.Get(int64(j)).Data()...)
+			valueArgs = append(valueArgs, dataFrame.GetRow(int64(j)).Data()...)
 		}
 		stmt := fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES %s", dataFrame.Name(), colString, strings.Join(valueStrings, ","))
 
@@ -92,9 +92,9 @@ func (t *sqliteQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	log.Debug("Creating df - ", dataFrame.Name(), schema.Columns())
+	log.Debug("Creating df - ", dataFrame.Name(), schema.Series())
 
-	err := t.createTable(dataFrame.Name(), schema.Columns())
+	err := t.createTable(dataFrame.Name(), schema.Series())
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 		return
 	}
 
-	cols := make([]df.Column, len(sqlCols))
+	cols := make([]df.SeriesSchema, len(sqlCols))
 
 	for i, c := range sqlCols {
 		dfFormat, err := df.GetFormat(sqlColTypes[i].DatabaseTypeName())
@@ -136,7 +136,7 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 			log.Debugf("sql format error for - %s, %s, %s", c, sqlColTypes[i].DatabaseTypeName(), err)
 			dfFormat, err = df.GetFormat("string")
 		}
-		cols[i] = df.Column{Name: c, Format: dfFormat}
+		cols[i] = df.SeriesSchema{Name: c, Format: dfFormat}
 	}
 
 	dataRows := make([][]any, 0, 100)

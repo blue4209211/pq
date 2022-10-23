@@ -119,7 +119,7 @@ func TestParquetDataSourceReader(t *testing.T) {
 }
 
 func TestParquetDataSourceWriter(t *testing.T) {
-	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}}, [][]any{
+	dataframe := inmemory.NewDataframe([]df.SeriesSchema{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}}, [][]any{
 		{int64(1), float64(1.0)},
 		{int64(2), float64(2.0)},
 		{int64(3), float64(3.0)},
@@ -145,7 +145,7 @@ func TestParquetDataSourceWriter(t *testing.T) {
 	assert.NoError(t, err)
 
 	schema2 := dataframe.Schema()
-	assert.Equal(t, schema, schema2.Columns())
+	assert.Equal(t, schema, schema2.Series())
 
 }
 
@@ -157,7 +157,7 @@ func BenchmarkParquetParsing(b *testing.B) {
 		records[i] = []any{int64(1), float64(1.0), "abc", true}
 	}
 
-	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}}, records)
+	dataframe := inmemory.NewDataframe([]df.SeriesSchema{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}}, records)
 
 	source := ParquetDataSource{}
 	writer, _ := source.Writer(dataframe, map[string]string{

@@ -11,7 +11,7 @@ import (
 func TestNewDataFrameRow(t *testing.T) {
 
 	data := []any{1, 2.0, "abc", false}
-	r := NewDataFrameRow(df.NewSchema([]df.Column{
+	r := NewDataFrameRow(df.NewSchema([]df.SeriesSchema{
 		{Name: "c1", Format: df.IntegerFormat},
 		{Name: "c2", Format: df.DoubleFormat},
 		{Name: "c3", Format: df.StringFormat},

@@ -126,7 +126,7 @@ func TestBoolType(t *testing.T) {
 }
 
 func TestNewSchema(t *testing.T) {
-	s := NewSchema([]Column{
+	s := NewSchema([]SeriesSchema{
 		{Name: "c1", Format: IntegerFormat},
 		{Name: "c2", Format: DoubleFormat},
 		{Name: "c3", Format: StringFormat},
