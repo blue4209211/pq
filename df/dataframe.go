@@ -79,15 +79,17 @@ type DataFrame interface {
 	GetRow(i int64) DataFrameRow
 	ForEachRow(f func(DataFrameRow))
 
+	Group(key string, others ...string) DataFrameGrouped
 	Join(schema DataFrameSchema, series DataFrame, jointype JoinType, f func(DataFrameRow, DataFrameRow) []DataFrameRow) DataFrame
 }
 
 type DataFrameGrouped interface {
-	Get(index any) DataFrame
-	GetKeys() []any
-	ForEach(f func(any, DataFrame))
-	Map(schema DataFrameSeriesFormat, f func(any, DataFrame) DataFrame) DataFrameGrouped
-	Filter(f func(any, DataFrame) bool) DataFrameGrouped
+	GetGroupKeys() []string
+	Get(index DataFrameRow) DataFrame
+	GetKeys() []DataFrameRow
+	ForEach(f func(DataFrameRow, DataFrame))
+	Map(s DataFrameSchema, f func(DataFrameRow, DataFrame) DataFrame) DataFrameGrouped
+	Filter(f func(DataFrameRow, DataFrame) bool) DataFrameGrouped
 }
 
 // DataFrameSeries Type for Storing column data of Dataframe
@@ -122,29 +124,32 @@ type DataFrameSeriesValue interface {
 }
 
 type DataFrameGroupedSeries interface {
-	Get(index any) DataFrameSeries
-	GetKeys() []any
-	ForEach(f func(any, DataFrameSeries))
-	Map(schema DataFrameSeriesFormat, f func(any, DataFrameSeries) DataFrameSeries) DataFrameGroupedSeries
-	Filter(f func(any, DataFrameSeries) bool) DataFrameGroupedSeries
+	Get(index DataFrameSeriesValue) DataFrameSeries
+	GetKeys() []DataFrameSeriesValue
+	ForEach(f func(DataFrameSeriesValue, DataFrameSeries))
+	Map(schema DataFrameSeriesFormat, f func(DataFrameSeriesValue, DataFrameSeries) DataFrameSeries) DataFrameGroupedSeries
+	Filter(f func(DataFrameSeriesValue, DataFrameSeries) bool) DataFrameGroupedSeries
 }
 
 // DataFrameRow Type representing row data of Dataframe
 type DataFrameRow interface {
 	Schema() DataFrameSchema
-	Get(i int) any
-	GetVal(i int) DataFrameSeriesValue
-	GetByName(s string) any
-	Data() []any
+	GetRaw(i int) any
+	Get(i int) DataFrameSeriesValue
+	GetByName(s string) DataFrameSeriesValue
+	Data() []DataFrameSeriesValue
 	Len() int
 	GetAsString(i int) string
 	GetAsInt(i int) int64
 	GetAsDouble(i int) float64
 	GetAsBool(i int) bool
 	GetAsDatetime(i int) time.Time
-	GetMap() (r map[string]any)
+	GetMap() (r map[string]DataFrameSeriesValue)
 	IsAnyNil() bool
 	IsNil(i int) bool
+	Copy() DataFrameRow
+	Select(i ...int) DataFrameRow
+	Append(name string, v DataFrameSeriesValue) DataFrameRow
 }
 
 // DataFrameSchema Type representing schema of Dataframe

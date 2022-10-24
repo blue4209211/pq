@@ -5,49 +5,57 @@ import (
 	"github.com/blue4209211/pq/internal/inmemory"
 )
 
-func AMinInt(s df.DataFrameSeries) (r int64) {
-	if s.Schema().Format != df.IntegerFormat {
-		panic("only int format supported")
+func ASum(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+		panic("only int/double format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		if dfsv2.GetAsInt() < dfsv1.GetAsInt() {
+		return inmemory.NewDataFrameSeriesDoubleValue(dfsv2.GetAsDouble() + dfsv1.GetAsDouble())
+	}, inmemory.NewDataFrameSeriesDoubleValue(0))
+	return val
+}
+
+func AMin(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+		panic("only int/double format supported")
+	}
+	val := s.Reduce(func(dfsv1, dfsv2 df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+		if dfsv2.GetAsDouble() < dfsv1.GetAsDouble() {
 			return dfsv2
 		}
 		return dfsv1
 	}, inmemory.NewDataFrameSeriesIntValue(0))
-	return val.GetAsInt()
+	return val
 }
 
-func AMaxInt(s df.DataFrameSeries) (r int64) {
-	if s.Schema().Format != df.IntegerFormat {
-		panic("only int format supported")
+func AMax(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+		panic("only int/double format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		if dfsv2.GetAsInt() > dfsv1.GetAsInt() {
+		if dfsv2.GetAsDouble() > dfsv1.GetAsDouble() {
 			return dfsv2
 		}
 		return dfsv1
 	}, inmemory.NewDataFrameSeriesIntValue(0))
-	return val.GetAsInt()
+	return val
 }
 
-func AMedian(s df.DataFrameSeries) (r any) {
-	return r
+func AMean(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	return inmemory.NewDataFrameSeriesDoubleValue(ASum(s).GetAsDouble() / float64(s.Len()))
 }
 
-func AMean(s df.DataFrameSeries) (r any) {
-	return r
-}
-
-func ACumSum(s df.DataFrameSeries) (r any) {
-	return r
-}
-
-func AIsUnique(s df.DataFrameSeries) (r bool) {
-	return r
-}
-
-func AHasNil(s df.DataFrameSeries) (r bool) {
+func AMedian(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+		panic("only int/double format supported")
+	}
+	s = s.Sort(df.SortOrderASC)
+	middle := s.Len() / 2
+	if s.Len()%2 == 0 {
+		r = inmemory.NewDataFrameSeriesDoubleValue((s.Get(middle-1).GetAsDouble() + s.Get(middle).GetAsDouble()) / 2)
+	} else {
+		r = inmemory.NewDataFrameSeriesDoubleValue(s.Get(middle).GetAsDouble())
+	}
 	return r
 }
 
@@ -55,8 +63,8 @@ func ADescribe(s df.DataFrameSeries) (r df.DataFrame) {
 	return r
 }
 
-func ACountValues(s df.DataFrameSeries) (r map[any]int64) {
-	s.Group().ForEach(func(a any, dfs df.DataFrameSeries) {
+func ACountValues(s df.DataFrameSeries) (r map[df.DataFrameSeriesValue]int64) {
+	s.Group().ForEach(func(a df.DataFrameSeriesValue, dfs df.DataFrameSeries) {
 		r[a] = dfs.Len()
 	})
 	return r

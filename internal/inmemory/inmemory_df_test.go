@@ -42,7 +42,7 @@ func TestInMemoryDfRowOps(t *testing.T) {
 	})
 
 	filteredData := data.FilterRow(func(r df.DataFrameRow) bool {
-		return r.GetByName("c3") == "a1"
+		return r.GetByName("c3").GetAsString() == "a1"
 	})
 
 	assert.Equal(t, int64(1), filteredData.Len())
@@ -53,5 +53,4 @@ func TestInMemoryDfRowOps(t *testing.T) {
 	assert.Equal(t, data.Len(), sortedData.Len())
 	assert.Equal(t, int64(4), sortedData.GetRow(0).Get(0))
 	assert.Equal(t, int64(4), data.Len())
-
 }

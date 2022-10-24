@@ -71,7 +71,10 @@ func (t *sqliteQueryEngine) insertData(dataFrame df.DataFrame) (err error) {
 
 		for j := i; j < (i+batchSize) && j < totalRecords; j++ {
 			valueStrings = append(valueStrings, "("+quesString+")")
-			valueArgs = append(valueArgs, dataFrame.GetRow(int64(j)).Data()...)
+			r := dataFrame.GetRow(int64(j))
+			for k := 0; k < r.Len(); k++ {
+				valueArgs = append(valueArgs, r.GetRaw(k))
+			}
 		}
 		stmt := fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES %s", dataFrame.Name(), colString, strings.Join(valueStrings, ","))
 

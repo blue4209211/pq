@@ -307,13 +307,13 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 
 			switch arr := writerValue.(type) {
 			case []bool:
-				arr[i] = r.Data()[col].(bool)
+				arr[i] = r.Data()[col].GetAsBool()
 			case []int64:
-				arr[i] = r.Data()[col].(int64)
+				arr[i] = r.Data()[col].GetAsInt()
 			case []string:
-				arr[i] = r.Data()[col].(string)
+				arr[i] = r.Data()[col].GetAsString()
 			case []float64:
-				arr[i] = r.Data()[col].(float64)
+				arr[i] = r.Data()[col].GetAsDouble()
 			}
 		}
 

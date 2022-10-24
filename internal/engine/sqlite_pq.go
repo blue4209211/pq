@@ -202,13 +202,13 @@ func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 	}
 	switch cType.Format.Type() {
 	case reflect.String:
-		c.ResultText(i.(string))
+		c.ResultText(i.GetAsString())
 	case reflect.Int64:
-		c.ResultInt64(i.(int64))
+		c.ResultInt64(i.GetAsInt())
 	case reflect.Float64:
-		c.ResultDouble(i.(float64))
+		c.ResultDouble(i.GetAsDouble())
 	case reflect.Bool:
-		c.ResultBool(i.(bool))
+		c.ResultBool(i.GetAsBool())
 	}
 	return nil
 }
@@ -255,22 +255,22 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Matches(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Matches(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "regexp":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Regexp(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Regexp(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "like":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Like(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Like(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "glob":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Glob(dfr.Get(colOp.idx).(string), vals[i].(string)))
+					f = f && (fns.Glob(dfr.GetAsString(colOp.idx), vals[i].(string)))
 				case "<":
 					if colOp.schema.Type() == reflect.Int64 {
 						v, e := df.IntegerFormat.Convert(vals[i])
@@ -278,14 +278,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) < v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) < v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) < v.(float64))
+						f = f && (dfr.Get(colOp.idx).GetAsDouble() < v.(float64))
 					}
 				case "<=":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -294,14 +294,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) <= v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) <= v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) <= v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) <= v.(float64))
 					}
 				case ">":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -310,14 +310,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) > v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) > v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) > v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) > v.(float64))
 					}
 				case ">=":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -326,14 +326,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) >= v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) >= v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) >= v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) >= v.(float64))
 					}
 
 				}
