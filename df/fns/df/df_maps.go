@@ -11,9 +11,9 @@ import (
 	"github.com/blue4209211/pq/df/fns/series/str"
 )
 
-func MAsType(s df.DataFrame, t map[string]df.DataFrameSeriesFormat) (r df.DataFrame) {
+func AsType(s df.DataFrame, t map[string]df.DataFrameSeriesFormat) (r df.DataFrame) {
 	for k, v := range t {
-		s, err := s.UpdateSeriesByName(k, series.MAsType(s.GetSeriesByName(k), v))
+		s, err := s.UpdateSeriesByName(k, series.AsType(s.GetSeriesByName(k), v))
 		if err != nil {
 			panic(err)
 		}
@@ -23,7 +23,7 @@ func MAsType(s df.DataFrame, t map[string]df.DataFrameSeriesFormat) (r df.DataFr
 	return r
 }
 
-func MWhereNill(s df.DataFrame, t map[string]any) (r df.DataFrame) {
+func WhereNill(s df.DataFrame, t map[string]any) (r df.DataFrame) {
 	for _, schema := range s.Schema().Series() {
 		val, ok := t[schema.Name]
 		if !ok {
@@ -65,13 +65,13 @@ func MWhereNill(s df.DataFrame, t map[string]any) (r df.DataFrame) {
 	return r
 }
 
-func MWhere(s df.DataFrame, t map[string]map[any]any) (r df.DataFrame) {
+func Where(s df.DataFrame, t map[string]map[any]any) (r df.DataFrame) {
 	for _, schema := range s.Schema().Series() {
 		val, ok := t[schema.Name]
 		if !ok {
 			continue
 		}
-		s, err := s.UpdateSeriesByName(schema.Name, series.MWhere(s.GetSeriesByName(schema.Name), schema.Format, val))
+		s, err := s.UpdateSeriesByName(schema.Name, series.Where(s.GetSeriesByName(schema.Name), schema.Format, val))
 		if err != nil {
 			panic(err)
 		}

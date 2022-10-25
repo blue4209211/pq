@@ -115,3 +115,10 @@ func TrimPrefix(s df.DataFrameSeries, suf string) (r df.DataFrameSeries) {
 		return inmemory.NewDataFrameSeriesValue(df.StringFormat, strings.TrimPrefix(dfsv.GetAsString(), suf))
 	})
 }
+
+func ConcatSeries(s df.DataFrameSeries, sep string, s1 df.DataFrameSeries) (r df.DataFrameSeries) {
+	r = s.Join(df.StringFormat, s1, df.JoinEqui, func(dfsv1, dfsv2 df.DataFrameSeriesValue) (r []df.DataFrameSeriesValue) {
+		return append(r, inmemory.NewDataFrameSeriesStringValue(fmt.Sprintf("%v%v%v", dfsv1.Get(), sep, dfsv2.Get())))
+	})
+	return r
+}

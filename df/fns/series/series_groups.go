@@ -5,7 +5,7 @@ import (
 	"github.com/blue4209211/pq/internal/inmemory"
 )
 
-func ASum(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+func Sum(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
 		panic("only int/double format supported")
 	}
@@ -15,7 +15,7 @@ func ASum(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	return val
 }
 
-func AMin(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+func Min(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
 		panic("only int/double format supported")
 	}
@@ -28,7 +28,7 @@ func AMin(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	return val
 }
 
-func AMax(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+func Max(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
 		panic("only int/double format supported")
 	}
@@ -41,11 +41,11 @@ func AMax(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	return val
 }
 
-func AMean(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
-	return inmemory.NewDataFrameSeriesDoubleValue(ASum(s).GetAsDouble() / float64(s.Len()))
+func Mean(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+	return inmemory.NewDataFrameSeriesDoubleValue(Sum(s).GetAsDouble() / float64(s.Len()))
 }
 
-func AMedian(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
+func Median(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
 		panic("only int/double format supported")
 	}
@@ -59,18 +59,18 @@ func AMedian(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {
 	return r
 }
 
-func ADescribe(s df.DataFrameSeries) (r df.DataFrame) {
+func Describe(s df.DataFrameSeries) (r df.DataFrame) {
 	return r
 }
 
-func ACountValues(s df.DataFrameSeries) (r map[df.DataFrameSeriesValue]int64) {
+func CountValues(s df.DataFrameSeries) (r map[df.DataFrameSeriesValue]int64) {
 	s.Group().ForEach(func(a df.DataFrameSeriesValue, dfs df.DataFrameSeries) {
 		r[a] = dfs.Len()
 	})
 	return r
 }
 
-func AUnion(s df.DataFrameSeries, s1 df.DataFrameSeries, all bool) (r df.DataFrameSeries) {
+func Union(s df.DataFrameSeries, s1 df.DataFrameSeries, all bool) (r df.DataFrameSeries) {
 	r = s.Append(s1)
 	if !all {
 		r = r.Distinct()
@@ -78,7 +78,7 @@ func AUnion(s df.DataFrameSeries, s1 df.DataFrameSeries, all bool) (r df.DataFra
 	return r
 }
 
-func AIntersection(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameSeries) {
+func Intersection(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameSeries) {
 	if s.Schema().Format != s1.Schema().Format {
 		panic("formats should match")
 	}
@@ -92,17 +92,17 @@ func AIntersection(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameS
 	return r.Distinct()
 }
 
-func ASubstract(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameSeries) {
+func Substract(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameSeries) {
 	if s.Schema().Format != s1.Schema().Format {
 		panic("formats should match")
 	}
 	return r
 }
 
-func ACountNotNil(s df.DataFrameSeries) (r int64) {
-	return FNotNil(s).Len()
+func CountNotNil(s df.DataFrameSeries) (r int64) {
+	return IsNotNil(s).Len()
 }
 
-func ACovariance(s df.DataFrameSeries) (r float64) {
+func Covariance(s df.DataFrameSeries) (r float64) {
 	return r
 }
