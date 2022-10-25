@@ -16,7 +16,7 @@ func TestNewStringSeries(t *testing.T) {
 	s := NewStringSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+	sf := s.Where(func(i df.DataFrameSeriesValue) bool {
 		return i.Get() == "abc"
 	})
 	assert.Equal(t, int64(2), sf.Len())
@@ -52,7 +52,7 @@ func TestNewIntSeries(t *testing.T) {
 	s := NewIntSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+	sf := s.Where(func(i df.DataFrameSeriesValue) bool {
 		return i.GetAsInt() == int64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())
@@ -87,7 +87,7 @@ func TestNewBoolSeries(t *testing.T) {
 	s := NewBoolSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+	sf := s.Where(func(i df.DataFrameSeriesValue) bool {
 		return i.GetAsBool() == true
 	})
 	assert.Equal(t, int64(3), sf.Len())
@@ -123,7 +123,7 @@ func TestNewDoubleSeries(t *testing.T) {
 	s := NewDoubleSeries(data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
-	sf := s.Filter(func(i df.DataFrameSeriesValue) bool {
+	sf := s.Where(func(i df.DataFrameSeriesValue) bool {
 		return i.GetAsDouble() == float64(1)
 	})
 	assert.Equal(t, int64(2), sf.Len())

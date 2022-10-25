@@ -289,11 +289,25 @@ func (t *inmemoryDataFrame) FlatMapRow(cols []df.SeriesSchema, f func(df.DataFra
 	return NewDataframeFromRow(cols, data)
 }
 
-func (t *inmemoryDataFrame) FilterRow(f func(df.DataFrameRow) bool) df.DataFrame {
+func (t *inmemoryDataFrame) Where(f func(df.DataFrameRow) bool) df.DataFrame {
 	data := make([]df.DataFrameRow, 0, t.Len())
 	for _, r := range t.data {
 		if f(r) {
 			data = append(data, r)
+		}
+	}
+	return NewDataframeFromRow(t.schema.Series(), data)
+}
+
+func (t *inmemoryDataFrame) Select(b df.DataFrameSeries) df.DataFrame {
+	if b.Schema().Format != df.BoolFormat {
+		panic("Only bool series supported")
+	}
+	data := make([]df.DataFrameRow, 0, len(t.data))
+	seriesLength := b.Len()
+	for i, d := range t.data {
+		if int64(i) < seriesLength && b.Get(int64(i)).GetAsBool() {
+			data = append(data, d)
 		}
 	}
 	return NewDataframeFromRow(t.schema.Series(), data)

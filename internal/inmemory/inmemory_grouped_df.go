@@ -43,7 +43,7 @@ func (t *inmemoryGroupedDataFrame) Map(s df.DataFrameSchema, f func(df.DataFrame
 	return &inmemoryGroupedDataFrame{data: d1, schema: s}
 }
 
-func (t *inmemoryGroupedDataFrame) Filter(f func(df.DataFrameRow, df.DataFrame) bool) (d df.DataFrameGrouped) {
+func (t *inmemoryGroupedDataFrame) Where(f func(df.DataFrameRow, df.DataFrame) bool) (d df.DataFrameGrouped) {
 	d1 := map[df.DataFrameRow]df.DataFrame{}
 	for k, v := range t.data {
 		if f(k, v) {

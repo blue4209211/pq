@@ -36,7 +36,7 @@ func (t *inmemoryGroupedDataFrameSeries) Map(schema df.DataFrameSeriesFormat, f 
 	return &inmemoryGroupedDataFrameSeries{data: d1, typ: schema}
 }
 
-func (t *inmemoryGroupedDataFrameSeries) Filter(f func(df.DataFrameSeriesValue, df.DataFrameSeries) bool) (d df.DataFrameGroupedSeries) {
+func (t *inmemoryGroupedDataFrameSeries) Where(f func(df.DataFrameSeriesValue, df.DataFrameSeries) bool) (d df.DataFrameGroupedSeries) {
 	d1 := map[df.DataFrameSeriesValue]df.DataFrameSeries{}
 	for k, v := range t.data {
 		if f(k, v) {

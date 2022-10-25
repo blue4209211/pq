@@ -1,8 +1,14 @@
 package df
 
 import (
+	"time"
+
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/df/fns/series"
+	boolean "github.com/blue4209211/pq/df/fns/series/bool"
+	"github.com/blue4209211/pq/df/fns/series/dt"
+	"github.com/blue4209211/pq/df/fns/series/num"
+	"github.com/blue4209211/pq/df/fns/series/str"
 )
 
 func MAsType(s df.DataFrame, t map[string]df.DataFrameSeriesFormat) (r df.DataFrame) {
@@ -23,11 +29,38 @@ func MWhereNill(s df.DataFrame, t map[string]any) (r df.DataFrame) {
 		if !ok {
 			continue
 		}
-		s, err := s.UpdateSeriesByName(schema.Name, series.MWhereNil(s.GetSeriesByName(schema.Name), schema.Format, val))
-		if err != nil {
-			panic(err)
+		switch schema.Format {
+		case df.DateTimeFormat:
+			s, err := s.UpdateSeriesByName(schema.Name, dt.WhereNil(s.GetSeriesByName(schema.Name), val.(time.Time)))
+			if err != nil {
+				panic(err)
+			}
+			r = s
+		case df.IntegerFormat:
+			s, err := s.UpdateSeriesByName(schema.Name, num.WhereNilInt(s.GetSeriesByName(schema.Name), val.(int64)))
+			if err != nil {
+				panic(err)
+			}
+			r = s
+		case df.DoubleFormat:
+			s, err := s.UpdateSeriesByName(schema.Name, num.WhereNilDouble(s.GetSeriesByName(schema.Name), val.(float64)))
+			if err != nil {
+				panic(err)
+			}
+			r = s
+		case df.StringFormat:
+			s, err := s.UpdateSeriesByName(schema.Name, str.WhereNil(s.GetSeriesByName(schema.Name), val.(string)))
+			if err != nil {
+				panic(err)
+			}
+			r = s
+		case df.BoolFormat:
+			s, err := s.UpdateSeriesByName(schema.Name, boolean.WhereNil(s.GetSeriesByName(schema.Name), val.(bool)))
+			if err != nil {
+				panic(err)
+			}
+			r = s
 		}
-		r = s
 	}
 	return r
 }

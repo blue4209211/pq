@@ -239,7 +239,7 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			colIdxAndOps[i] = filterOp{idx: idx, op: colIdxAndOp[1], schema: (*t.data).Schema().Get(idx).Format}
 		}
 
-		d := (*t.data).FilterRow(func(dfr df.DataFrameRow) bool {
+		d := (*t.data).Where(func(dfr df.DataFrameRow) bool {
 			f := true
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {

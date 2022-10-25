@@ -33,10 +33,24 @@ func (t *inmemoryDataFrameSeries) ForEach(f func(df.DataFrameSeriesValue)) {
 	}
 }
 
-func (t *inmemoryDataFrameSeries) Filter(f func(df.DataFrameSeriesValue) bool) df.DataFrameSeries {
+func (t *inmemoryDataFrameSeries) Where(f func(df.DataFrameSeriesValue) bool) df.DataFrameSeries {
 	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		if f(NewDataFrameSeriesValue(t.schema.Format, d)) {
+			data = append(data, d)
+		}
+	}
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
+}
+
+func (t *inmemoryDataFrameSeries) Select(b df.DataFrameSeries) df.DataFrameSeries {
+	if b.Schema().Format != df.BoolFormat {
+		panic("Only bool series supported")
+	}
+	data := make([]any, 0, len(t.data))
+	seriesLength := b.Len()
+	for i, d := range t.data {
+		if int64(i) < seriesLength && b.Get(int64(i)).GetAsBool() {
 			data = append(data, d)
 		}
 	}

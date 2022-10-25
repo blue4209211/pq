@@ -63,7 +63,8 @@ type DataFrame interface {
 	SelectSeriesByName(col ...string) (DataFrame, error)
 	MapRow(schema []SeriesSchema, f func(DataFrameRow) DataFrameRow) DataFrame
 	FlatMapRow(schema []SeriesSchema, f func(DataFrameRow) []DataFrameRow) DataFrame
-	FilterRow(f func(DataFrameRow) bool) DataFrame
+	Where(f func(DataFrameRow) bool) DataFrame
+	Select(b DataFrameSeries) DataFrame
 
 	GetSeries(index int) DataFrameSeries
 	GetSeriesByName(s string) DataFrameSeries
@@ -89,7 +90,7 @@ type DataFrameGrouped interface {
 	GetKeys() []DataFrameRow
 	ForEach(f func(DataFrameRow, DataFrame))
 	Map(s DataFrameSchema, f func(DataFrameRow, DataFrame) DataFrame) DataFrameGrouped
-	Filter(f func(DataFrameRow, DataFrame) bool) DataFrameGrouped
+	Where(f func(DataFrameRow, DataFrame) bool) DataFrameGrouped
 }
 
 // DataFrameSeries Type for Storing column data of Dataframe
@@ -102,7 +103,8 @@ type DataFrameSeries interface {
 	Map(schema DataFrameSeriesFormat, f func(DataFrameSeriesValue) DataFrameSeriesValue) DataFrameSeries
 	FlatMap(schema DataFrameSeriesFormat, f func(DataFrameSeriesValue) []DataFrameSeriesValue) DataFrameSeries
 	Reduce(f func(DataFrameSeriesValue, DataFrameSeriesValue) DataFrameSeriesValue, startValue DataFrameSeriesValue) DataFrameSeriesValue
-	Filter(f func(DataFrameSeriesValue) bool) DataFrameSeries
+	Where(f func(DataFrameSeriesValue) bool) DataFrameSeries
+	Select(b DataFrameSeries) DataFrameSeries
 	Limit(offset int, size int) DataFrameSeries
 	Distinct() DataFrameSeries
 	Copy() DataFrameSeries
@@ -128,7 +130,7 @@ type DataFrameGroupedSeries interface {
 	GetKeys() []DataFrameSeriesValue
 	ForEach(f func(DataFrameSeriesValue, DataFrameSeries))
 	Map(schema DataFrameSeriesFormat, f func(DataFrameSeriesValue, DataFrameSeries) DataFrameSeries) DataFrameGroupedSeries
-	Filter(f func(DataFrameSeriesValue, DataFrameSeries) bool) DataFrameGroupedSeries
+	Where(f func(DataFrameSeriesValue, DataFrameSeries) bool) DataFrameGroupedSeries
 }
 
 // DataFrameRow Type representing row data of Dataframe

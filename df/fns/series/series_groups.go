@@ -98,3 +98,11 @@ func ASubstract(s df.DataFrameSeries, s1 df.DataFrameSeries) (r df.DataFrameSeri
 	}
 	return r
 }
+
+func ACountNotNil(s df.DataFrameSeries) (r int64) {
+	return FNotNil(s).Len()
+}
+
+func ACovariance(s df.DataFrameSeries) (r float64) {
+	return r
+}
