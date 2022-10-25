@@ -244,13 +244,13 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {
 				case "is", "=":
-					f = f && (dfr.Get(colOp.idx) == vals[i])
+					f = f && (dfr.Get(colOp.idx).Get() == vals[i])
 				case "isnot", "not":
-					f = f && (dfr.Get(colOp.idx) != vals[i])
+					f = f && (dfr.Get(colOp.idx).Get() != vals[i])
 				case "isnull":
-					f = f && (dfr.Get(colOp.idx) == nil)
+					f = f && (dfr.Get(colOp.idx).Get() == nil)
 				case "notnull":
-					f = f && (dfr.Get(colOp.idx) != nil)
+					f = f && (dfr.Get(colOp.idx).Get() != nil)
 				case "match":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false

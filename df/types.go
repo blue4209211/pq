@@ -168,6 +168,11 @@ func i2datetime(v any) (datetime time.Time, err error) {
 	if v == nil {
 		return datetime, err
 	}
+	datetime, ok := v.(time.Time)
+	if ok {
+		return datetime, err
+	}
+
 	if reflect.TypeOf(v).String() == "time.Time" {
 		datetime = v.(time.Time)
 	}
@@ -176,6 +181,10 @@ func i2datetime(v any) (datetime time.Time, err error) {
 
 func i2str(v any) (str string, err error) {
 	if v == nil {
+		return str, err
+	}
+	str, ok := v.(string)
+	if ok {
 		return str, err
 	}
 
@@ -213,7 +222,15 @@ func i2int(v any) (i int64, err error) {
 	if v == nil {
 		return i, err
 	}
-	vt := reflect.TypeOf(v).Kind()
+
+	i, ok := v.(int64)
+	if ok {
+		return i, err
+	}
+
+	t := reflect.TypeOf(v)
+
+	vt := t.Kind()
 	switch vt {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		rv := reflect.ValueOf(v)
@@ -253,6 +270,11 @@ func i2double(v any) (f float64, err error) {
 	if v == nil {
 		return f, err
 	}
+	i, ok := v.(float64)
+	if ok {
+		return i, err
+	}
+
 	vt := reflect.TypeOf(v).Kind()
 	switch vt {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -280,6 +302,11 @@ func i2bool(v any) (b bool, err error) {
 	if v == nil {
 		return b, err
 	}
+	i, ok := v.(bool)
+	if ok {
+		return i, err
+	}
+
 	vt := reflect.TypeOf(v).Kind()
 	switch vt {
 	case reflect.Bool:

@@ -18,7 +18,7 @@ func TestQuerySortOpPQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(4), dataframe.Len())
-	assert.Equal(t, float64(4), dataframe.GetSeriesByName("c1").Get(0))
+	assert.Equal(t, float64(4), dataframe.GetSeriesByName("c1").Get(0).Get())
 }
 
 func TestQueryFilterOpPQ(t *testing.T) {

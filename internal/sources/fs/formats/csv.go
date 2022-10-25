@@ -71,13 +71,12 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 		csvWriter.Write(cols)
 	}
 
-	format, err := df.GetFormat("string")
 	for i := int64(0); i < t.data.Len(); i++ {
 		rowInterface := t.data.GetRow(i)
 		row := make([]string, rowInterface.Len())
 		for i, r := range rowInterface.Data() {
-			str, _ := format.Convert(r)
-			row[i] = str.(string)
+			str := r.GetAsString()
+			row[i] = str
 		}
 		csvWriter.Write(row)
 	}

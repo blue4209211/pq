@@ -16,8 +16,8 @@ func TestInMemoryDfColOps(t *testing.T) {
 
 	assert.Equal(t, "df1", data.Name())
 	assert.Equal(t, int64(4), data.Len())
-	assert.Equal(t, df.DoubleFormat, data.GetSeries(1).Schema())
-	assert.Equal(t, 3.0, data.GetSeries(1).Get(2))
+	assert.Equal(t, df.DoubleFormat, data.GetSeries(1).Schema().Format)
+	assert.Equal(t, 3.0, data.GetSeries(1).Get(2).Get())
 
 	data2, err := data.AddSeries("c4", NewBoolSeries([]bool{true, true, false, false}))
 	assert.Nil(t, err)
@@ -51,6 +51,6 @@ func TestInMemoryDfRowOps(t *testing.T) {
 	sortedData := data.SortByName(df.SortByName{Series: "c1", Order: df.SortOrderDESC})
 
 	assert.Equal(t, data.Len(), sortedData.Len())
-	assert.Equal(t, int64(4), sortedData.GetRow(0).Get(0))
+	assert.Equal(t, int64(4), sortedData.GetRow(0).Get(0).Get())
 	assert.Equal(t, int64(4), data.Len())
 }

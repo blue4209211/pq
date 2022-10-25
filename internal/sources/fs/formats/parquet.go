@@ -290,13 +290,13 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 
 		switch dfSchema.Get(col).Format.Type() {
 		case reflect.Int64:
-			writerValue = make([]int64, t.data.Len(), t.data.Len())
+			writerValue = make([]int64, t.data.Len())
 		case reflect.Float64:
-			writerValue = make([]float64, t.data.Len(), t.data.Len())
+			writerValue = make([]float64, t.data.Len())
 		case reflect.String:
-			writerValue = make([]string, t.data.Len(), t.data.Len())
+			writerValue = make([]string, t.data.Len())
 		case reflect.Bool:
-			writerValue = make([]bool, t.data.Len(), t.data.Len())
+			writerValue = make([]bool, t.data.Len())
 		}
 
 		for i := int64(0); i < t.data.Len(); i++ {

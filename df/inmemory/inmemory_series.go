@@ -69,7 +69,7 @@ func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.
 	data := make([]any, 0, len(t.data))
 	for _, d := range t.data {
 		for _, k := range f(NewDataFrameSeriesValue(t.schema.Format, d)) {
-			data = append(data, k)
+			data = append(data, k.Get())
 		}
 	}
 	return NewSeries(data, s)

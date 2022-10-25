@@ -53,7 +53,7 @@ func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map
 	for r := range objMapListChannel {
 		return r.data, r.err
 	}
-	return objMapList, errors.New("Unable to read data")
+	return objMapList, errors.New("unable to read data")
 }
 
 type xmlAsyncReadResult struct {
@@ -199,9 +199,9 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 
 		for j, c := range schema.Series() {
 			if strings.Index(c.Name, "_") == 0 {
-				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Data()[j])
+				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Data()[j].Get())
 			} else {
-				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Data()[j], c.Name)
+				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Data()[j].Get(), c.Name)
 			}
 		}
 		writer.Write([]byte(fmt.Sprintf(rf, xmlElementName, attrs, nestElements, xmlElementName)))

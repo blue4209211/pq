@@ -25,7 +25,7 @@ func TestNewStringSeries(t *testing.T) {
 		return NewDataFrameSeriesStringValue(i.GetAsString() + "1")
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
-	assert.Equal(t, data[1]+"1", sm.Get(1))
+	assert.Equal(t, data[1]+"1", sm.Get(1).Get())
 
 	sfm := s.FlatMap(df.StringFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
 		return []df.DataFrameSeriesValue{
@@ -34,13 +34,13 @@ func TestNewStringSeries(t *testing.T) {
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
-	assert.Equal(t, data[0]+"2", sfm.Get(1))
+	assert.Equal(t, data[0]+"2", sfm.Get(1).Get())
 
 	sd := s.Distinct()
 	assert.Equal(t, int64(5), sd.Len())
 
 	ss := s.Sort(df.SortOrderDESC)
-	assert.Equal(t, "lmn", ss.Get(0))
+	assert.Equal(t, "lmn", ss.Get(0).Get())
 
 }
 
@@ -61,7 +61,7 @@ func TestNewIntSeries(t *testing.T) {
 		return NewDataFrameSeriesIntValue(i.GetAsInt() + 10)
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
-	assert.Equal(t, data[1]+10, sm.Get(1))
+	assert.Equal(t, data[1]+10, sm.Get(1).Get())
 
 	sfm := s.FlatMap(df.IntegerFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
 		return []df.DataFrameSeriesValue{
@@ -70,13 +70,13 @@ func TestNewIntSeries(t *testing.T) {
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
-	assert.Equal(t, data[0]+20, sfm.Get(1))
+	assert.Equal(t, data[0]+20, sfm.Get(1).Get())
 
 	sd := s.Distinct()
 	assert.Equal(t, int64(5), sd.Len())
 
 	ss := s.Sort(df.SortOrderDESC)
-	assert.Equal(t, int64(5), ss.Get(0))
+	assert.Equal(t, int64(5), ss.Get(0).Get())
 }
 
 func TestNewBoolSeries(t *testing.T) {
@@ -96,7 +96,7 @@ func TestNewBoolSeries(t *testing.T) {
 		return NewDataFrameSeriesBoolValue(!i.GetAsBool())
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
-	assert.Equal(t, true, sm.Get(1))
+	assert.Equal(t, true, sm.Get(1).Get())
 
 	sfm := s.FlatMap(df.BoolFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
 		return []df.DataFrameSeriesValue{
@@ -105,13 +105,13 @@ func TestNewBoolSeries(t *testing.T) {
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
-	assert.Equal(t, true, sfm.Get(1))
+	assert.Equal(t, true, sfm.Get(1).Get())
 
 	sd := s.Distinct()
 	assert.Equal(t, int64(2), sd.Len())
 
 	ss := s.Sort(df.SortOrderDESC)
-	assert.Equal(t, true, ss.Get(0))
+	assert.Equal(t, true, ss.Get(0).Get())
 
 }
 
@@ -132,7 +132,7 @@ func TestNewDoubleSeries(t *testing.T) {
 		return NewDataFrameSeriesDoubleValue(i.GetAsDouble() + 10)
 	})
 	assert.Equal(t, int64(len(data)), sm.Len())
-	assert.Equal(t, data[1]+10, sm.Get(1))
+	assert.Equal(t, data[1]+10, sm.Get(1).Get())
 
 	sfm := s.FlatMap(df.IntegerFormat, func(i df.DataFrameSeriesValue) []df.DataFrameSeriesValue {
 		return []df.DataFrameSeriesValue{
@@ -141,11 +141,11 @@ func TestNewDoubleSeries(t *testing.T) {
 		}
 	})
 	assert.Equal(t, int64(len(data)*2), sfm.Len())
-	assert.Equal(t, data[0]+20, sfm.Get(1))
+	assert.Equal(t, data[0]+10, sfm.Get(1).Get())
 
 	sd := s.Distinct()
 	assert.Equal(t, int64(5), sd.Len())
 
 	ss := s.Sort(df.SortOrderDESC)
-	assert.Equal(t, float64(5), ss.Get(0))
+	assert.Equal(t, float64(5), ss.Get(0).Get())
 }

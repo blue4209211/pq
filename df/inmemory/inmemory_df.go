@@ -120,7 +120,7 @@ func (t *inmemoryDataFrame) RemoveSeries(index int) df.DataFrame {
 	cols = append(cols, t.schema.Series()[index+1:]...)
 	data := make([][]any, t.Len())
 	for i, e := range t.data {
-		row := make([]any, 0, t.schema.Len()-1)
+		row := make([]any, t.schema.Len()-1)
 		for j := 0; j < t.schema.Len(); j++ {
 			if j == index {
 				continue
@@ -384,7 +384,7 @@ func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.Da
 	for i := int64(0); i < data[0].Len(); i++ {
 		r := make([]any, len(colNames))
 		for j := 0; j < len(colNames); j++ {
-			r[j] = data[j].Get(i)
+			r[j] = data[j].Get(i).Get()
 		}
 		dfData = append(dfData, r)
 	}
