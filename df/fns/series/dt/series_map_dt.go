@@ -7,113 +7,113 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func WhereNil(s df.DataFrameSeries, v time.Time) (r df.DataFrameSeries) {
+func WhereNil(s df.Series, v time.Time) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		if sv.Get() == nil {
-			return inmemory.NewDataFrameSeriesDatetimeValue(v)
+			return inmemory.NewDatetimeValue(v)
 		}
-		return inmemory.NewDataFrameSeriesDatetimeValue(sv.GetAsDatetime())
+		return inmemory.NewDatetimeValue(sv.GetAsDatetime())
 	})
 
 	return r
 }
 
-func Year(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Year(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Year()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Year()))
 	})
 
 	return r
 }
 
-func Month(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Month(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Month()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Month()))
 	})
 
 	return r
 }
 
-func Day(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Day(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Day()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Day()))
 	})
 
 	return r
 }
 
-func Hour(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Hour(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Hour()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Hour()))
 	})
 
 	return r
 }
 
-func Minute(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Minute(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Minute()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Minute()))
 	})
 
 	return r
 }
 
-func Second(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func Second(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().Second()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Second()))
 	})
 
 	return r
 }
 
-func UnixMilli(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func UnixMilli(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(int64(sv.GetAsDatetime().UnixMilli()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(int64(sv.GetAsDatetime().UnixMilli()))
 	})
 
 	return r
 }
 
-func AddDate(s df.DataFrameSeries, y int, m int, d int) (r df.DataFrameSeries) {
+func AddDate(s df.Series, y int, m int, d int) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesDatetimeValue(sv.GetAsDatetime().AddDate(y, m, d))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewDatetimeValue(sv.GetAsDatetime().AddDate(y, m, d))
 	})
 
 	return r
 }
 
-func AddTime(s df.DataFrameSeries, h time.Duration, m time.Duration, sec time.Duration) (r df.DataFrameSeries) {
+func AddTime(s df.Series, h time.Duration, m time.Duration, sec time.Duration) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		dt := sv.GetAsDatetime()
 		if h != 0 {
 			dt = dt.Add(time.Hour * h)
@@ -124,52 +124,52 @@ func AddTime(s df.DataFrameSeries, h time.Duration, m time.Duration, sec time.Du
 		if m != 0 {
 			dt = dt.Add(time.Second * sec)
 		}
-		return inmemory.NewDataFrameSeriesDatetimeValue(dt)
+		return inmemory.NewDatetimeValue(dt)
 	})
 
 	return r
 }
 
-func Parse(s df.DataFrameSeries, pattern string) (r df.DataFrameSeries) {
+func Parse(s df.Series, pattern string) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for string format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		dt, _ := time.Parse(pattern, sv.GetAsString())
-		return inmemory.NewDataFrameSeriesDatetimeValue(dt)
+		return inmemory.NewDatetimeValue(dt)
 	})
 
 	return r
 }
 
-func Format(s df.DataFrameSeries, pattern string) (r df.DataFrameSeries) {
+func Format(s df.Series, pattern string) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesStringValue(sv.GetAsDatetime().Format(pattern))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewStringValue(sv.GetAsDatetime().Format(pattern))
 	})
 
 	return r
 }
 
-func ToUnixMilli(s df.DataFrameSeries, pattern string) (r df.DataFrameSeries) {
+func ToUnixMilli(s df.Series, pattern string) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesIntValue(sv.GetAsDatetime().UnixMilli())
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewIntValue(sv.GetAsDatetime().UnixMilli())
 	})
 
 	return r
 }
 
-func FromUnixMilli(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func FromUnixMilli(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for int format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
-		return inmemory.NewDataFrameSeriesDatetimeValue(time.UnixMilli(sv.GetAsInt()))
+	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		return inmemory.NewDatetimeValue(time.UnixMilli(sv.GetAsInt()))
 	})
 
 	return r

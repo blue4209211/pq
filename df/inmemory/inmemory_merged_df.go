@@ -21,7 +21,7 @@ func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, e
 		for _, d := range dfs {
 			cnt = cnt + int(d.Len())
 		}
-		records := make([]df.DataFrameRow, cnt)
+		records := make([]df.Row, cnt)
 
 		mergeIndx := 0
 		for _, df := range dfs {

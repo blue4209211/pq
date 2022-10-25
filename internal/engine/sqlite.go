@@ -23,7 +23,7 @@ type sqliteQueryEngine struct {
 	dbFile *os.File
 }
 
-func getSqliteType(c df.DataFrameSeriesFormat) string {
+func getSqliteType(c df.Format) string {
 	if c.Name() == "string" {
 		return "text"
 	}

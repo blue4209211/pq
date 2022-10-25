@@ -126,7 +126,7 @@ func (t datetimeFormat) Convert(i any) (any, error) {
 }
 
 // GetFormatFromKind returns format based on kind
-func GetFormatFromKind(t reflect.Kind) (format DataFrameSeriesFormat, err error) {
+func GetFormatFromKind(t reflect.Kind) (format Format, err error) {
 	return GetFormat(t.String())
 }
 
@@ -146,7 +146,7 @@ var BoolFormat boolFormat = boolFormat{name: "boolean"}
 var DateTimeFormat datetimeFormat = datetimeFormat{name: "datetime"}
 
 // GetFormat returns format based on type
-func GetFormat(t string) (format DataFrameSeriesFormat, err error) {
+func GetFormat(t string) (format Format, err error) {
 	t = strings.ToLower(t)
 	if t == "string" || t == "text" {
 		format = StringFormat

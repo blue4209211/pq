@@ -24,15 +24,15 @@ const (
 	BetweenIncludeNeighter BetweenInclude = "neighter"
 )
 
-func IsAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
+func IsAny(s df.Series, data ...any) (r df.Series) {
 	if len(data) == 0 {
 		r = s
 	} else if len(data) == 1 {
-		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+		r = s.Where(func(v df.Value) bool {
 			return v.Get() == data[0]
 		})
 	} else {
-		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+		r = s.Where(func(v df.Value) bool {
 			for _, k := range data {
 				if k == v.Get() {
 					return true
@@ -44,15 +44,15 @@ func IsAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
 	return r
 }
 
-func IsNotAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
+func IsNotAny(s df.Series, data ...any) (r df.Series) {
 	if len(data) == 0 {
 		r = s
 	} else if len(data) == 1 {
-		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+		r = s.Where(func(v df.Value) bool {
 			return v.Get() != data[0]
 		})
 	} else {
-		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+		r = s.Where(func(v df.Value) bool {
 			for _, k := range data {
 				if k == v.Get() {
 					return false
@@ -64,10 +64,10 @@ func IsNotAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
 	return r
 }
 
-func IsNil(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func IsNil(s df.Series) (r df.Series) {
 	return IsAny(s, nil)
 }
 
-func IsNotNil(s df.DataFrameSeries) (r df.DataFrameSeries) {
+func IsNotNil(s df.Series) (r df.Series) {
 	return IsNotAny(s, nil)
 }

@@ -218,7 +218,7 @@ func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 type filterOp struct {
 	idx    int
 	op     string
-	schema df.DataFrameSeriesFormat
+	schema df.Format
 }
 
 func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
@@ -241,7 +241,7 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			colIdxAndOps[i] = filterOp{idx: idx, op: colIdxAndOp[1], schema: (*t.data).Schema().Get(idx).Format}
 		}
 
-		d := (*t.data).Where(func(dfr df.DataFrameRow) bool {
+		d := (*t.data).Where(func(dfr df.Row) bool {
 			f := true
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {

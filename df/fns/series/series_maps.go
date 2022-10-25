@@ -5,23 +5,23 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func Where(s df.DataFrameSeries, f df.DataFrameSeriesFormat, v map[any]any) (r df.DataFrameSeries) {
-	r = s.Map(f, func(sv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+func Where(s df.Series, f df.Format, v map[any]any) (r df.Series) {
+	r = s.Map(f, func(sv df.Value) df.Value {
 		k, ok := v[sv.Get()]
 		if ok {
-			return inmemory.NewDataFrameSeriesValue(f, k)
+			return inmemory.NewValue(f, k)
 		}
 		return sv
 	})
 	return r
 }
 
-func AsType(s df.DataFrameSeries, t df.DataFrameSeriesFormat) (r df.DataFrameSeries) {
-	return s.Map(t, func(dfsv df.DataFrameSeriesValue) df.DataFrameSeriesValue {
+func AsType(s df.Series, t df.Format) (r df.Series) {
+	return s.Map(t, func(dfsv df.Value) df.Value {
 		v, e := t.Convert(dfsv.Get())
 		if e != nil {
 			v = nil
 		}
-		return inmemory.NewDataFrameSeriesValue(t, v)
+		return inmemory.NewValue(t, v)
 	})
 }

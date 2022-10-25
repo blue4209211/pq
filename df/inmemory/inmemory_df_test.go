@@ -8,7 +8,7 @@ import (
 )
 
 func TestInMemoryDfColOps(t *testing.T) {
-	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.DataFrameSeries{
+	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.Series{
 		NewIntSeries([]int64{1, 2, 3, 4}),
 		NewDoubleSeries([]float64{1, 2, 3, 4}),
 		NewStringSeries([]string{"a1", "a2", "a3", "a4"}),
@@ -35,13 +35,13 @@ func TestInMemoryDfColOps(t *testing.T) {
 }
 
 func TestInMemoryDfRowOps(t *testing.T) {
-	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.DataFrameSeries{
+	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.Series{
 		NewIntSeries([]int64{1, 2, 3, 4}),
 		NewDoubleSeries([]float64{1, 2, 3, 4}),
 		NewStringSeries([]string{"a1", "a2", "a3", "a4"}),
 	})
 
-	filteredData := data.Where(func(r df.DataFrameRow) bool {
+	filteredData := data.Where(func(r df.Row) bool {
 		return r.GetByName("c3").GetAsString() == "a1"
 	})
 

@@ -4,53 +4,53 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
-type inmemoryGroupedDataFrameSeries struct {
-	data map[df.DataFrameSeriesValue]df.DataFrameSeries
-	typ  df.DataFrameSeriesFormat
+type inmemoryGroupedSeries struct {
+	data map[df.Value]df.Series
+	typ  df.Format
 }
 
-func (t *inmemoryGroupedDataFrameSeries) Get(index df.DataFrameSeriesValue) (d df.DataFrameSeries) {
+func (t *inmemoryGroupedSeries) Get(index df.Value) (d df.Series) {
 	return t.data[index]
 }
 
-func (t *inmemoryGroupedDataFrameSeries) GetKeys() (d []df.DataFrameSeriesValue) {
-	d = make([]df.DataFrameSeriesValue, 0, len(t.data))
+func (t *inmemoryGroupedSeries) GetKeys() (d []df.Value) {
+	d = make([]df.Value, 0, len(t.data))
 	for k := range t.data {
 		d = append(d, k)
 	}
 	return d
 }
 
-func (t *inmemoryGroupedDataFrameSeries) ForEach(f func(df.DataFrameSeriesValue, df.DataFrameSeries)) {
+func (t *inmemoryGroupedSeries) ForEach(f func(df.Value, df.Series)) {
 	for k, v := range t.data {
 		f(k, v)
 	}
 }
 
-func (t *inmemoryGroupedDataFrameSeries) Map(schema df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue, df.DataFrameSeries) df.DataFrameSeries) (d df.DataFrameGroupedSeries) {
-	d1 := map[df.DataFrameSeriesValue]df.DataFrameSeries{}
+func (t *inmemoryGroupedSeries) Map(schema df.Format, f func(df.Value, df.Series) df.Series) (d df.GroupedSeries) {
+	d1 := map[df.Value]df.Series{}
 	for k, v := range t.data {
 		nv := f(k, v)
 		d1[k] = nv
 	}
-	return &inmemoryGroupedDataFrameSeries{data: d1, typ: schema}
+	return &inmemoryGroupedSeries{data: d1, typ: schema}
 }
 
-func (t *inmemoryGroupedDataFrameSeries) Where(f func(df.DataFrameSeriesValue, df.DataFrameSeries) bool) (d df.DataFrameGroupedSeries) {
-	d1 := map[df.DataFrameSeriesValue]df.DataFrameSeries{}
+func (t *inmemoryGroupedSeries) Where(f func(df.Value, df.Series) bool) (d df.GroupedSeries) {
+	d1 := map[df.Value]df.Series{}
 	for k, v := range t.data {
 		if f(k, v) {
 			d1[k] = v
 		}
 	}
-	return &inmemoryGroupedDataFrameSeries{data: d1, typ: t.typ}
+	return &inmemoryGroupedSeries{data: d1, typ: t.typ}
 }
 
-func NewGroupedSeries(data df.DataFrameSeries) df.DataFrameGroupedSeries {
-	gd := map[df.DataFrameSeriesValue]df.DataFrameSeries{}
-	gdv := map[df.DataFrameSeriesValue][]df.DataFrameSeriesValue{}
+func NewGroupedSeries(data df.Series) df.GroupedSeries {
+	gd := map[df.Value]df.Series{}
+	gdv := map[df.Value][]df.Value{}
 
-	data.ForEach(func(dfsv df.DataFrameSeriesValue) {
+	data.ForEach(func(dfsv df.Value) {
 		k := gdv[dfsv]
 		gdv[dfsv] = append(k, dfsv)
 	})
@@ -59,5 +59,5 @@ func NewGroupedSeries(data df.DataFrameSeries) df.DataFrameGroupedSeries {
 		gd[k] = NewValueSeries(v, data.Schema().Format)
 	}
 
-	return &inmemoryGroupedDataFrameSeries{data: gd, typ: data.Schema().Format}
+	return &inmemoryGroupedSeries{data: gd, typ: data.Schema().Format}
 }

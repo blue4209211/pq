@@ -7,11 +7,11 @@ import (
 )
 
 type inmemoryDataFrameSeriesVal struct {
-	schema df.DataFrameSeriesFormat
+	schema df.Format
 	data   any
 }
 
-func (t *inmemoryDataFrameSeriesVal) Schema() df.DataFrameSeriesFormat {
+func (t *inmemoryDataFrameSeriesVal) Schema() df.Format {
 	return t.schema
 }
 
@@ -64,26 +64,26 @@ func (t *inmemoryDataFrameSeriesVal) IsNil() (r bool) {
 }
 
 // NewDataFrameRow returns new Row based on schema and data
-func NewDataFrameSeriesValue(schema df.DataFrameSeriesFormat, data any) df.DataFrameSeriesValue {
+func NewValue(schema df.Format, data any) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: schema, data: data}
 }
 
-func NewDataFrameSeriesStringValue(data string) df.DataFrameSeriesValue {
+func NewStringValue(data string) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: df.StringFormat, data: data}
 }
 
-func NewDataFrameSeriesIntValue(data int64) df.DataFrameSeriesValue {
+func NewIntValue(data int64) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: df.IntegerFormat, data: data}
 }
 
-func NewDataFrameSeriesDoubleValue(data float64) df.DataFrameSeriesValue {
+func NewDoubleValue(data float64) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: df.DoubleFormat, data: data}
 }
 
-func NewDataFrameSeriesBoolValue(data bool) df.DataFrameSeriesValue {
+func NewBoolValue(data bool) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: df.BoolFormat, data: data}
 }
 
-func NewDataFrameSeriesDatetimeValue(data time.Time) df.DataFrameSeriesValue {
+func NewDatetimeValue(data time.Time) df.Value {
 	return &inmemoryDataFrameSeriesVal{schema: df.BoolFormat, data: data}
 }

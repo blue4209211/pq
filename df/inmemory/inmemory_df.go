@@ -12,7 +12,7 @@ import (
 type inmemoryDataFrame struct {
 	name   string
 	schema df.DataFrameSchema
-	data   []df.DataFrameRow
+	data   []df.Row
 }
 
 func (t *inmemoryDataFrame) Schema() df.DataFrameSchema {
@@ -29,22 +29,22 @@ func (t *inmemoryDataFrame) Rename(name string, inplace bool) df.DataFrame {
 		return t
 	}
 
-	data := make([]df.DataFrameRow, t.Len())
+	data := make([]df.Row, t.Len())
 	for i, r := range t.data {
 		data[i] = r.Copy()
 	}
 	return NewDataframeFromRowAndName(name, t.schema.Series(), data)
 }
 
-func (t *inmemoryDataFrame) GetSeries(i int) df.DataFrameSeries {
-	series := make([]df.DataFrameSeriesValue, t.Len())
+func (t *inmemoryDataFrame) GetSeries(i int) df.Series {
+	series := make([]df.Value, t.Len())
 	for j, e := range t.data {
 		series[j] = e.Get(i)
 	}
 	return NewValueSeriesWihNameAndCopy(series, t.schema.Get(i).Format, t.schema.Get(i).Name, false)
 }
 
-func (t *inmemoryDataFrame) GetSeriesByName(s string) df.DataFrameSeries {
+func (t *inmemoryDataFrame) GetSeriesByName(s string) df.Series {
 	index, err := t.schema.GetIndexByName(s)
 	if err != nil {
 		panic(err)
@@ -52,7 +52,7 @@ func (t *inmemoryDataFrame) GetSeriesByName(s string) df.DataFrameSeries {
 	return t.GetSeries(index)
 }
 
-func (t *inmemoryDataFrame) GetRow(r int64) df.DataFrameRow {
+func (t *inmemoryDataFrame) GetRow(r int64) df.Row {
 	return t.data[r]
 }
 
@@ -60,32 +60,32 @@ func (t *inmemoryDataFrame) Len() int64 {
 	return int64(len(t.data))
 }
 
-func (t *inmemoryDataFrame) ForEachRow(f func(df.DataFrameRow)) {
+func (t *inmemoryDataFrame) ForEachRow(f func(df.Row)) {
 	for _, r := range t.data {
 		f(r)
 	}
 }
 
-func (t *inmemoryDataFrame) AddSeries(name string, series df.DataFrameSeries) (d df.DataFrame, e error) {
+func (t *inmemoryDataFrame) AddSeries(name string, series df.Series) (d df.DataFrame, e error) {
 	if t.Len() != series.Len() {
-		return d, errors.New("Data length mismatch")
+		return d, errors.New("data length mismatch")
 	}
 	_, e = t.schema.GetByName(name)
 	if e == nil {
-		return d, errors.New("Column Already Exists - " + name)
+		return d, errors.New("column Already Exists - " + name)
 	}
 	e = nil
 	cols := make([]df.SeriesSchema, 0, t.schema.Len()+1)
 	cols = append(cols, t.schema.Series()...)
 	cols = append(cols, df.SeriesSchema{Name: name, Format: series.Schema().Format})
-	data := make([]df.DataFrameRow, len(cols))
+	data := make([]df.Row, len(cols))
 	for i, e := range t.data {
 		data[i] = e.Append(name, series.Get(int64(i)))
 	}
 	return NewDataframeFromRow(cols, data), e
 }
 
-func (t *inmemoryDataFrame) UpdateSeries(index int, series df.DataFrameSeries) (d df.DataFrame, e error) {
+func (t *inmemoryDataFrame) UpdateSeries(index int, series df.Series) (d df.DataFrame, e error) {
 	if index < 0 || index >= t.Schema().Len() {
 		return d, fmt.Errorf(fmt.Sprintf("Column Doesnt Exists - %d", index))
 	}
@@ -106,7 +106,7 @@ func (t *inmemoryDataFrame) UpdateSeries(index int, series df.DataFrameSeries) (
 	return NewDataframe(cols, data), e
 }
 
-func (t *inmemoryDataFrame) UpdateSeriesByName(name string, series df.DataFrameSeries) (d df.DataFrame, e error) {
+func (t *inmemoryDataFrame) UpdateSeriesByName(name string, series df.Series) (d df.DataFrame, e error) {
 	index, e := t.schema.GetIndexByName(name)
 	if e != nil {
 		return d, fmt.Errorf("unable to find column - %s", name)
@@ -183,7 +183,7 @@ func (t *inmemoryDataFrame) SelectSeries(index ...int) (d df.DataFrame, e error)
 		cols = append(cols, t.Schema().Get(c))
 	}
 
-	data := make([]df.DataFrameRow, t.Len())
+	data := make([]df.Row, t.Len())
 	for i, v := range t.data {
 		data[i] = v.Select(index...)
 	}
@@ -206,12 +206,12 @@ func (t *inmemoryDataFrame) SelectSeriesByName(col ...string) (d df.DataFrame, e
 }
 
 func (t *inmemoryDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
-	data := make([]df.DataFrameRow, t.Len())
+	data := make([]df.Row, t.Len())
 	for i, r := range t.data {
 		data[i] = r.Copy()
 	}
 
-	isLessFunc := func(f df.SeriesSchema, order df.SortOrder, c1 df.DataFrameSeriesValue, c2 df.DataFrameSeriesValue) bool {
+	isLessFunc := func(f df.SeriesSchema, order df.SortOrder, c1 df.Value, c2 df.Value) bool {
 		if f.Format == df.IntegerFormat {
 			if order == df.SortOrderASC {
 				return c1.GetAsInt() < c2.GetAsInt()
@@ -271,9 +271,9 @@ func (t *inmemoryDataFrame) SortByName(order ...df.SortByName) df.DataFrame {
 	return t.Sort(idexes...)
 }
 
-func (t *inmemoryDataFrame) MapRow(cols []df.SeriesSchema, f func(df.DataFrameRow) df.DataFrameRow) df.DataFrame {
+func (t *inmemoryDataFrame) MapRow(cols []df.SeriesSchema, f func(df.Row) df.Row) df.DataFrame {
 
-	data := make([]df.DataFrameRow, t.Len())
+	data := make([]df.Row, t.Len())
 	for i, r := range t.data {
 		data[i] = f(r)
 	}
@@ -281,16 +281,16 @@ func (t *inmemoryDataFrame) MapRow(cols []df.SeriesSchema, f func(df.DataFrameRo
 	return NewDataframeFromRow(cols, data)
 }
 
-func (t *inmemoryDataFrame) FlatMapRow(cols []df.SeriesSchema, f func(df.DataFrameRow) []df.DataFrameRow) df.DataFrame {
-	data := make([]df.DataFrameRow, 0, t.Len())
+func (t *inmemoryDataFrame) FlatMapRow(cols []df.SeriesSchema, f func(df.Row) []df.Row) df.DataFrame {
+	data := make([]df.Row, 0, t.Len())
 	for _, r := range t.data {
 		data = append(data, f(r)...)
 	}
 	return NewDataframeFromRow(cols, data)
 }
 
-func (t *inmemoryDataFrame) Where(f func(df.DataFrameRow) bool) df.DataFrame {
-	data := make([]df.DataFrameRow, 0, t.Len())
+func (t *inmemoryDataFrame) Where(f func(df.Row) bool) df.DataFrame {
+	data := make([]df.Row, 0, t.Len())
 	for _, r := range t.data {
 		if f(r) {
 			data = append(data, r)
@@ -299,11 +299,11 @@ func (t *inmemoryDataFrame) Where(f func(df.DataFrameRow) bool) df.DataFrame {
 	return NewDataframeFromRow(t.schema.Series(), data)
 }
 
-func (t *inmemoryDataFrame) Select(b df.DataFrameSeries) df.DataFrame {
+func (t *inmemoryDataFrame) Select(b df.Series) df.DataFrame {
 	if b.Schema().Format != df.BoolFormat {
 		panic("Only bool series supported")
 	}
-	data := make([]df.DataFrameRow, 0, len(t.data))
+	data := make([]df.Row, 0, len(t.data))
 	seriesLength := b.Len()
 	for i, d := range t.data {
 		if int64(i) < seriesLength && b.Get(int64(i)).GetAsBool() {
@@ -317,12 +317,12 @@ func (t *inmemoryDataFrame) Limit(offset int, size int) df.DataFrame {
 	return NewDataframeFromRow(t.schema.Series(), t.data[offset:offset+size])
 }
 
-func (t *inmemoryDataFrame) Group(key string, others ...string) df.DataFrameGrouped {
+func (t *inmemoryDataFrame) Group(key string, others ...string) df.GroupedDataFrame {
 	return NewGroupedDf(t, key, others...)
 }
 
-func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, jointype df.JoinType, f func(df.DataFrameRow, df.DataFrameRow) []df.DataFrameRow) (r df.DataFrame) {
-	val := []df.DataFrameRow{}
+func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, jointype df.JoinType, f func(df.Row, df.Row) []df.Row) (r df.DataFrame) {
+	val := []df.Row{}
 	if jointype == df.JoinLeft || jointype == df.JoinReft || jointype == df.JoinEqui {
 		min := int64(len(t.data))
 		if data.Len() < min {
@@ -359,31 +359,31 @@ func NewDataframe(cols []df.SeriesSchema, data [][]any) df.DataFrame {
 }
 
 // NewDataframe Create Dataframe based on given schema and data
-func NewDataframeFromRow(cols []df.SeriesSchema, data []df.DataFrameRow) df.DataFrame {
+func NewDataframeFromRow(cols []df.SeriesSchema, data []df.Row) df.DataFrame {
 	dfCounter = dfCounter + 1
 	return NewDataframeFromRowAndName("df_"+strconv.Itoa(dfCounter), cols, data)
 }
 
 // NewDataframe Create Dataframe based on given schema and data
-func NewDataframeFromRowAndName(name string, cols []df.SeriesSchema, data []df.DataFrameRow) df.DataFrame {
+func NewDataframeFromRowAndName(name string, cols []df.SeriesSchema, data []df.Row) df.DataFrame {
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: data}
 }
 
 // NewDataframeWithName Create Dataframe based on given name, schema and data
 func NewDataframeWithName(name string, cols []df.SeriesSchema, data [][]any, copyData bool) df.DataFrame {
-	data2 := make([]df.DataFrameRow, len(data))
+	data2 := make([]df.Row, len(data))
 	for i, k := range data {
-		kv := make([]df.DataFrameSeriesValue, len(k))
+		kv := make([]df.Value, len(k))
 		for i, v := range k {
-			kv[i] = NewDataFrameSeriesValue(cols[i].Format, v)
+			kv[i] = NewValue(cols[i].Format, v)
 		}
-		data2[i] = NewDataFrameRowWithCopy(df.NewSchema(cols), kv, copyData)
+		data2[i] = NewRowWithCopy(df.NewSchema(cols), kv, copyData)
 	}
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: data2}
 }
 
 // NewDataframeWithNameFromSeries Create Dataframe based on given name, schema and data
-func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.DataFrameSeries) df.DataFrame {
+func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.Series) df.DataFrame {
 	if len(data) == 0 || len(colNames) == 0 {
 		panic("data/col is empty")
 	}
@@ -394,13 +394,13 @@ func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.Da
 
 	schema := df.NewSchema(cols)
 
-	dfData := make([]df.DataFrameRow, 0, data[0].Len())
+	dfData := make([]df.Row, 0, data[0].Len())
 	for i := int64(0); i < data[0].Len(); i++ {
-		r := make([]df.DataFrameSeriesValue, len(colNames))
+		r := make([]df.Value, len(colNames))
 		for j := 0; j < len(colNames); j++ {
 			r[j] = data[j].Get(i)
 		}
-		dfData = append(dfData, NewDataFrameRow(schema, r))
+		dfData = append(dfData, NewRow(schema, r))
 	}
 
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: dfData}

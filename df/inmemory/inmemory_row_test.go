@@ -9,8 +9,8 @@ import (
 
 func TestNewDataFrameRow(t *testing.T) {
 
-	data := []df.DataFrameSeriesValue{NewDataFrameSeriesIntValue(1), NewDataFrameSeriesDoubleValue(2.0), NewDataFrameSeriesStringValue("abc"), NewDataFrameSeriesBoolValue(false)}
-	r := NewDataFrameRow(df.NewSchema([]df.SeriesSchema{
+	data := []df.Value{NewIntValue(1), NewDoubleValue(2.0), NewStringValue("abc"), NewBoolValue(false)}
+	r := NewRow(df.NewSchema([]df.SeriesSchema{
 		{Name: "c1", Format: df.IntegerFormat},
 		{Name: "c2", Format: df.DoubleFormat},
 		{Name: "c3", Format: df.StringFormat},

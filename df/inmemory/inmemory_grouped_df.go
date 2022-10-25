@@ -5,7 +5,7 @@ import (
 )
 
 type inmemoryGroupedDataFrame struct {
-	data   map[df.DataFrameRow]df.DataFrame
+	data   map[df.Row]df.DataFrame
 	schema df.DataFrameSchema
 	keys   []string
 }
@@ -16,26 +16,26 @@ func (t *inmemoryGroupedDataFrame) GetGroupKeys() []string {
 	return s1
 }
 
-func (t *inmemoryGroupedDataFrame) Get(index df.DataFrameRow) (d df.DataFrame) {
+func (t *inmemoryGroupedDataFrame) Get(index df.Row) (d df.DataFrame) {
 	return t.data[index]
 }
 
-func (t *inmemoryGroupedDataFrame) GetKeys() (d []df.DataFrameRow) {
-	d = make([]df.DataFrameRow, 0, len(t.data))
+func (t *inmemoryGroupedDataFrame) GetKeys() (d []df.Row) {
+	d = make([]df.Row, 0, len(t.data))
 	for k := range t.data {
 		d = append(d, k)
 	}
 	return d
 }
 
-func (t *inmemoryGroupedDataFrame) ForEach(f func(df.DataFrameRow, df.DataFrame)) {
+func (t *inmemoryGroupedDataFrame) ForEach(f func(df.Row, df.DataFrame)) {
 	for k, v := range t.data {
 		f(k, v)
 	}
 }
 
-func (t *inmemoryGroupedDataFrame) Map(s df.DataFrameSchema, f func(df.DataFrameRow, df.DataFrame) df.DataFrame) (d df.DataFrameGrouped) {
-	d1 := map[df.DataFrameRow]df.DataFrame{}
+func (t *inmemoryGroupedDataFrame) Map(s df.DataFrameSchema, f func(df.Row, df.DataFrame) df.DataFrame) (d df.GroupedDataFrame) {
+	d1 := map[df.Row]df.DataFrame{}
 	for k, v := range t.data {
 		dfr := f(k, v)
 		d1[k] = dfr
@@ -43,8 +43,8 @@ func (t *inmemoryGroupedDataFrame) Map(s df.DataFrameSchema, f func(df.DataFrame
 	return &inmemoryGroupedDataFrame{data: d1, schema: s}
 }
 
-func (t *inmemoryGroupedDataFrame) Where(f func(df.DataFrameRow, df.DataFrame) bool) (d df.DataFrameGrouped) {
-	d1 := map[df.DataFrameRow]df.DataFrame{}
+func (t *inmemoryGroupedDataFrame) Where(f func(df.Row, df.DataFrame) bool) (d df.GroupedDataFrame) {
+	d1 := map[df.Row]df.DataFrame{}
 	for k, v := range t.data {
 		if f(k, v) {
 			d1[k] = v
@@ -53,8 +53,8 @@ func (t *inmemoryGroupedDataFrame) Where(f func(df.DataFrameRow, df.DataFrame) b
 	return &inmemoryGroupedDataFrame{data: d1, schema: t.schema}
 }
 
-func NewGroupedDf(data df.DataFrame, key string, others ...string) df.DataFrameGrouped {
-	groupedData := map[df.DataFrameRow][]df.DataFrameRow{}
+func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDataFrame {
+	groupedData := map[df.Row][]df.Row{}
 	indexes := []int{}
 	i, err := data.Schema().GetIndexByName(key)
 	if err != nil {
@@ -70,11 +70,11 @@ func NewGroupedDf(data df.DataFrame, key string, others ...string) df.DataFrameG
 		indexes = append(indexes, i)
 	}
 
-	data.ForEachRow(func(dfr df.DataFrameRow) {
+	data.ForEachRow(func(dfr df.Row) {
 		groupedData[dfr.Select(indexes...)] = append(groupedData[dfr.Select(indexes...)], dfr)
 	})
 
-	groupedData2 := map[df.DataFrameRow]df.DataFrame{}
+	groupedData2 := map[df.Row]df.DataFrame{}
 	for k, v := range groupedData {
 		groupedData2[k] = NewDataframeFromRow(data.Schema().Series(), v)
 	}

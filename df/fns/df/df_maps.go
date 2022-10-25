@@ -11,7 +11,7 @@ import (
 	"github.com/blue4209211/pq/df/fns/series/str"
 )
 
-func AsType(s df.DataFrame, t map[string]df.DataFrameSeriesFormat) (r df.DataFrame) {
+func AsType(s df.DataFrame, t map[string]df.Format) (r df.DataFrame) {
 	for k, v := range t {
 		s, err := s.UpdateSeriesByName(k, series.AsType(s.GetSeriesByName(k), v))
 		if err != nil {
