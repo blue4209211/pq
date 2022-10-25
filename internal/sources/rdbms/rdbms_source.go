@@ -72,7 +72,7 @@ func (t *DataSource) Read(context context.Context, dbURL string, args map[string
 	}
 
 	if u.Fragment != "" {
-		return inmemory.NewDataframeWithName(u.Fragment, schema, records), nil
+		return inmemory.NewDataframeWithName(u.Fragment, schema, records, false), nil
 	}
 	return inmemory.NewDataframe(schema, records), nil
 

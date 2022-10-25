@@ -270,9 +270,9 @@ func i2double(v any) (f float64, err error) {
 	if v == nil {
 		return f, err
 	}
-	i, ok := v.(float64)
+	f, ok := v.(float64)
 	if ok {
-		return i, err
+		return f, err
 	}
 
 	vt := reflect.TypeOf(v).Kind()

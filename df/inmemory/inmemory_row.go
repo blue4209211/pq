@@ -119,5 +119,15 @@ func (t *inmemoryDataFrameRow) IsNil(i int) (r bool) {
 
 // NewDataFrameRow returns new Row based on schema and data
 func NewDataFrameRow(schema df.DataFrameSchema, data []any) df.DataFrameRow {
-	return &inmemoryDataFrameRow{schema: schema, data: data}
+	return NewDataFrameRowWithCopy(schema, data, false)
+}
+
+// NewDataFrameRow returns new Row based on schema and data
+func NewDataFrameRowWithCopy(schema df.DataFrameSchema, data []any, copyData bool) df.DataFrameRow {
+	data2 := data
+	if copyData {
+		data2 = make([]any, len(data))
+		copy(data2, data)
+	}
+	return &inmemoryDataFrameRow{schema: schema, data: data2}
 }

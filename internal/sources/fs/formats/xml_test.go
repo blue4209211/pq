@@ -104,7 +104,7 @@ func TestXMLDataSourceWriter(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	dataframe := inmemory.NewDataframeWithName("df_1", xmlReader.Schema(), xmlReader.Data())
+	dataframe := inmemory.NewDataframeWithName("df_1", xmlReader.Schema(), xmlReader.Data(), false)
 	assert.Equal(t, dataframe.Name(), "df_1")
 
 	writer, err := source.Writer(dataframe, map[string]string{

@@ -165,7 +165,7 @@ func BenchmarkDataframeQueryPQ(b *testing.B) {
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{
 		ConfigEngineStorage: "pq",
 	})
-	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
+	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data(), false)
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {
@@ -186,9 +186,9 @@ func BenchmarkMultipleDataframeQueryPQ(b *testing.B) {
 	}
 
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
+	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data(), false)
 	jsonReader2, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe2 := inmemory.NewDataframeWithName("t2", jsonReader2.Schema(), jsonReader2.Data())
+	dataframe2 := inmemory.NewDataframeWithName("t2", jsonReader2.Schema(), jsonReader2.Data(), false)
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {

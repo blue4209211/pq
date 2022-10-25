@@ -40,7 +40,7 @@ func (t *inmemoryDataFrameSeries) Where(f func(df.DataFrameSeriesValue) bool) df
 			data = append(data, d)
 		}
 	}
-	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name, false)
 }
 
 func (t *inmemoryDataFrameSeries) Select(b df.DataFrameSeries) df.DataFrameSeries {
@@ -54,7 +54,7 @@ func (t *inmemoryDataFrameSeries) Select(b df.DataFrameSeries) df.DataFrameSerie
 			data = append(data, d)
 		}
 	}
-	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name, false)
 }
 
 func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue) df.DataFrameSeriesValue) df.DataFrameSeries {
@@ -62,7 +62,7 @@ func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(df.Data
 	for _, d := range t.data {
 		data = append(data, f(NewDataFrameSeriesValue(t.schema.Format, d)).Get())
 	}
-	return NewSeries(data, s)
+	return NewSeries(data, s, false)
 }
 
 func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue) []df.DataFrameSeriesValue) df.DataFrameSeries {
@@ -72,7 +72,7 @@ func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.
 			data = append(data, k.Get())
 		}
 	}
-	return NewSeries(data, s)
+	return NewSeries(data, s, false)
 }
 
 func (t *inmemoryDataFrameSeries) Reduce(f func(df.DataFrameSeriesValue, df.DataFrameSeriesValue) df.DataFrameSeriesValue, startValue df.DataFrameSeriesValue) df.DataFrameSeriesValue {
@@ -98,18 +98,18 @@ func (t *inmemoryDataFrameSeries) Distinct() df.DataFrameSeries {
 			data = append(data, d)
 		}
 	}
-	return NewNamedSeries(data, t.schema.Format, t.schema.Name)
+	return NewNamedSeries(data, t.schema.Format, t.schema.Name, false)
 }
 
 func (t *inmemoryDataFrameSeries) Copy() df.DataFrameSeries {
 	v := make([]any, t.Len())
 	copy(v, t.data)
 
-	return NewNamedSeries(v, t.schema.Format, t.schema.Name+"_Copy")
+	return NewNamedSeries(v, t.schema.Format, t.schema.Name+"_Copy", false)
 }
 
 func (t *inmemoryDataFrameSeries) Limit(offset int, size int) df.DataFrameSeries {
-	return NewNamedSeries(t.data[offset:offset+size], t.schema.Format, t.schema.Name)
+	return NewNamedSeries(t.data[offset:offset+size], t.schema.Format, t.schema.Name, false)
 }
 
 func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
@@ -158,7 +158,7 @@ func (t *inmemoryDataFrameSeries) Sort(order df.SortOrder) df.DataFrameSeries {
 		}
 	}
 
-	return NewNamedSeries(d, t.schema.Format, t.schema.Name)
+	return NewNamedSeries(d, t.schema.Format, t.schema.Name, false)
 }
 
 func (t *inmemoryDataFrameSeries) Join(schema df.DataFrameSeriesFormat, series df.DataFrameSeries, jointype df.JoinType, f func(df.DataFrameSeriesValue, df.DataFrameSeriesValue) []df.DataFrameSeriesValue) (s df.DataFrameSeries) {
@@ -199,7 +199,7 @@ func (t *inmemoryDataFrameSeries) Append(s df.DataFrameSeries) df.DataFrameSerie
 	for i := int64(0); i < s.Len(); i++ {
 		dv = append(dv, s.Get(i).Get())
 	}
-	return NewSeries(dv, t.schema.Format)
+	return NewSeries(dv, t.schema.Format, false)
 }
 
 func (t *inmemoryDataFrameSeries) Group() df.DataFrameGroupedSeries {
@@ -207,14 +207,19 @@ func (t *inmemoryDataFrameSeries) Group() df.DataFrameGroupedSeries {
 }
 
 //
-func NewNamedSeries(data []any, colFormat df.DataFrameSeriesFormat, colName string) df.DataFrameSeries {
+func NewNamedSeries(data []any, colFormat df.DataFrameSeriesFormat, colName string, copyData bool) df.DataFrameSeries {
+	data2 := data
+	if copyData {
+		data2 = make([]any, len(data))
+		copy(data2, data)
+	}
 	colSchema := df.SeriesSchema{Name: colName, Format: colFormat}
-	return &inmemoryDataFrameSeries{schema: colSchema, data: data}
+	return &inmemoryDataFrameSeries{schema: colSchema, data: data2}
 }
 
 // NewSeries returns a column of given type
-func NewSeries(data []any, colSchema df.DataFrameSeriesFormat) df.DataFrameSeries {
-	return NewNamedSeries(data, colSchema, "")
+func NewSeries(data []any, colSchema df.DataFrameSeriesFormat, copy bool) df.DataFrameSeries {
+	return NewNamedSeries(data, colSchema, "", copy)
 }
 
 // NewSeries returns a column of given type
@@ -223,7 +228,7 @@ func NewValueSeries(data []df.DataFrameSeriesValue, colSchema df.DataFrameSeries
 	for _, v := range data {
 		val = append(val, v.Get())
 	}
-	return NewNamedSeries(val, colSchema, "")
+	return NewNamedSeries(val, colSchema, "", false)
 }
 
 // NewStringSeries returns a column of type string
@@ -232,7 +237,7 @@ func NewStringSeries(data []string) df.DataFrameSeries {
 	for i, e := range data {
 		d[i] = e
 	}
-	return NewSeries(d, df.StringFormat)
+	return NewSeries(d, df.StringFormat, false)
 }
 
 // NewIntSeries returns a column of type int
@@ -241,7 +246,7 @@ func NewIntSeries(data []int64) df.DataFrameSeries {
 	for i, e := range data {
 		d[i] = e
 	}
-	return NewSeries(d, df.IntegerFormat)
+	return NewSeries(d, df.IntegerFormat, false)
 }
 
 // NewBoolSeries returns a column of type bool
@@ -250,7 +255,7 @@ func NewBoolSeries(data []bool) df.DataFrameSeries {
 	for i, e := range data {
 		d[i] = e
 	}
-	return NewSeries(d, df.BoolFormat)
+	return NewSeries(d, df.BoolFormat, false)
 }
 
 // NewDoubleSeries returns a column of type double
@@ -259,7 +264,7 @@ func NewDoubleSeries(data []float64) df.DataFrameSeries {
 	for i, e := range data {
 		d[i] = e
 	}
-	return NewSeries(d, df.DoubleFormat)
+	return NewSeries(d, df.DoubleFormat, false)
 }
 
 // NewDoubleSeries returns a column of type double
@@ -268,5 +273,5 @@ func NewDatetimeSeries(data []time.Time) df.DataFrameSeries {
 	for i, e := range data {
 		d[i] = e
 	}
-	return NewSeries(d, df.DateTimeFormat)
+	return NewSeries(d, df.DateTimeFormat, false)
 }

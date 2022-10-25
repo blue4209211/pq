@@ -196,7 +196,7 @@ func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 	cType := (*t.data).Schema().Get(col)
 	//i, _ := cType.Format.Convert((*t.data)[t.index][col])
 	i := (*t.data).GetRow(int64(t.index)).Data()[col]
-	if i == nil {
+	if i == nil || i.Get() == nil {
 		c.ResultNull()
 		return err
 	}

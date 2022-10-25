@@ -105,7 +105,7 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err := source.Reader(strings.NewReader(csvString), configs)
 	assert.NoError(t, err)
-	dataframe := inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	dataframe := inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data(), false)
 	writer, err := source.Writer(dataframe, configs)
 	buff := new(strings.Builder)
 	writer.Write(buff)
@@ -123,7 +123,7 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err = source.Reader(strings.NewReader(csvStringWithHeader), configs)
 	assert.NoError(t, err)
-	dataframe = inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	dataframe = inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data(), false)
 	writer, err = source.Writer(dataframe, configs)
 	buff = new(strings.Builder)
 	writer.Write(buff)

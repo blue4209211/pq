@@ -102,7 +102,7 @@ func TestJSONDataSourceWriter(t *testing.T) {
 	jsonReader, err := source.Reader(strings.NewReader(jsonString), map[string]string{})
 	assert.NoError(t, err)
 
-	dataframe := inmemory.NewDataframeWithName("df_1", jsonReader.Schema(), jsonReader.Data())
+	dataframe := inmemory.NewDataframeWithName("df_1", jsonReader.Schema(), jsonReader.Data(), false)
 	assert.Equal(t, dataframe.Name(), "df_1")
 
 	writer, err := source.Writer(dataframe, map[string]string{
