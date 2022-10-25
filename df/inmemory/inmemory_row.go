@@ -8,7 +8,7 @@ import (
 
 type inmemoryDataFrameRow struct {
 	schema df.DataFrameSchema
-	data   []any
+	data   []df.DataFrameSeriesValue
 }
 
 func (t *inmemoryDataFrameRow) Schema() df.DataFrameSchema {
@@ -16,15 +16,7 @@ func (t *inmemoryDataFrameRow) Schema() df.DataFrameSchema {
 }
 
 func (t *inmemoryDataFrameRow) GetRaw(i int) any {
-	return t.data[i]
-}
-
-func (t *inmemoryDataFrameRow) Data() []df.DataFrameSeriesValue {
-	data2 := make([]df.DataFrameSeriesValue, t.Len())
-	for i, v := range t.data {
-		data2[i] = NewDataFrameSeriesValue(t.schema.Get(i).Format, v)
-	}
-	return data2
+	return t.data[i].Get()
 }
 
 func (t *inmemoryDataFrameRow) Len() int {
@@ -32,16 +24,16 @@ func (t *inmemoryDataFrameRow) Len() int {
 }
 
 func (t *inmemoryDataFrameRow) Copy() (r df.DataFrameRow) {
-	r1 := make([]any, t.Len())
+	r1 := make([]df.DataFrameSeriesValue, t.Len())
 	copy(r1, t.data)
 	r = NewDataFrameRow(t.schema, r1)
 	return r
 }
 
 func (t *inmemoryDataFrameRow) Append(name string, v df.DataFrameSeriesValue) (r df.DataFrameRow) {
-	r1 := make([]any, t.Len()+1)
+	r1 := make([]df.DataFrameSeriesValue, t.Len()+1)
 	copy(r1, t.data)
-	r1[t.Len()] = v.Get()
+	r1[t.Len()] = v
 	s1 := make([]df.SeriesSchema, t.Len()+1)
 	copy(s1, t.schema.Series())
 	s1[t.Len()] = df.SeriesSchema{Name: name, Format: v.Schema()}
@@ -51,7 +43,7 @@ func (t *inmemoryDataFrameRow) Append(name string, v df.DataFrameSeriesValue) (r
 }
 
 func (t *inmemoryDataFrameRow) Get(i int) df.DataFrameSeriesValue {
-	return NewDataFrameSeriesValue(t.schema.Get(i).Format, t.GetRaw(i))
+	return t.data[i]
 }
 
 func (t *inmemoryDataFrameRow) GetByName(s string) df.DataFrameSeriesValue {
@@ -85,14 +77,14 @@ func (t *inmemoryDataFrameRow) GetAsDatetime(i int) (r time.Time) {
 func (t *inmemoryDataFrameRow) GetMap() (r map[string]df.DataFrameSeriesValue) {
 	r = map[string]df.DataFrameSeriesValue{}
 	for i, v := range t.data {
-		r[t.schema.Get(i).Name] = NewDataFrameSeriesValue(t.schema.Get(i).Format, v)
+		r[t.schema.Get(i).Name] = v
 	}
 	return r
 }
 
 func (t *inmemoryDataFrameRow) IsAnyNil() (r bool) {
 	for _, v := range t.data {
-		if v == nil {
+		if v == nil || v.Get() == nil {
 			r = true
 			break
 		}
@@ -106,7 +98,7 @@ func (t *inmemoryDataFrameRow) Select(index ...int) df.DataFrameRow {
 		cols = append(cols, t.Schema().Get(c))
 	}
 
-	r := make([]any, 0, len(index))
+	r := make([]df.DataFrameSeriesValue, 0, len(index))
 	for _, c := range index {
 		r = append(r, t.data[c])
 	}
@@ -118,15 +110,15 @@ func (t *inmemoryDataFrameRow) IsNil(i int) (r bool) {
 }
 
 // NewDataFrameRow returns new Row based on schema and data
-func NewDataFrameRow(schema df.DataFrameSchema, data []any) df.DataFrameRow {
+func NewDataFrameRow(schema df.DataFrameSchema, data []df.DataFrameSeriesValue) df.DataFrameRow {
 	return NewDataFrameRowWithCopy(schema, data, false)
 }
 
 // NewDataFrameRow returns new Row based on schema and data
-func NewDataFrameRowWithCopy(schema df.DataFrameSchema, data []any, copyData bool) df.DataFrameRow {
+func NewDataFrameRowWithCopy(schema df.DataFrameSchema, data []df.DataFrameSeriesValue, copyData bool) df.DataFrameRow {
 	data2 := data
 	if copyData {
-		data2 = make([]any, len(data))
+		data2 = make([]df.DataFrameSeriesValue, len(data))
 		copy(data2, data)
 	}
 	return &inmemoryDataFrameRow{schema: schema, data: data2}

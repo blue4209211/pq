@@ -373,7 +373,11 @@ func NewDataframeFromRowAndName(name string, cols []df.SeriesSchema, data []df.D
 func NewDataframeWithName(name string, cols []df.SeriesSchema, data [][]any, copyData bool) df.DataFrame {
 	data2 := make([]df.DataFrameRow, len(data))
 	for i, k := range data {
-		data2[i] = NewDataFrameRowWithCopy(df.NewSchema(cols), k, copyData)
+		kv := make([]df.DataFrameSeriesValue, len(k))
+		for i, v := range k {
+			kv[i] = NewDataFrameSeriesValue(cols[i].Format, v)
+		}
+		data2[i] = NewDataFrameRowWithCopy(df.NewSchema(cols), kv, copyData)
 	}
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: data2}
 }
@@ -392,9 +396,9 @@ func NewDataframeWithNameFromSeries(name string, colNames []string, data []df.Da
 
 	dfData := make([]df.DataFrameRow, 0, data[0].Len())
 	for i := int64(0); i < data[0].Len(); i++ {
-		r := make([]any, len(colNames))
+		r := make([]df.DataFrameSeriesValue, len(colNames))
 		for j := 0; j < len(colNames); j++ {
-			r[j] = data[j].Get(i).Get()
+			r[j] = data[j].Get(i)
 		}
 		dfData = append(dfData, NewDataFrameRow(schema, r))
 	}

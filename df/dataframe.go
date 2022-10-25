@@ -139,7 +139,6 @@ type DataFrameRow interface {
 	GetRaw(i int) any
 	Get(i int) DataFrameSeriesValue
 	GetByName(s string) DataFrameSeriesValue
-	Data() []DataFrameSeriesValue
 	Len() int
 	GetAsString(i int) string
 	GetAsInt(i int) int64

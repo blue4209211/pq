@@ -199,9 +199,9 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 
 		for j, c := range schema.Series() {
 			if strings.Index(c.Name, "_") == 0 {
-				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Data()[j].Get())
+				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Get(j).Get())
 			} else {
-				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Data()[j].Get(), c.Name)
+				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Get(j).Get(), c.Name)
 			}
 		}
 		writer.Write([]byte(fmt.Sprintf(rf, xmlElementName, attrs, nestElements, xmlElementName)))

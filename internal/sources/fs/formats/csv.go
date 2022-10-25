@@ -74,9 +74,9 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 	for i := int64(0); i < t.data.Len(); i++ {
 		rowInterface := t.data.GetRow(i)
 		row := make([]string, rowInterface.Len())
-		for i, r := range rowInterface.Data() {
-			str := r.GetAsString()
-			row[i] = str
+		for j := 0; j < rowInterface.Len(); j++ {
+			str := rowInterface.GetAsString(j)
+			row[j] = str
 		}
 		csvWriter.Write(row)
 	}

@@ -234,7 +234,7 @@ func (t *jsonDataSourceWriter) Write(writer io.Writer) (err error) {
 		row := t.data.GetRow(index)
 		obj := make(map[string]any)
 		for i, c := range schema.Series() {
-			obj[c.Name] = row.Data()[i].Get()
+			obj[c.Name] = row.Get(i).Get()
 		}
 		jsonRecords[index] = obj
 	}

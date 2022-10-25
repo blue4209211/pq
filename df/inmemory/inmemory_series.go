@@ -67,9 +67,7 @@ func (t *inmemoryDataFrameSeries) Map(s df.DataFrameSeriesFormat, f func(df.Data
 func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.DataFrameSeriesValue) []df.DataFrameSeriesValue) df.DataFrameSeries {
 	data := make([]df.DataFrameSeriesValue, 0, len(t.data))
 	for _, d := range t.data {
-		for _, k := range f(NewDataFrameSeriesValue(t.schema.Format, d)) {
-			data = append(data, k)
-		}
+		data = append(data, f(d)...)
 	}
 	return NewValueSeries(data, s)
 }
@@ -77,7 +75,7 @@ func (t *inmemoryDataFrameSeries) FlatMap(s df.DataFrameSeriesFormat, f func(df.
 func (t *inmemoryDataFrameSeries) Reduce(f func(df.DataFrameSeriesValue, df.DataFrameSeriesValue) df.DataFrameSeriesValue, startValue df.DataFrameSeriesValue) df.DataFrameSeriesValue {
 	finalValue := startValue
 	for _, d := range t.data {
-		finalValue = f(finalValue, NewDataFrameSeriesValue(t.schema.Format, d))
+		finalValue = f(finalValue, d)
 	}
 	return finalValue
 }
@@ -88,7 +86,7 @@ func (t *inmemoryDataFrameSeries) Distinct() df.DataFrameSeries {
 	for _, d := range t.data {
 		found := false
 		for _, v := range data {
-			if v == d {
+			if v.Get() == d.Get() {
 				found = true
 				break
 			}

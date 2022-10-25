@@ -301,19 +301,19 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 
 		for i := int64(0); i < t.data.Len(); i++ {
 			r := t.data.GetRow(i)
-			if r.Data()[col] == nil {
+			if r.Get(col) == nil {
 				continue
 			}
 
 			switch arr := writerValue.(type) {
 			case []bool:
-				arr[i] = r.Data()[col].GetAsBool()
+				arr[i] = r.GetAsBool(col)
 			case []int64:
-				arr[i] = r.Data()[col].GetAsInt()
+				arr[i] = r.GetAsInt(col)
 			case []string:
-				arr[i] = r.Data()[col].GetAsString()
+				arr[i] = r.GetAsString(col)
 			case []float64:
-				arr[i] = r.Data()[col].GetAsDouble()
+				arr[i] = r.GetAsDouble(col)
 			}
 		}
 

@@ -4,13 +4,12 @@ import (
 	"testing"
 
 	"github.com/blue4209211/pq/df"
-
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewDataFrameRow(t *testing.T) {
 
-	data := []any{1, 2.0, "abc", false}
+	data := []df.DataFrameSeriesValue{NewDataFrameSeriesIntValue(1), NewDataFrameSeriesDoubleValue(2.0), NewDataFrameSeriesStringValue("abc"), NewDataFrameSeriesBoolValue(false)}
 	r := NewDataFrameRow(df.NewSchema([]df.SeriesSchema{
 		{Name: "c1", Format: df.IntegerFormat},
 		{Name: "c2", Format: df.DoubleFormat},
@@ -21,6 +20,6 @@ func TestNewDataFrameRow(t *testing.T) {
 	//assert.Equal(t, data, r.Data())
 	assert.Equal(t, len(data), r.Len())
 	for i, c := range data {
-		assert.Equal(t, c, r.Get(i).Get())
+		assert.Equal(t, c, r.Get(i))
 	}
 }
