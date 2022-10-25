@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/sources/fs/formats"
 )
 

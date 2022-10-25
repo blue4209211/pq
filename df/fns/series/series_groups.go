@@ -2,7 +2,7 @@ package series
 
 import (
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 func Sum(s df.DataFrameSeries) (r df.DataFrameSeriesValue) {

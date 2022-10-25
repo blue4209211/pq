@@ -2,7 +2,7 @@ package series
 
 import (
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 func Where(s df.DataFrameSeries, f df.DataFrameSeriesFormat, v map[any]any) (r df.DataFrameSeries) {

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 func WhereNil(s df.DataFrameSeries, v time.Time) (r df.DataFrameSeries) {

@@ -17,7 +17,7 @@ import (
 	"github.com/xo/dburl"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/log"
 )
 
