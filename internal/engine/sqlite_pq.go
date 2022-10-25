@@ -200,15 +200,17 @@ func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 		c.ResultNull()
 		return err
 	}
-	switch cType.Format.Type() {
-	case reflect.String:
+	switch cType.Format {
+	case df.StringFormat:
 		c.ResultText(i.GetAsString())
-	case reflect.Int64:
+	case df.IntegerFormat:
 		c.ResultInt64(i.GetAsInt())
-	case reflect.Float64:
+	case df.DoubleFormat:
 		c.ResultDouble(i.GetAsDouble())
-	case reflect.Bool:
+	case df.BoolFormat:
 		c.ResultBool(i.GetAsBool())
+	case df.DateTimeFormat:
+		c.ResultText(i.GetAsDatetime().String())
 	}
 	return nil
 }

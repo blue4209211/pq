@@ -48,15 +48,15 @@ func (t *inmemoryGroupedDataFrameSeries) Where(f func(df.DataFrameSeriesValue, d
 
 func NewGroupedSeries(data df.DataFrameSeries) df.DataFrameGroupedSeries {
 	gd := map[df.DataFrameSeriesValue]df.DataFrameSeries{}
-	gdv := map[df.DataFrameSeriesValue][]any{}
+	gdv := map[df.DataFrameSeriesValue][]df.DataFrameSeriesValue{}
 
 	data.ForEach(func(dfsv df.DataFrameSeriesValue) {
 		k := gdv[dfsv]
-		gdv[dfsv] = append(k, dfsv.Get())
+		gdv[dfsv] = append(k, dfsv)
 	})
 
 	for k, v := range gdv {
-		gd[k] = NewSeries(v, data.Schema().Format, false)
+		gd[k] = NewValueSeries(v, data.Schema().Format)
 	}
 
 	return &inmemoryGroupedDataFrameSeries{data: gd, typ: data.Schema().Format}

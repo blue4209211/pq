@@ -37,11 +37,11 @@ func (t *inmemoryDataFrame) Rename(name string, inplace bool) df.DataFrame {
 }
 
 func (t *inmemoryDataFrame) GetSeries(i int) df.DataFrameSeries {
-	series := make([]any, t.Len())
+	series := make([]df.DataFrameSeriesValue, t.Len())
 	for j, e := range t.data {
-		series[j] = e.GetRaw(i)
+		series[j] = e.Get(i)
 	}
-	return NewSeries(series, t.schema.Get(i).Format, false)
+	return NewValueSeriesWihNameAndCopy(series, t.schema.Get(i).Format, t.schema.Get(i).Name, false)
 }
 
 func (t *inmemoryDataFrame) GetSeriesByName(s string) df.DataFrameSeries {
@@ -61,8 +61,8 @@ func (t *inmemoryDataFrame) Len() int64 {
 }
 
 func (t *inmemoryDataFrame) ForEachRow(f func(df.DataFrameRow)) {
-	for r := int64(0); r < t.Len(); r++ {
-		f(t.GetRow(r))
+	for _, r := range t.data {
+		f(r)
 	}
 }
 

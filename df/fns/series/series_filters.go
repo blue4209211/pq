@@ -25,26 +25,42 @@ const (
 )
 
 func IsAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
-	r = s.Where(func(v df.DataFrameSeriesValue) bool {
-		for _, k := range data {
-			if k == v.Get() {
-				return true
+	if len(data) == 0 {
+		r = s
+	} else if len(data) == 1 {
+		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+			return v.Get() == data[0]
+		})
+	} else {
+		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+			for _, k := range data {
+				if k == v.Get() {
+					return true
+				}
 			}
-		}
-		return false
-	})
+			return false
+		})
+	}
 	return r
 }
 
 func IsNotAny(s df.DataFrameSeries, data ...any) (r df.DataFrameSeries) {
-	r = s.Where(func(v df.DataFrameSeriesValue) bool {
-		for _, k := range data {
-			if k == v.Get() {
-				return false
+	if len(data) == 0 {
+		r = s
+	} else if len(data) == 1 {
+		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+			return v.Get() != data[0]
+		})
+	} else {
+		r = s.Where(func(v df.DataFrameSeriesValue) bool {
+			for _, k := range data {
+				if k == v.Get() {
+					return false
+				}
 			}
-		}
-		return true
-	})
+			return true
+		})
+	}
 	return r
 }
 
