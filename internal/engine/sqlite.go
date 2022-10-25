@@ -26,7 +26,10 @@ type sqliteQueryEngine struct {
 func getSqliteType(c df.Format) string {
 	if c.Name() == "string" {
 		return "text"
+	} else if c.Name() == "datetime" {
+		return "text"
 	}
+
 	return c.Name()
 }
 
