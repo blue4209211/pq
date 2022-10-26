@@ -5,9 +5,8 @@ import (
 )
 
 type inmemoryGroupedDataFrame struct {
-	data   map[df.Row]df.DataFrame
-	schema df.DataFrameSchema
-	keys   []string
+	data map[df.Row]df.DataFrame
+	keys []string
 }
 
 func (t *inmemoryGroupedDataFrame) GetGroupKeys() []string {
@@ -34,13 +33,13 @@ func (t *inmemoryGroupedDataFrame) ForEach(f func(df.Row, df.DataFrame)) {
 	}
 }
 
-func (t *inmemoryGroupedDataFrame) Map(s df.DataFrameSchema, f func(df.Row, df.DataFrame) df.DataFrame) (d df.GroupedDataFrame) {
+func (t *inmemoryGroupedDataFrame) Map(f func(df.Row, df.DataFrame) df.DataFrame) (d df.GroupedDataFrame) {
 	d1 := map[df.Row]df.DataFrame{}
 	for k, v := range t.data {
 		dfr := f(k, v)
 		d1[k] = dfr
 	}
-	return &inmemoryGroupedDataFrame{data: d1, schema: s}
+	return &inmemoryGroupedDataFrame{data: d1}
 }
 
 func (t *inmemoryGroupedDataFrame) Where(f func(df.Row, df.DataFrame) bool) (d df.GroupedDataFrame) {
@@ -50,7 +49,7 @@ func (t *inmemoryGroupedDataFrame) Where(f func(df.Row, df.DataFrame) bool) (d d
 			d1[k] = v
 		}
 	}
-	return &inmemoryGroupedDataFrame{data: d1, schema: t.schema}
+	return &inmemoryGroupedDataFrame{data: d1}
 }
 
 func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDataFrame {
@@ -79,5 +78,5 @@ func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDat
 		groupedData2[k] = NewDataframeFromRow(data.Schema().Series(), v)
 	}
 
-	return &inmemoryGroupedDataFrame{data: groupedData2, schema: data.Schema(), keys: []string{key}}
+	return &inmemoryGroupedDataFrame{data: groupedData2, keys: []string{key}}
 }

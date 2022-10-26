@@ -89,7 +89,7 @@ type GroupedDataFrame interface {
 	Get(index Row) DataFrame
 	GetKeys() []Row
 	ForEach(f func(Row, DataFrame))
-	Map(s DataFrameSchema, f func(Row, DataFrame) DataFrame) GroupedDataFrame
+	Map(f func(Row, DataFrame) DataFrame) GroupedDataFrame
 	Where(f func(Row, DataFrame) bool) GroupedDataFrame
 }
 
@@ -100,6 +100,7 @@ type Series interface {
 	Get(index int64) Value
 	ForEach(f func(Value))
 	Sort(order SortOrder) Series
+	//TODO remove type args ?
 	Map(schema Format, f func(Value) Value) Series
 	FlatMap(schema Format, f func(Value) []Value) Series
 	Reduce(f func(Value, Value) Value, startValue Value) Value
@@ -129,7 +130,7 @@ type GroupedSeries interface {
 	Get(index Value) Series
 	GetKeys() []Value
 	ForEach(f func(Value, Series))
-	Map(schema Format, f func(Value, Series) Series) GroupedSeries
+	Map(f func(Value, Series) Series) GroupedSeries
 	Where(f func(Value, Series) bool) GroupedSeries
 }
 
