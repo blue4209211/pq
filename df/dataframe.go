@@ -86,12 +86,13 @@ type DataFrame interface {
 }
 
 type GroupedDataFrame interface {
-	GetGroupKeys() []string
+	GetGroupColumns() []string
 	Get(index Row) DataFrame
 	GetKeys() []Row
 	ForEach(f func(Row, DataFrame))
 	Map(f func(Row, DataFrame) DataFrame) GroupedDataFrame
 	Where(f func(Row, DataFrame) bool) GroupedDataFrame
+	Len() int64
 }
 
 // Series Type for Storing column data of Dataframe

@@ -381,6 +381,9 @@ func NewDataframeWithNameFromSeries(name string, colNames []string, data *[]df.S
 	if len(*data) == 0 || len(colNames) == 0 {
 		panic("data/col is empty")
 	}
+	if len(*data) != len(colNames) {
+		panic("data/col len is not equal")
+	}
 	cols := make([]df.SeriesSchema, len(colNames))
 	for i, e := range colNames {
 		cols[i] = df.SeriesSchema{Name: e, Format: (*data)[i].Schema().Format}

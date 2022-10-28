@@ -132,3 +132,14 @@ func NewRowFromAny(schema df.DataFrameSchema, data *[]any) df.Row {
 	}
 	return &inmemoryRow{schema: schema, data: data2}
 }
+
+// NewRow returns new Row based on schema and data
+func NewRowFromMap(data *map[string]df.Value) df.Row {
+	data2 := make([]df.Value, 0, len(*data))
+	cols := make([]df.SeriesSchema, 0, len(*data))
+	for i, v := range *data {
+		data2 = append(data2, v)
+		cols = append(cols, df.SeriesSchema{Name: i, Format: v.Schema()})
+	}
+	return &inmemoryRow{schema: df.NewSchema(cols), data: data2}
+}
