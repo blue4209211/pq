@@ -75,7 +75,7 @@ func TestNewStringSeries(t *testing.T) {
 
 	//group
 	sg := s.Group()
-	assert.Equal(t, len(sg.GetKeys()), 6)
+	assert.Equal(t, len(sg.GetKeys()), 5)
 
 	//append
 	ss = s.Append(NewStringSeries(&[]string{"1", "2"}))

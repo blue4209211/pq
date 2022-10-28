@@ -5,58 +5,63 @@ import (
 )
 
 type inmemoryGroupedSeries struct {
-	data map[df.Value]df.Series
+	data   map[any]df.Series
+	format df.Format
 }
 
 func (t *inmemoryGroupedSeries) Get(index df.Value) (d df.Series) {
-	return t.data[index]
+	return t.data[index.Get()]
 }
 
 func (t *inmemoryGroupedSeries) GetKeys() (d []df.Value) {
 	d = make([]df.Value, 0, len(t.data))
 	for k := range t.data {
-		d = append(d, k)
+		d = append(d, NewValue(t.format, k))
 	}
 	return d
 }
 
 func (t *inmemoryGroupedSeries) ForEach(f func(df.Value, df.Series)) {
 	for k, v := range t.data {
-		f(k, v)
+		f(NewValue(t.format, k), v)
 	}
+}
+
+func (t *inmemoryGroupedSeries) Len() int64 {
+	return int64(len(t.data))
 }
 
 func (t *inmemoryGroupedSeries) Map(f func(df.Value, df.Series) df.Series) (d df.GroupedSeries) {
-	d1 := map[df.Value]df.Series{}
+	d1 := map[any]df.Series{}
 	for k, v := range t.data {
-		nv := f(k, v)
+		nv := f(NewValue(t.format, k), v)
 		d1[k] = nv
 	}
-	return &inmemoryGroupedSeries{data: d1}
+	return &inmemoryGroupedSeries{data: d1, format: t.format}
 }
 
 func (t *inmemoryGroupedSeries) Where(f func(df.Value, df.Series) bool) (d df.GroupedSeries) {
-	d1 := map[df.Value]df.Series{}
+	d1 := map[any]df.Series{}
 	for k, v := range t.data {
-		if f(k, v) {
+		if f(NewValue(t.format, k), v) {
 			d1[k] = v
 		}
 	}
-	return &inmemoryGroupedSeries{data: d1}
+	return &inmemoryGroupedSeries{data: d1, format: t.format}
 }
 
 func NewGroupedSeries(data df.Series) df.GroupedSeries {
-	gd := map[df.Value]df.Series{}
-	gdv := map[df.Value][]df.Value{}
+	gd := map[any]df.Series{}
+	gdv := map[any][]df.Value{}
 
 	(data).ForEach(func(dfsv df.Value) {
-		k := gdv[dfsv]
-		gdv[dfsv] = append(k, dfsv)
+		k := gdv[dfsv.Get()]
+		gdv[dfsv.Get()] = append(k, dfsv)
 	})
 
 	for k, v := range gdv {
 		gd[k] = NewSeries(&v, (data).Schema().Format)
 	}
 
-	return &inmemoryGroupedSeries{data: gd}
+	return &inmemoryGroupedSeries{data: gd, format: data.Schema().Format}
 }

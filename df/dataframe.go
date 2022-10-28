@@ -133,6 +133,7 @@ type GroupedSeries interface {
 	ForEach(f func(Value, Series))
 	Map(f func(Value, Series) Series) GroupedSeries
 	Where(f func(Value, Series) bool) GroupedSeries
+	Len() int64
 }
 
 // Row Type representing row data of Dataframe
