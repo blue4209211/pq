@@ -5,7 +5,7 @@ import (
 )
 
 func IsNil(s df.DataFrame) (r df.DataFrame) {
-	return s.Where(func(dfr df.Row) bool {
+	return s.WhereRow(func(dfr df.Row) bool {
 		return dfr.IsAnyNil()
 	})
 }

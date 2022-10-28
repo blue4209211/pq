@@ -41,7 +41,7 @@ func TestInMemoryDfRowOps(t *testing.T) {
 		NewStringSeries(&[]string{"a1", "a2", "a3", "a4"}),
 	})
 
-	filteredData := data.Where(func(r df.Row) bool {
+	filteredData := data.WhereRow(func(r df.Row) bool {
 		return r.GetByName("c3").GetAsString() == "a1"
 	})
 

@@ -63,8 +63,8 @@ type DataFrame interface {
 	SelectSeriesByName(col ...string) (DataFrame, error)
 	MapRow(schema DataFrameSchema, f func(Row) Row) DataFrame
 	FlatMapRow(schema DataFrameSchema, f func(Row) []Row) DataFrame
-	Where(f func(Row) bool) DataFrame
-	Select(b Series) DataFrame
+	WhereRow(f func(Row) bool) DataFrame
+	SelectRow(b Series) DataFrame
 
 	GetSeries(index int) Series
 	GetSeriesByName(s string) Series
@@ -81,7 +81,8 @@ type DataFrame interface {
 	ForEachRow(f func(Row))
 
 	Group(key string, others ...string) GroupedDataFrame
-	Join(schema DataFrameSchema, series DataFrame, jointype JoinType, f func(Row, Row) []Row) DataFrame
+	Append(series DataFrame) DataFrame
+	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
 }
 
 type GroupedDataFrame interface {

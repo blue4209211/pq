@@ -85,5 +85,5 @@ func NewBoolValue(data bool) df.Value {
 }
 
 func NewDatetimeValue(data time.Time) df.Value {
-	return &inmemoryDataFrameSeriesVal{schema: df.BoolFormat, data: data}
+	return &inmemoryDataFrameSeriesVal{schema: df.DateTimeFormat, data: data}
 }

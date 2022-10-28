@@ -292,7 +292,7 @@ func (t *inmemoryDataFrame) FlatMapRow(cols df.DataFrameSchema, f func(df.Row) [
 	return NewDataframeFromRow(cols, &data)
 }
 
-func (t *inmemoryDataFrame) Where(f func(df.Row) bool) df.DataFrame {
+func (t *inmemoryDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 	data := make([]df.Row, 0, t.Len())
 	for _, r := range t.data {
 		if f(r) {
@@ -302,7 +302,7 @@ func (t *inmemoryDataFrame) Where(f func(df.Row) bool) df.DataFrame {
 	return NewDataframeFromRow(t.schema, &data)
 }
 
-func (t *inmemoryDataFrame) Select(b df.Series) df.DataFrame {
+func (t *inmemoryDataFrame) SelectRow(b df.Series) df.DataFrame {
 	if b.Schema().Format != df.BoolFormat {
 		panic("Only bool series supported")
 	}
@@ -321,11 +321,15 @@ func (t *inmemoryDataFrame) Limit(offset int, size int) df.DataFrame {
 	return NewDataframeFromRow(t.schema, &v)
 }
 
+func (t *inmemoryDataFrame) Append(series df.DataFrame) df.DataFrame {
+	return t
+}
+
 func (t *inmemoryDataFrame) Group(key string, others ...string) df.GroupedDataFrame {
 	return NewGroupedDf(t, key, others...)
 }
 
-func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, jointype df.JoinType, f func(df.Row, df.Row) []df.Row) (r df.DataFrame) {
+func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, jointype df.JoinType, cols map[string]string, f func(df.Row, df.Row) []df.Row) (r df.DataFrame) {
 	val := []df.Row{}
 	if jointype == df.JoinLeft || jointype == df.JoinReft || jointype == df.JoinEqui {
 		min := int64(len(t.data))
