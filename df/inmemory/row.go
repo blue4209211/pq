@@ -106,7 +106,7 @@ func (t *inmemoryRow) Select(index ...int) df.Row {
 }
 
 func (t *inmemoryRow) IsNil(i int) (r bool) {
-	return t.data[i] == nil
+	return t.data[i] == nil || t.data[i].IsNil()
 }
 
 // NewRow returns new Row based on schema and data
