@@ -26,7 +26,7 @@ func (t *inmemoryRow) Len() int {
 func (t *inmemoryRow) Copy() (r df.Row) {
 	r1 := make([]df.Value, t.Len())
 	copy(r1, t.data)
-	r = NewRow(t.schema, r1)
+	r = NewRow(t.schema, &r1)
 	return r
 }
 
@@ -38,7 +38,7 @@ func (t *inmemoryRow) Append(name string, v df.Value) (r df.Row) {
 	copy(s1, t.schema.Series())
 	s1[t.Len()] = df.SeriesSchema{Name: name, Format: v.Schema()}
 	t.schema.Series()
-	r = NewRow(df.NewSchema(s1), r1)
+	r = NewRow(df.NewSchema(s1), &r1)
 	return r
 }
 
@@ -102,7 +102,7 @@ func (t *inmemoryRow) Select(index ...int) df.Row {
 	for _, c := range index {
 		r = append(r, t.data[c])
 	}
-	return NewRow(df.NewSchema(cols), r)
+	return NewRow(df.NewSchema(cols), &r)
 }
 
 func (t *inmemoryRow) IsNil(i int) (r bool) {
@@ -110,16 +110,25 @@ func (t *inmemoryRow) IsNil(i int) (r bool) {
 }
 
 // NewRow returns new Row based on schema and data
-func NewRow(schema df.DataFrameSchema, data []df.Value) df.Row {
+func NewRow(schema df.DataFrameSchema, data *[]df.Value) df.Row {
 	return NewRowWithCopy(schema, data, false)
 }
 
 // NewRow returns new Row based on schema and data
-func NewRowWithCopy(schema df.DataFrameSchema, data []df.Value, copyData bool) df.Row {
-	data2 := data
+func NewRowWithCopy(schema df.DataFrameSchema, data *[]df.Value, copyData bool) df.Row {
+	data2 := *data
 	if copyData {
-		data2 = make([]df.Value, len(data))
-		copy(data2, data)
+		data2 = make([]df.Value, len(*data))
+		copy(data2, *data)
+	}
+	return &inmemoryRow{schema: schema, data: data2}
+}
+
+// NewRow returns new Row based on schema and data
+func NewRowFromAny(schema df.DataFrameSchema, data *[]any) df.Row {
+	data2 := make([]df.Value, len(*data))
+	for i, v := range *data {
+		data2[i] = NewValue(schema.Get(i).Format, v)
 	}
 	return &inmemoryRow{schema: schema, data: data2}
 }

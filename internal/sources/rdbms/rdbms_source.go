@@ -72,9 +72,9 @@ func (t *DataSource) Read(context context.Context, dbURL string, args map[string
 	}
 
 	if u.Fragment != "" {
-		return inmemory.NewDataframeWithName(u.Fragment, schema, records, false), nil
+		return inmemory.NewDataframeFromRowAndName(u.Fragment, schema, &records), nil
 	}
-	return inmemory.NewDataframe(schema, records), nil
+	return inmemory.NewDataframeFromRow(schema, &records), nil
 
 }
 
@@ -82,7 +82,7 @@ func (t *DataSource) Write(context context.Context, data df.DataFrame, path stri
 	return errors.New("Unsupported")
 }
 
-func queryInternal(db *sql.DB, query string) (schema []df.SeriesSchema, data [][]any, err error) {
+func queryInternal(db *sql.DB, query string) (schema df.DataFrameSchema, data []df.Row, err error) {
 	preparedQuery, err := db.Prepare(query)
 	if err != nil {
 		return schema, data, err
@@ -119,7 +119,8 @@ func queryInternal(db *sql.DB, query string) (schema []df.SeriesSchema, data [][
 		cols[i] = df.SeriesSchema{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]any, 0, 100)
+	schema = df.NewSchema(cols)
+	data = make([]df.Row, 0, 100)
 
 	for rows.Next() {
 		dataRowPtrs := make([]any, len(sqlCols))
@@ -132,20 +133,21 @@ func queryInternal(db *sql.DB, query string) (schema []df.SeriesSchema, data [][
 			return schema, data, err
 		}
 
-		dataRow := make([]any, len(sqlCols))
+		dataRow := make([]df.Value, len(sqlCols))
 		for i, cellPtr := range dataRowPtrs {
-			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*any)))
+			v, err := cols[i].Format.Convert(*(cellPtr.(*any)))
 			if err != nil {
 				return schema, data, err
 			}
+			dataRow[i] = inmemory.NewValue(cols[i].Format, v)
 		}
 
-		dataRows = append(dataRows, dataRow)
+		data = append(data, inmemory.NewRow(schema, &dataRow))
 	}
 
 	err = rows.Err()
 	if err != nil {
 		return schema, data, err
 	}
-	return cols, dataRows, nil
+	return schema, data, nil
 }

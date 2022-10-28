@@ -145,7 +145,8 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 		cols[i] = df.SeriesSchema{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]any, 0, 100)
+	schema := df.NewSchema(cols)
+	dataRows := make([]df.Row, 0, 100)
 
 	for rows.Next() {
 		dataRowPtrs := make([]any, len(sqlCols))
@@ -158,15 +159,16 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 			return
 		}
 
-		dataRow := make([]any, len(sqlCols))
+		dataRow := make([]df.Value, len(sqlCols))
 		for i, cellPtr := range dataRowPtrs {
-			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*any)))
+			v, err := cols[i].Format.Convert(*(cellPtr.(*any)))
 			if err != nil {
 				return result, err
 			}
+			dataRow[i] = inmemory.NewValue(cols[i].Format, v)
 		}
 
-		dataRows = append(dataRows, dataRow)
+		dataRows = append(dataRows, inmemory.NewRow(schema, &dataRow))
 	}
 
 	err = rows.Err()
@@ -174,7 +176,7 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 		return
 	}
 
-	inMemoryDf := inmemory.NewDataframe(cols, dataRows)
+	inMemoryDf := inmemory.NewDataframeFromRow(schema, &dataRows)
 	result = inMemoryDf
 	return
 }

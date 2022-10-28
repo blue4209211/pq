@@ -49,13 +49,13 @@ func NewGroupedSeries(data df.Series) df.GroupedSeries {
 	gd := map[df.Value]df.Series{}
 	gdv := map[df.Value][]df.Value{}
 
-	data.ForEach(func(dfsv df.Value) {
+	(data).ForEach(func(dfsv df.Value) {
 		k := gdv[dfsv]
 		gdv[dfsv] = append(k, dfsv)
 	})
 
 	for k, v := range gdv {
-		gd[k] = NewValueSeries(v, data.Schema().Format)
+		gd[k] = NewValueSeries(&v, (data).Schema().Format)
 	}
 
 	return &inmemoryGroupedSeries{data: gd}

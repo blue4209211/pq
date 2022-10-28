@@ -39,7 +39,7 @@ func (t *inmemorySeries) Where(f func(df.Value) bool) df.Series {
 			data = append(data, d)
 		}
 	}
-	return NewValueSeries(data, t.schema.Format)
+	return NewValueSeries(&data, t.schema.Format)
 }
 
 func (t *inmemorySeries) Select(b df.Series) df.Series {
@@ -53,7 +53,7 @@ func (t *inmemorySeries) Select(b df.Series) df.Series {
 			data = append(data, d)
 		}
 	}
-	return NewValueSeries(data, t.schema.Format)
+	return NewValueSeries(&data, t.schema.Format)
 }
 
 func (t *inmemorySeries) Map(s df.Format, f func(df.Value) df.Value) df.Series {
@@ -61,7 +61,7 @@ func (t *inmemorySeries) Map(s df.Format, f func(df.Value) df.Value) df.Series {
 	for _, d := range t.data {
 		data = append(data, f(d))
 	}
-	return NewValueSeries(data, s)
+	return NewValueSeries(&data, s)
 }
 
 func (t *inmemorySeries) FlatMap(s df.Format, f func(df.Value) []df.Value) df.Series {
@@ -69,7 +69,7 @@ func (t *inmemorySeries) FlatMap(s df.Format, f func(df.Value) []df.Value) df.Se
 	for _, d := range t.data {
 		data = append(data, f(d)...)
 	}
-	return NewValueSeries(data, s)
+	return NewValueSeries(&data, s)
 }
 
 func (t *inmemorySeries) Reduce(f func(df.Value, df.Value) df.Value, startValue df.Value) df.Value {
@@ -95,18 +95,19 @@ func (t *inmemorySeries) Distinct() df.Series {
 			data = append(data, d)
 		}
 	}
-	return NewValueSeries(data, t.schema.Format)
+	return NewValueSeries(&data, t.schema.Format)
 }
 
 func (t *inmemorySeries) Copy() df.Series {
 	v := make([]df.Value, t.Len())
 	copy(v, t.data)
 
-	return NewValueSeries(v, t.schema.Format)
+	return NewValueSeries(&v, t.schema.Format)
 }
 
 func (t *inmemorySeries) Limit(offset int, size int) df.Series {
-	return NewValueSeries(t.data[offset:offset+size], t.schema.Format)
+	data := t.data[offset : offset+size]
+	return NewValueSeries(&data, t.schema.Format)
 }
 
 func (t *inmemorySeries) Sort(order df.SortOrder) df.Series {
@@ -165,7 +166,7 @@ func (t *inmemorySeries) Sort(order df.SortOrder) df.Series {
 		}
 	}
 
-	return NewValueSeries(d, t.schema.Format)
+	return NewValueSeries(&d, t.schema.Format)
 }
 
 func (t *inmemorySeries) Join(schema df.Format, series df.Series, jointype df.JoinType, f func(df.Value, df.Value) []df.Value) (s df.Series) {
@@ -194,7 +195,7 @@ func (t *inmemorySeries) Join(schema df.Format, series df.Series, jointype df.Jo
 			}
 		}
 	}
-	return NewValueSeries(val, schema)
+	return NewValueSeries(&val, schema)
 }
 
 func (t *inmemorySeries) Append(s df.Series) df.Series {
@@ -206,7 +207,7 @@ func (t *inmemorySeries) Append(s df.Series) df.Series {
 	for i := int64(0); i < s.Len(); i++ {
 		dv = append(dv, s.Get(i))
 	}
-	return NewValueSeries(dv, t.schema.Format)
+	return NewValueSeries(&dv, t.schema.Format)
 }
 
 func (t *inmemorySeries) Group() df.GroupedSeries {
@@ -214,74 +215,74 @@ func (t *inmemorySeries) Group() df.GroupedSeries {
 }
 
 //
-func NewNamedSeries(data []any, colFormat df.Format, colName string) df.Series {
-	data2 := make([]df.Value, len(data))
-	for i, v := range data {
+func NewNamedSeries(data *[]any, colFormat df.Format, colName string) df.Series {
+	data2 := make([]df.Value, len(*data))
+	for i, v := range *data {
 		data2[i] = NewValue(colFormat, v)
 	}
-	return NewValueSeriesWihNameAndCopy(data2, colFormat, colName, false)
+	return NewValueSeriesWihNameAndCopy(&data2, colFormat, colName, false)
 }
 
 // NewSeries returns a column of given type
-func NewSeries(data []any, colSchema df.Format) df.Series {
+func NewSeries(data *[]any, colSchema df.Format) df.Series {
 	return NewNamedSeries(data, colSchema, "")
 }
 
 // NewSeries returns a column of given type
-func NewValueSeries(data []df.Value, colSchema df.Format) df.Series {
+func NewValueSeries(data *[]df.Value, colSchema df.Format) df.Series {
 	return NewValueSeriesWihNameAndCopy(data, colSchema, "", false)
 }
 
-func NewValueSeriesWihNameAndCopy(data []df.Value, colFormat df.Format, colName string, dataCopy bool) df.Series {
-	data2 := data
+func NewValueSeriesWihNameAndCopy(data *[]df.Value, colFormat df.Format, colName string, dataCopy bool) df.Series {
+	data2 := *data
 	if dataCopy {
-		data2 = make([]df.Value, len(data))
-		copy(data2, data)
+		data2 = make([]df.Value, len(*data))
+		copy(data2, *data)
 	}
 	return &inmemorySeries{schema: df.SeriesSchema{Name: colName, Format: colFormat}, data: data2}
 }
 
 // NewStringSeries returns a column of type string
-func NewStringSeries(data []string) df.Series {
-	d := make([]df.Value, len(data))
-	for i, e := range data {
+func NewStringSeries(data *[]string) df.Series {
+	d := make([]df.Value, len(*data))
+	for i, e := range *data {
 		d[i] = NewStringValue(e)
 	}
-	return NewValueSeries(d, df.StringFormat)
+	return NewValueSeries(&d, df.StringFormat)
 }
 
 // NewIntSeries returns a column of type int
-func NewIntSeries(data []int64) df.Series {
-	d := make([]df.Value, len(data))
-	for i, e := range data {
+func NewIntSeries(data *[]int64) df.Series {
+	d := make([]df.Value, len(*data))
+	for i, e := range *data {
 		d[i] = NewIntValue(e)
 	}
-	return NewValueSeries(d, df.IntegerFormat)
+	return NewValueSeries(&d, df.IntegerFormat)
 }
 
 // NewBoolSeries returns a column of type bool
-func NewBoolSeries(data []bool) df.Series {
-	d := make([]df.Value, len(data))
-	for i, e := range data {
+func NewBoolSeries(data *[]bool) df.Series {
+	d := make([]df.Value, len(*data))
+	for i, e := range *data {
 		d[i] = NewBoolValue(e)
 	}
-	return NewValueSeries(d, df.BoolFormat)
+	return NewValueSeries(&d, df.BoolFormat)
 }
 
 // NewDoubleSeries returns a column of type double
-func NewDoubleSeries(data []float64) df.Series {
-	d := make([]df.Value, len(data))
-	for i, e := range data {
+func NewDoubleSeries(data *[]float64) df.Series {
+	d := make([]df.Value, len(*data))
+	for i, e := range *data {
 		d[i] = NewDoubleValue(e)
 	}
-	return NewValueSeries(d, df.DoubleFormat)
+	return NewValueSeries(&d, df.DoubleFormat)
 }
 
-// NewDoubleSeries returns a column of type double
-func NewDatetimeSeries(data []time.Time) df.Series {
-	d := make([]df.Value, len(data))
-	for i, e := range data {
+// NewDatetimeSeries returns a column of type double
+func NewDatetimeSeries(data *[]time.Time) df.Series {
+	d := make([]df.Value, len(*data))
+	for i, e := range *data {
 		d[i] = NewDatetimeValue(e)
 	}
-	return NewValueSeries(d, df.DateTimeFormat)
+	return NewValueSeries(&d, df.DateTimeFormat)
 }

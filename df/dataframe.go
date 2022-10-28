@@ -61,8 +61,8 @@ type DataFrame interface {
 
 	SelectSeries(index ...int) (DataFrame, error)
 	SelectSeriesByName(col ...string) (DataFrame, error)
-	MapRow(schema []SeriesSchema, f func(Row) Row) DataFrame
-	FlatMapRow(schema []SeriesSchema, f func(Row) []Row) DataFrame
+	MapRow(schema DataFrameSchema, f func(Row) Row) DataFrame
+	FlatMapRow(schema DataFrameSchema, f func(Row) []Row) DataFrame
 	Where(f func(Row) bool) DataFrame
 	Select(b Series) DataFrame
 

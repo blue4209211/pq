@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 // ConfigCsvHeader Is First valid line header
@@ -87,10 +88,14 @@ type csvDataSourceReader struct {
 	args     map[string]string
 	records  [][]string
 	isHeader bool
+	schema   df.DataFrameSchema
 }
 
-func (t *csvDataSourceReader) Schema() (columns []df.SeriesSchema) {
-	columns = make([]df.SeriesSchema, len(t.records[0]))
+func (t *csvDataSourceReader) Schema() df.DataFrameSchema {
+	if t.schema != nil {
+		return t.schema
+	}
+	columns := make([]df.SeriesSchema, len(t.records[0]))
 	f, _ := df.GetFormat("string")
 	for i, col := range t.records[0] {
 		if t.isHeader {
@@ -99,26 +104,27 @@ func (t *csvDataSourceReader) Schema() (columns []df.SeriesSchema) {
 			columns[i] = df.SeriesSchema{Name: "c" + strconv.Itoa(i), Format: f}
 		}
 	}
-	return
+	t.schema = df.NewSchema(columns)
+	return t.schema
 }
 
-func (t *csvDataSourceReader) Data() (data [][]any) {
+func (t *csvDataSourceReader) Data() *[]df.Row {
 	index := 0
 	if t.isHeader {
 		index = 1
 	}
 
-	data = make([][]any, len(t.records)-index)
+	data := make([]df.Row, len(t.records)-index)
+	schema := t.Schema()
 
 	for i, record := range t.records[index:] {
-		row := make([]any, len(record))
+		row := make([]df.Value, len(record))
 		for j, cell := range record {
-			row[j] = cell
+			row[j] = inmemory.NewStringValue(cell)
 		}
-
-		data[i] = row
+		data[i] = inmemory.NewRow(schema, &row)
 	}
-	return
+	return &data
 }
 
 func (t *csvDataSourceReader) init(reader io.Reader) (err error) {

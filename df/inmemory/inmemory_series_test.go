@@ -13,7 +13,7 @@ func TestNewStringSeries(t *testing.T) {
 		"abc", "def", "geh", "ijk", "lmn", "abc",
 	}
 
-	s := NewStringSeries(data)
+	s := NewStringSeries(&data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
 	sf := s.Where(func(i df.Value) bool {
@@ -49,7 +49,7 @@ func TestNewIntSeries(t *testing.T) {
 		1, 2, 3, 4, 5, 1,
 	}
 
-	s := NewIntSeries(data)
+	s := NewIntSeries(&data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
 	sf := s.Where(func(i df.Value) bool {
@@ -84,7 +84,7 @@ func TestNewBoolSeries(t *testing.T) {
 		true, false, true, false, true, false,
 	}
 
-	s := NewBoolSeries(data)
+	s := NewBoolSeries(&data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
 	sf := s.Where(func(i df.Value) bool {
@@ -120,7 +120,7 @@ func TestNewDoubleSeries(t *testing.T) {
 		1, 2, 3, 4, 5, 1,
 	}
 
-	s := NewDoubleSeries(data)
+	s := NewDoubleSeries(&data)
 
 	assert.Equal(t, int64(len(data)), s.Len())
 	sf := s.Where(func(i df.Value) bool {

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 var textConfig = map[string]string{}
@@ -33,26 +34,26 @@ func (t *TextDataSource) Writer(data df.DataFrame, args map[string]string) (w Fo
 
 type textDataSourceReader struct {
 	args     map[string]string
-	records  [][]any
+	records  []df.Row
 	isHeader bool
 }
 
-var textSchema []df.SeriesSchema = []df.SeriesSchema{
+var textSchema df.DataFrameSchema = df.NewSchema([]df.SeriesSchema{
 	{Name: "text", Format: df.StringFormat},
 	{Name: "rowNumber_", Format: df.IntegerFormat},
-}
+})
 
-func (t *textDataSourceReader) Schema() (columns []df.SeriesSchema) {
+func (t *textDataSourceReader) Schema() (columns df.DataFrameSchema) {
 	return textSchema
 }
 
-func (t *textDataSourceReader) Data() (data [][]any) {
-	return t.records
+func (t *textDataSourceReader) Data() *[]df.Row {
+	return &t.records
 }
 
 func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 	bufferedReader := bufio.NewReader(reader)
-	t.records = make([][]any, 0, 1000)
+	t.records = make([]df.Row, 0, 1000)
 
 	// in somecases line size gets bigger than default scanner settings
 	// so using reader to handle those scenarios
@@ -66,31 +67,31 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 		}
 		if err == io.EOF {
 			if len(textData) > 0 {
-				rowData := []any{
-					string(textData) + string(textArr), cnt,
+				rowData := []df.Value{
+					inmemory.NewStringValue(string(textData) + string(textArr)), inmemory.NewIntValue(cnt),
 				}
-				t.records = append(t.records, rowData)
+				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 				textData = textData[:0]
 			} else if len(textArr) > 0 {
-				rowData := []any{
-					string(textArr), cnt,
+				rowData := []df.Value{
+					inmemory.NewStringValue(string(textArr)), inmemory.NewIntValue(cnt),
 				}
-				t.records = append(t.records, rowData)
+				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 			}
 			break
 		}
 
 		if len(textData) > 0 {
-			rowData := []any{
-				string(textData) + string(textArr), cnt,
+			rowData := []df.Value{
+				inmemory.NewStringValue(string(textData) + string(textArr)), inmemory.NewIntValue(cnt),
 			}
-			t.records = append(t.records, rowData)
+			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 			textData = textData[:0]
 		} else {
-			rowData := []any{
-				string(textArr), cnt,
+			rowData := []df.Value{
+				inmemory.NewStringValue(string(textArr)), inmemory.NewIntValue(cnt),
 			}
-			t.records = append(t.records, rowData)
+			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 		}
 		cnt = cnt + 1
 	}

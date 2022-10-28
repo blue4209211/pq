@@ -15,7 +15,7 @@ func TestNewDataFrameRow(t *testing.T) {
 		{Name: "c2", Format: df.DoubleFormat},
 		{Name: "c3", Format: df.StringFormat},
 		{Name: "c4", Format: df.BoolFormat},
-	}), data)
+	}), &data)
 
 	//assert.Equal(t, data, r.Data())
 	assert.Equal(t, len(data), r.Len())

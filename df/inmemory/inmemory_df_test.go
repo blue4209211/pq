@@ -8,10 +8,10 @@ import (
 )
 
 func TestInMemoryDfColOps(t *testing.T) {
-	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.Series{
-		NewIntSeries([]int64{1, 2, 3, 4}),
-		NewDoubleSeries([]float64{1, 2, 3, 4}),
-		NewStringSeries([]string{"a1", "a2", "a3", "a4"}),
+	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, &[]df.Series{
+		NewIntSeries(&[]int64{1, 2, 3, 4}),
+		NewDoubleSeries(&[]float64{1, 2, 3, 4}),
+		NewStringSeries(&[]string{"a1", "a2", "a3", "a4"}),
 	})
 
 	assert.Equal(t, "df1", data.Name())
@@ -19,7 +19,7 @@ func TestInMemoryDfColOps(t *testing.T) {
 	assert.Equal(t, df.DoubleFormat, data.GetSeries(1).Schema().Format)
 	assert.Equal(t, 3.0, data.GetSeries(1).Get(2).Get())
 
-	data2, err := data.AddSeries("c4", NewBoolSeries([]bool{true, true, false, false}))
+	data2, err := data.AddSeries("c4", NewBoolSeries(&[]bool{true, true, false, false}))
 	assert.Nil(t, err)
 	assert.Equal(t, 4, data2.Schema().Len())
 	assert.Equal(t, 3, data.Schema().Len())
@@ -35,10 +35,10 @@ func TestInMemoryDfColOps(t *testing.T) {
 }
 
 func TestInMemoryDfRowOps(t *testing.T) {
-	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, []df.Series{
-		NewIntSeries([]int64{1, 2, 3, 4}),
-		NewDoubleSeries([]float64{1, 2, 3, 4}),
-		NewStringSeries([]string{"a1", "a2", "a3", "a4"}),
+	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, &[]df.Series{
+		NewIntSeries(&[]int64{1, 2, 3, 4}),
+		NewDoubleSeries(&[]float64{1, 2, 3, 4}),
+		NewStringSeries(&[]string{"a1", "a2", "a3", "a4"}),
 	})
 
 	filteredData := data.Where(func(r df.Row) bool {

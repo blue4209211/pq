@@ -172,7 +172,7 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 	if err != nil {
 		return data, err
 	}
-	datsourceDf := inmemory.NewDataframeWithName(name, dataframeReader.Schema(), dataframeReader.Data(), false)
+	datsourceDf := inmemory.NewDataframeFromRowAndName(name, dataframeReader.Schema(), dataframeReader.Data())
 	return datsourceDf, nil
 }
 

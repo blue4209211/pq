@@ -30,7 +30,7 @@ func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, e
 				mergeIndx++
 			}
 		}
-		output = NewDataframeFromRowAndName(name, schema.Series(), records)
+		output = NewDataframeFromRowAndName(name, schema, &records)
 	}
 
 	return

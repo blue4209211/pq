@@ -75,7 +75,7 @@ func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDat
 
 	groupedData2 := map[df.Row]df.DataFrame{}
 	for k, v := range groupedData {
-		groupedData2[k] = NewDataframeFromRow(data.Schema().Series(), v)
+		groupedData2[k] = NewDataframeFromRow(data.Schema(), &v)
 	}
 
 	return &inmemoryGroupedDataFrame{data: groupedData2, keys: []string{key}}

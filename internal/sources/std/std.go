@@ -40,7 +40,8 @@ func (t *DataSource) Read(context context.Context, url string, args map[string]s
 		return data, err
 	}
 
-	return inmemory.NewDataframeWithName("stdin", reader.Schema(), reader.Data(), false), err
+	data2 := reader.Data()
+	return inmemory.NewDataframeFromRowAndName("stdin", reader.Schema(), data2), err
 }
 
 func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, args map[string]string) (err error) {
