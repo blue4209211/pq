@@ -1,6 +1,7 @@
 package inmemory
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/blue4209211/pq/df"
@@ -65,7 +66,22 @@ func (t *inmemoryDataFrameSeriesVal) IsNil() (r bool) {
 
 // NewDataFrameRow returns new Row based on schema and data
 func NewValue(schema df.Format, data any) df.Value {
-	return &inmemoryDataFrameSeriesVal{schema: schema, data: data}
+	if data == nil {
+		return &inmemoryDataFrameSeriesVal{schema: schema, data: data}
+	}
+	switch schema {
+	case df.BoolFormat:
+		return NewBoolValue(data.(bool))
+	case df.DateTimeFormat:
+		return NewDatetimeValue(data.(time.Time))
+	case df.DoubleFormat:
+		return NewDoubleValue(data.(float64))
+	case df.IntegerFormat:
+		return NewIntValue(data.(int64))
+	case df.StringFormat:
+		return NewStringValue(data.(string))
+	}
+	panic(fmt.Errorf("invalid format - %v", schema))
 }
 
 func NewStringValue(data string) df.Value {

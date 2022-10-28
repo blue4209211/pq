@@ -208,6 +208,10 @@ func i2str(v any) (str string, err error) {
 		}
 	case reflect.String:
 		str = v.(string)
+	case reflect.Struct:
+		if reflect.TypeOf(v).String() == "time.Time" {
+			str = v.(time.Time).String()
+		}
 	default:
 		data, err := json.Marshal(v)
 		if err == nil {
@@ -258,6 +262,10 @@ func i2int(v any) (i int64, err error) {
 			return int64(i), err
 		}
 		return int64(i), err
+	case reflect.Struct:
+		if reflect.TypeOf(v).String() == "time.Time" {
+			i = int64(v.(time.Time).UnixMilli())
+		}
 
 	default:
 		err = errors.New("unsupported type - " + vt.String())
@@ -291,6 +299,10 @@ func i2double(v any) (f float64, err error) {
 		}
 	case reflect.String:
 		f, err = strconv.ParseFloat(v.(string), 64)
+	case reflect.Struct:
+		if reflect.TypeOf(v).String() == "time.Time" {
+			f = float64(v.(time.Time).UnixMilli())
+		}
 	default:
 		err = errors.New("unsupported type - " + vt.String())
 	}
