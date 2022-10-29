@@ -19,8 +19,8 @@ type FormatSource interface {
 
 // FormatReader Reads dataframe
 type FormatReader interface {
-	Schema() []df.Column
-	Data() [][]any
+	Schema() df.DataFrameSchema
+	Data() *[]df.Row
 }
 
 // FormatWriter Writes dataframe to write

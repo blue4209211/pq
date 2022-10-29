@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"sync"
@@ -11,13 +12,6 @@ import (
 	"github.com/blue4209211/pq/internal/sources/std"
 )
 
-// DataFrameSource Provides interface for all the data sources
-type DataFrameSource interface {
-	Read(path string, args map[string]string) (df.DataFrame, error)
-	Write(data df.DataFrame, path string, args map[string]string) error
-	IsSupported(protocol string) bool
-}
-
 // WriteDataFrame Write Dataframe to Given Source
 func WriteDataFrame(data df.DataFrame, src string, config map[string]string) (err error) {
 
@@ -26,7 +20,7 @@ func WriteDataFrame(data df.DataFrame, src string, config map[string]string) (er
 		return err
 	}
 
-	return s.Write(data, src, config)
+	return s.Write(context.Background(), data, src, config)
 }
 
 // ReadDataFrames on given files or directories
@@ -46,7 +40,7 @@ func ReadDataFrames(config map[string]string, sourceUrls ...string) (data []df.D
 				return
 			}
 
-			mergedDf, err := dfSource.Read(sourceURL, config)
+			mergedDf, err := dfSource.Read(context.Background(), sourceURL, config)
 			if err != nil {
 				ers[idx] = err
 				return
@@ -65,12 +59,12 @@ func ReadDataFrames(config map[string]string, sourceUrls ...string) (data []df.D
 	return dfs, nil
 }
 
-var sources = []DataFrameSource{
+var sources = []df.DataFrameSource{
 	&fs.DataSource{}, &rdbms.DataSource{}, &std.DataSource{},
 }
 
 //GetDataFrameSource returns DF source based on given sourceurl
-func GetDataFrameSource(sourceURL string) (s DataFrameSource, err error) {
+func GetDataFrameSource(sourceURL string) (s df.DataFrameSource, err error) {
 	u, err := url.Parse(sourceURL)
 	if err != nil {
 		return s, err

@@ -2,6 +2,7 @@ fmt:
 	go fmt
 
 test:
+	mkdir testresults || true
 	go test -coverprofile=testresults/testcoverage.txt -tags "json1 vtable" -race ./...
 	go tool cover -html=testresults/testcoverage.txt -o testresults/testcoverage.html
 

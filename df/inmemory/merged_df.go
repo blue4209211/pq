@@ -10,10 +10,9 @@ import (
 // Schema of new dataframe will be same as first dataframe
 func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, err error) {
 	if len(dfs) == 0 {
-		return output, errors.New("Empty data")
+		return output, errors.New("empty data")
 	}
 
-	var records [][]any
 	if len(dfs) == 1 {
 		output = dfs[0].Rename(name, false)
 	} else {
@@ -22,16 +21,16 @@ func NewMergeDataframe(name string, dfs ...df.DataFrame) (output df.DataFrame, e
 		for _, d := range dfs {
 			cnt = cnt + int(d.Len())
 		}
-		records = make([][]any, cnt, cnt)
+		records := make([]df.Row, cnt)
 
 		mergeIndx := 0
 		for _, df := range dfs {
 			for i := int64(0); i < df.Len(); i++ {
-				records[mergeIndx] = df.Get(i).Data()
+				records[mergeIndx] = df.GetRow(i)
 				mergeIndx++
 			}
 		}
-		output = NewDataframeWithName(name, schema.Columns(), records)
+		output = NewDataframeFromRowAndName(name, schema, &records)
 	}
 
 	return

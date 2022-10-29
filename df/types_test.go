@@ -14,10 +14,12 @@ func TestGetType(t *testing.T) {
 	assert.Equal(t, reflect.String, f.Type())
 
 	f, err = GetFormat("string1")
+	assert.Nil(t, f)
 	assert.Error(t, err)
 
 	f, err = GetFormatFromKind(reflect.Int32)
 	assert.Equal(t, reflect.Int64, f.Type())
+	assert.Nil(t, err)
 
 }
 
@@ -41,9 +43,11 @@ func TestIntType(t *testing.T) {
 
 	c, err = f.Convert("xyz")
 	assert.Error(t, err)
+	assert.Equal(t, c, int64(0))
 
 	c, err = f.Convert(nil)
 	assert.Nil(t, c)
+	assert.Nil(t, err)
 
 }
 
@@ -66,9 +70,11 @@ func TestDoubleType(t *testing.T) {
 
 	c, err = f.Convert("xyz")
 	assert.Error(t, err)
+	assert.Equal(t, c, float64(0))
 
 	c, err = f.Convert(nil)
 	assert.Nil(t, c)
+	assert.Nil(t, err)
 
 }
 
@@ -96,9 +102,11 @@ func TestStringType(t *testing.T) {
 
 	c, err = f.Convert("xyz")
 	assert.Equal(t, "xyz", c)
+	assert.Nil(t, err)
 
 	c, err = f.Convert(nil)
 	assert.Nil(t, c)
+	assert.Nil(t, err)
 }
 
 func TestBoolType(t *testing.T) {
@@ -112,6 +120,7 @@ func TestBoolType(t *testing.T) {
 
 	c, err = f.Convert("1.0")
 	assert.Error(t, err)
+	assert.Equal(t, c, false)
 
 	c, err = f.Convert(true)
 	assert.NoError(t, err)
@@ -119,25 +128,26 @@ func TestBoolType(t *testing.T) {
 
 	c, err = f.Convert("xyz")
 	assert.Error(t, err)
+	assert.Equal(t, c, false)
 
 	c, err = f.Convert(nil)
 	assert.Nil(t, c)
+	assert.Nil(t, err)
 
 }
 
 func TestNewSchema(t *testing.T) {
-	s := NewSchema([]Column{
+	s := NewSchema([]SeriesSchema{
 		{Name: "c1", Format: IntegerFormat},
 		{Name: "c2", Format: DoubleFormat},
 		{Name: "c3", Format: StringFormat},
 		{Name: "c4", Format: BoolFormat},
 	})
 
-	c, e := s.GetByName("c1")
-	assert.Nil(t, e)
+	c := s.GetByName("c1")
 	assert.Equal(t, "c1", c.Name)
-	c, e = s.GetByName("c11")
-	assert.Error(t, e)
+	c = s.GetByName("c11")
+	assert.Equal(t, "", c.Name)
 
 	assert.Equal(t, "c3", s.Get(2).Name)
 	assert.Equal(t, 4, s.Len())

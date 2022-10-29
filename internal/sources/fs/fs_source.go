@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -16,7 +17,7 @@ import (
 	"time"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/log"
 	"github.com/blue4209211/pq/internal/sources/fs/formats"
 	"github.com/blue4209211/pq/internal/sources/fs/vfs"
@@ -53,7 +54,7 @@ func updateConfigFromSourceURL(sourceURL string, config map[string]string) map[s
 	return updatedConfig
 }
 
-func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.DataFrame, err error) {
+func (t *DataSource) Read(context context.Context, sourceURL string, config map[string]string) (data df.DataFrame, err error) {
 	config = updateConfigFromSourceURL(sourceURL, config)
 
 	filePath, fileOrDirName, format, _, err := getFileDetails(sourceURL)
@@ -134,7 +135,7 @@ func (t *DataSource) Read(sourceURL string, config map[string]string) (data df.D
 
 }
 
-func (t *DataSource) Write(data df.DataFrame, path string, config map[string]string) (err error) {
+func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, config map[string]string) (err error) {
 	config = updateConfigFromSourceURL(path, config)
 	_, name, ext, _, err := getFileDetails(path)
 	dfs, err := formats.GetFormatHandler(ext)
@@ -171,7 +172,7 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 	if err != nil {
 		return data, err
 	}
-	datsourceDf := inmemory.NewDataframeWithName(name, dataframeReader.Schema(), dataframeReader.Data())
+	datsourceDf := inmemory.NewDataframeFromRowAndName(name, dataframeReader.Schema(), dataframeReader.Data())
 	return datsourceDf, nil
 }
 

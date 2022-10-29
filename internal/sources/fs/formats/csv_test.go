@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,25 +29,25 @@ func TestCSVDataSourceReader(t *testing.T) {
 	schema := csvReader.Schema()
 
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(schema))
-	assert.Equal(t, "a", schema[0].Name)
-	assert.Equal(t, "string", schema[0].Format.Name())
-	assert.Equal(t, "b", schema[1].Name)
-	assert.Equal(t, "string", schema[1].Format.Name())
-	assert.Equal(t, "c", schema[2].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	assert.Equal(t, "d", schema[3].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	data := csvReader.Data()
+	assert.Equal(t, 4, schema.Len())
+	assert.Equal(t, "a", schema.Get(0).Name)
+	assert.Equal(t, "string", schema.Get(0).Format.Name())
+	assert.Equal(t, "b", schema.Get(1).Name)
+	assert.Equal(t, "string", schema.Get(1).Format.Name())
+	assert.Equal(t, "c", schema.Get(2).Name)
+	assert.Equal(t, "string", schema.Get(2).Format.Name())
+	assert.Equal(t, "d", schema.Get(3).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	data := *(csvReader.Data())
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
-	assert.Equal(t, "1", data[0][0])
-	assert.Equal(t, "2", data[0][1])
-	assert.Equal(t, "c1", data[0][2])
-	assert.Equal(t, "d1", data[0][3])
+	assert.Equal(t, "1", data[0].GetRaw(0))
+	assert.Equal(t, "2", data[0].GetRaw(1))
+	assert.Equal(t, "c1", data[0].GetRaw(2))
+	assert.Equal(t, "d1", data[0].GetRaw(3))
 
-	assert.Equal(t, "", data[2][1])
-	assert.Equal(t, "", data[2][2])
+	assert.Equal(t, "", data[2].GetRaw(1))
+	assert.Equal(t, "", data[2].GetRaw(2))
 
 }
 
@@ -69,21 +69,21 @@ func TestCSVDataSourceReaderNoHeaderDifferentSep(t *testing.T) {
 	schema := csvReader.Schema()
 
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(schema))
-	assert.Equal(t, "c0", schema[0].Name)
-	assert.Equal(t, "string", schema[0].Format.Name())
-	assert.Equal(t, "c1", schema[1].Name)
-	assert.Equal(t, "string", schema[1].Format.Name())
-	assert.Equal(t, "c2", schema[2].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	assert.Equal(t, "c3", schema[3].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
+	assert.Equal(t, 4, schema.Len())
+	assert.Equal(t, "c0", schema.Get(0).Name)
+	assert.Equal(t, "string", schema.Get(0).Format.Name())
+	assert.Equal(t, "c1", schema.Get(1).Name)
+	assert.Equal(t, "string", schema.Get(1).Format.Name())
+	assert.Equal(t, "c2", schema.Get(2).Name)
+	assert.Equal(t, "string", schema.Get(2).Format.Name())
+	assert.Equal(t, "c3", schema.Get(3).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
 	data := csvReader.Data()
 	assert.NoError(t, err)
-	assert.Equal(t, 3, len(data))
+	assert.Equal(t, 3, len(*data))
 
 	// wrong seprator
-	csvReader, err = source.Reader(strings.NewReader(csvString), map[string]string{
+	_, err = source.Reader(strings.NewReader(csvString), map[string]string{
 		ConfigCsvHeader: "false",
 		ConfigCsvSep:    "^^",
 	})
@@ -105,8 +105,9 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err := source.Reader(strings.NewReader(csvString), configs)
 	assert.NoError(t, err)
-	dataframe := inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	dataframe := inmemory.NewDataframeFromRowAndName("df_1", csvReader.Schema(), csvReader.Data())
 	writer, err := source.Writer(dataframe, configs)
+	assert.Nil(t, err)
 	buff := new(strings.Builder)
 	writer.Write(buff)
 
@@ -123,8 +124,9 @@ func TestCSVDataSourceWriter(t *testing.T) {
 	}
 	csvReader, err = source.Reader(strings.NewReader(csvStringWithHeader), configs)
 	assert.NoError(t, err)
-	dataframe = inmemory.NewDataframeWithName("df_1", csvReader.Schema(), csvReader.Data())
+	dataframe = inmemory.NewDataframeFromRowAndName("df_1", csvReader.Schema(), csvReader.Data())
 	writer, err = source.Writer(dataframe, configs)
+	assert.Nil(t, err)
 	buff = new(strings.Builder)
 	writer.Write(buff)
 

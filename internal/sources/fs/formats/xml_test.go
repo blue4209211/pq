@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,24 +25,24 @@ func TestXMLDataSourceReader(t *testing.T) {
 	schema := xmlReader.Schema()
 
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(schema))
-	assert.Equal(t, "_a", schema[0].Name)
-	assert.Equal(t, "string", schema[0].Format.Name())
-	assert.Equal(t, "b", schema[1].Name)
-	assert.Equal(t, "string", schema[1].Format.Name())
-	assert.Equal(t, "c", schema[2].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	assert.Equal(t, "d", schema[3].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	data := xmlReader.Data()
+	assert.Equal(t, 4, schema.Len())
+	assert.Equal(t, "_a", schema.Get(0).Name)
+	assert.Equal(t, "string", schema.Get(0).Format.Name())
+	assert.Equal(t, "b", schema.Get(1).Name)
+	assert.Equal(t, "string", schema.Get(1).Format.Name())
+	assert.Equal(t, "c", schema.Get(2).Name)
+	assert.Equal(t, "string", schema.Get(2).Format.Name())
+	assert.Equal(t, "d", schema.Get(3).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	data := *(xmlReader.Data())
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
-	assert.Equal(t, "1", data[0][0])
-	assert.Equal(t, "2", data[0][1])
-	assert.Equal(t, "c1", data[0][2])
-	assert.Equal(t, "d1", data[0][3])
-	assert.Equal(t, "", data[2][1])
-	assert.Equal(t, "", data[2][2])
+	assert.Equal(t, "1", data[0].GetRaw(0))
+	assert.Equal(t, "2", data[0].GetRaw(1))
+	assert.Equal(t, "c1", data[0].GetRaw(2))
+	assert.Equal(t, "d1", data[0].GetRaw(3))
+	assert.Equal(t, "", data[2].GetRaw(1))
+	assert.Equal(t, "", data[2].GetRaw(2))
 
 	//multiline xml
 	multiLineXMLString := `<root>
@@ -73,24 +73,24 @@ func TestXMLDataSourceReader(t *testing.T) {
 	schema = xmlReader.Schema()
 
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(schema))
-	assert.Equal(t, "_a", schema[0].Name)
-	assert.Equal(t, "string", schema[0].Format.Name())
-	assert.Equal(t, "b", schema[1].Name)
-	assert.Equal(t, "string", schema[1].Format.Name())
-	assert.Equal(t, "c", schema[2].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	assert.Equal(t, "d", schema[3].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	data = xmlReader.Data()
+	assert.Equal(t, 4, schema.Len())
+	assert.Equal(t, "_a", schema.Get(0).Name)
+	assert.Equal(t, "string", schema.Get(0).Format.Name())
+	assert.Equal(t, "b", schema.Get(1).Name)
+	assert.Equal(t, "string", schema.Get(1).Format.Name())
+	assert.Equal(t, "c", schema.Get(2).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	assert.Equal(t, "d", schema.Get(3).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	data = *(xmlReader.Data())
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(data))
-	assert.Equal(t, "1", data[0][0])
-	assert.Equal(t, "2", data[0][1])
-	assert.Equal(t, "c1", data[0][2])
-	assert.Equal(t, "d1", data[0][3])
-	assert.Equal(t, "", data[2][1])
-	assert.Equal(t, "", data[2][2])
+	assert.Equal(t, "1", data[0].GetRaw(0))
+	assert.Equal(t, "2", data[0].GetRaw(1))
+	assert.Equal(t, "c1", data[0].GetRaw(2))
+	assert.Equal(t, "d1", data[0].GetRaw(3))
+	assert.Equal(t, "", data[2].GetRaw(1))
+	assert.Equal(t, "", data[2].GetRaw(2))
 }
 
 func TestXMLDataSourceWriter(t *testing.T) {
@@ -104,13 +104,14 @@ func TestXMLDataSourceWriter(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	dataframe := inmemory.NewDataframeWithName("df_1", xmlReader.Schema(), xmlReader.Data())
+	dataframe := inmemory.NewDataframeFromRowAndName("df_1", xmlReader.Schema(), xmlReader.Data())
 	assert.Equal(t, dataframe.Name(), "df_1")
 
 	writer, err := source.Writer(dataframe, map[string]string{
 		ConfigXMLSingleLine:  "false",
 		ConfigXMLElementName: "element",
 	})
+	assert.Nil(t, err)
 	buff := new(strings.Builder)
 	writer.Write(buff)
 	assert.Equal(t, xmlString, buff.String())

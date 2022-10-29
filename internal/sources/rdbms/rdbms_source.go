@@ -1,6 +1,7 @@
 package rdbms
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/url"
@@ -16,7 +17,7 @@ import (
 	"github.com/xo/dburl"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/log"
 )
 
@@ -32,7 +33,7 @@ func (t *DataSource) IsSupported(protocol string) bool {
 	return protocol == "mysql" || protocol == "maria" || protocol == "postgres" || protocol == "postgresql" || protocol == "sqlite"
 }
 
-func (t *DataSource) Read(dbURL string, args map[string]string) (data df.DataFrame, err error) {
+func (t *DataSource) Read(context context.Context, dbURL string, args map[string]string) (data df.DataFrame, err error) {
 	u, err := url.Parse(dbURL)
 	if err != nil {
 		return data, err
@@ -71,17 +72,17 @@ func (t *DataSource) Read(dbURL string, args map[string]string) (data df.DataFra
 	}
 
 	if u.Fragment != "" {
-		return inmemory.NewDataframeWithName(u.Fragment, schema, records), nil
+		return inmemory.NewDataframeFromRowAndName(u.Fragment, schema, &records), nil
 	}
-	return inmemory.NewDataframe(schema, records), nil
+	return inmemory.NewDataframeFromRow(schema, &records), nil
 
 }
 
-func (t *DataSource) Write(data df.DataFrame, path string, args map[string]string) (err error) {
+func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, args map[string]string) (err error) {
 	return errors.New("Unsupported")
 }
 
-func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, err error) {
+func queryInternal(db *sql.DB, query string) (schema df.DataFrameSchema, data []df.Row, err error) {
 	preparedQuery, err := db.Prepare(query)
 	if err != nil {
 		return schema, data, err
@@ -103,18 +104,23 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, 
 		return
 	}
 
-	cols := make([]df.Column, len(sqlCols))
+	cols := make([]df.SeriesSchema, len(sqlCols))
 
 	for i, c := range sqlCols {
 		dfFormat, err := df.GetFormat(sqlColTypes[i].DatabaseTypeName())
 		if err != nil {
 			log.Debugf("sql format error for - %s, %s, %s", c, sqlColTypes[i].DatabaseTypeName(), err)
 			dfFormat, err = df.GetFormat("string")
+			if err != nil {
+				return schema, data, err
+			}
+
 		}
-		cols[i] = df.Column{Name: c, Format: dfFormat}
+		cols[i] = df.SeriesSchema{Name: c, Format: dfFormat}
 	}
 
-	dataRows := make([][]any, 0, 100)
+	schema = df.NewSchema(cols)
+	data = make([]df.Row, 0, 100)
 
 	for rows.Next() {
 		dataRowPtrs := make([]any, len(sqlCols))
@@ -127,20 +133,21 @@ func queryInternal(db *sql.DB, query string) (schema []df.Column, data [][]any, 
 			return schema, data, err
 		}
 
-		dataRow := make([]any, len(sqlCols))
+		dataRow := make([]df.Value, len(sqlCols))
 		for i, cellPtr := range dataRowPtrs {
-			dataRow[i], err = cols[i].Format.Convert(*(cellPtr.(*any)))
+			v, err := cols[i].Format.Convert(*(cellPtr.(*any)))
 			if err != nil {
 				return schema, data, err
 			}
+			dataRow[i] = inmemory.NewValue(cols[i].Format, v)
 		}
 
-		dataRows = append(dataRows, dataRow)
+		data = append(data, inmemory.NewRow(schema, &dataRow))
 	}
 
 	err = rows.Err()
 	if err != nil {
 		return schema, data, err
 	}
-	return cols, dataRows, nil
+	return schema, data, nil
 }

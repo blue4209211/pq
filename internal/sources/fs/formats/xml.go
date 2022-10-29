@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map[string]any, err error) {
@@ -53,7 +54,7 @@ func xmlReadByLine(reader io.Reader, config map[string]string) (objMapList []map
 	for r := range objMapListChannel {
 		return r.data, r.err
 	}
-	return objMapList, errors.New("Unable to read data")
+	return objMapList, errors.New("unable to read data")
 }
 
 type xmlAsyncReadResult struct {
@@ -197,11 +198,11 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 		attrs := ""
 		nestElements := ""
 
-		for j, c := range schema.Columns() {
+		for j, c := range schema.Series() {
 			if strings.Index(c.Name, "_") == 0 {
-				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.Get(i).Data()[j])
+				attrs = attrs + fmt.Sprintf(" %s=\"%s\"", c.Name[1:], t.data.GetRow(i).Get(j).Get())
 			} else {
-				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.Get(i).Data()[j], c.Name)
+				nestElements = nestElements + fmt.Sprintf("<%s>%s</%s>", c.Name, t.data.GetRow(i).Get(j).Get(), c.Name)
 			}
 		}
 		writer.Write([]byte(fmt.Sprintf(rf, xmlElementName, attrs, nestElements, xmlElementName)))
@@ -219,16 +220,16 @@ func (t *xmlDataSourceWriter) Write(writer io.Writer) (err error) {
 
 type xmlDataSourceReader struct {
 	args    map[string]string
-	cols    []df.Column
-	records [][]any
+	schema  df.DataFrameSchema
+	records []df.Row
 }
 
-func (t *xmlDataSourceReader) Schema() (columns []df.Column) {
-	return t.cols
+func (t *xmlDataSourceReader) Schema() df.DataFrameSchema {
+	return t.schema
 }
 
-func (t *xmlDataSourceReader) Data() (data [][]any) {
-	return t.records
+func (t *xmlDataSourceReader) Data() (data *[]df.Row) {
+	return &t.records
 }
 
 func (t *xmlDataSourceReader) readXML(reader io.Reader) (objMapList []map[string]any, err error) {
@@ -271,7 +272,7 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 	}
 	sort.Strings(colMapKeys)
 
-	t.cols = make([]df.Column, len(colMap))
+	cols := make([]df.SeriesSchema, len(colMap))
 	index := 0
 	for _, k := range colMapKeys {
 		v := colMap[k]
@@ -287,28 +288,30 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 		if err != nil {
 			return errors.New("xml : unable to get format for - " + k + ", " + typeStr)
 		}
-		t.cols[index] = df.Column{Name: k, Format: dfFormat}
+		cols[index] = df.SeriesSchema{Name: k, Format: dfFormat}
 		index = index + 1
 	}
 
-	t.records = make([][]any, len(objMapList))
+	t.schema = df.NewSchema(cols)
+	t.records = make([]df.Row, len(objMapList))
 
 	for i, objMap := range objMapList {
 
-		row := make([]any, len(t.cols))
+		row := make([]df.Value, len(cols))
 
-		for j, c := range t.cols {
+		for j, c := range cols {
 			if v, ok := objMap[c.Name]; ok {
-				row[j], err = c.Format.Convert(v)
+				v, err = c.Format.Convert(v)
 				if err != nil {
 					return err
 				}
+				row[j] = inmemory.NewValue(c.Format, v)
 			} else {
 				row[j] = nil
 			}
 		}
 
-		t.records[i] = row
+		t.records[i] = inmemory.NewRow(t.schema, &row)
 
 	}
 

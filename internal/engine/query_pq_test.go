@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/sources/fs/formats"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,7 +18,7 @@ func TestQuerySortOpPQ(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(4), dataframe.Len())
-	assert.Equal(t, float64(4), dataframe.ColumnByName("c1").Get(0))
+	assert.Equal(t, float64(4), dataframe.GetSeriesByName("c1").Get(0).Get())
 }
 
 func TestQueryFilterOpPQ(t *testing.T) {
@@ -165,7 +165,7 @@ func BenchmarkDataframeQueryPQ(b *testing.B) {
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{
 		ConfigEngineStorage: "pq",
 	})
-	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
+	dataframe := inmemory.NewDataframeFromRowAndName("t1", jsonReader.Schema(), jsonReader.Data())
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {
@@ -186,9 +186,9 @@ func BenchmarkMultipleDataframeQueryPQ(b *testing.B) {
 	}
 
 	jsonReader, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe := inmemory.NewDataframeWithName("t1", jsonReader.Schema(), jsonReader.Data())
+	dataframe := inmemory.NewDataframeFromRowAndName("t1", jsonReader.Schema(), jsonReader.Data())
 	jsonReader2, _ := source.Reader(strings.NewReader(jsonStringData), map[string]string{})
-	dataframe2 := inmemory.NewDataframeWithName("t2", jsonReader2.Schema(), jsonReader2.Data())
+	dataframe2 := inmemory.NewDataframeFromRowAndName("t2", jsonReader2.Schema(), jsonReader2.Data())
 	dataframe.Schema()
 
 	for i := 0; i < b.N; i++ {

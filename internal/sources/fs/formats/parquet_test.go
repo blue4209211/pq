@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blue4209211/pq/internal/inmemory"
+	"github.com/blue4209211/pq/df/inmemory"
 
 	"github.com/apache/arrow/go/v7/parquet"
 	"github.com/apache/arrow/go/v7/parquet/compress"
@@ -98,32 +98,35 @@ func TestParquetDataSourceReader(t *testing.T) {
 	schema := parquetReader.Schema()
 
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(schema))
-	assert.Equal(t, "a", schema[0].Name)
-	assert.Equal(t, "integer", schema[0].Format.Name())
-	assert.Equal(t, "b", schema[1].Name)
-	assert.Equal(t, "double", schema[1].Format.Name())
-	assert.Equal(t, "c", schema[2].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	assert.Equal(t, "d", schema[3].Name)
-	assert.Equal(t, "string", schema[3].Format.Name())
-	dfData := parquetReader.Data()
+	assert.Equal(t, 4, schema.Len())
+	assert.Equal(t, "a", schema.Get(0).Name)
+	assert.Equal(t, "integer", schema.Get(0).Format.Name())
+	assert.Equal(t, "b", schema.Get(1).Name)
+	assert.Equal(t, "double", schema.Get(1).Format.Name())
+	assert.Equal(t, "c", schema.Get(2).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	assert.Equal(t, "d", schema.Get(3).Name)
+	assert.Equal(t, "string", schema.Get(3).Format.Name())
+	dfData := *(parquetReader.Data())
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(dfData))
-	assert.Equal(t, int64(1), dfData[0][0])
-	assert.Equal(t, 1.0, dfData[0][1])
-	assert.Equal(t, "c1", dfData[0][2])
-	assert.Equal(t, "d1", dfData[0][3])
-	assert.Equal(t, 3.0, dfData[2][1])
-	assert.Equal(t, "", dfData[2][2])
+	assert.Equal(t, int64(1), dfData[0].GetRaw(0))
+	assert.Equal(t, 1.0, dfData[0].GetRaw(1))
+	assert.Equal(t, "c1", dfData[0].GetRaw(2))
+	assert.Equal(t, "d1", dfData[0].GetRaw(3))
+	assert.Equal(t, 3.0, dfData[2].GetRaw(1))
+	assert.Equal(t, "", dfData[2].GetRaw(2))
 }
 
 func TestParquetDataSourceWriter(t *testing.T) {
-	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}}, [][]any{
-		{int64(1), float64(1.0)},
-		{int64(2), float64(2.0)},
-		{int64(3), float64(3.0)},
-	})
+	schema := df.NewSchema([]df.SeriesSchema{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}})
+	rows := []df.Row{
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(1), inmemory.NewDoubleValue(1.0)})),
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(2), inmemory.NewDoubleValue(2.0)})),
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(3), inmemory.NewDoubleValue(3.0)})),
+	}
+
+	dataframe := inmemory.NewDataframeFromRow(schema, &rows)
 
 	source := ParquetDataSource{}
 	writer, err := source.Writer(dataframe, map[string]string{
@@ -140,24 +143,30 @@ func TestParquetDataSourceWriter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, parquetReader)
 
-	schema := parquetReader.Schema()
+	schema = parquetReader.Schema()
 	assert.NoError(t, err)
 	assert.NoError(t, err)
 
 	schema2 := dataframe.Schema()
-	assert.Equal(t, schema, schema2.Columns())
+	assert.Equal(t, schema, schema2)
 
 }
 
 func BenchmarkParquetParsing(b *testing.B) {
 
-	records := make([][]any, 1000, 1000)
+	schema := df.NewSchema([]df.SeriesSchema{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}})
+	records := make([]df.Row, 1000)
 
 	for i := range records {
-		records[i] = []any{int64(1), float64(1.0), "abc", true}
+		records[i] = inmemory.NewRow(schema, &([]df.Value{
+			inmemory.NewIntValue(1),
+			inmemory.NewDoubleValue(1.0),
+			inmemory.NewStringValue("abc"),
+			inmemory.NewBoolValue(true),
+		}))
 	}
 
-	dataframe := inmemory.NewDataframe([]df.Column{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}, {Name: "c", Format: df.StringFormat}, {Name: "d", Format: df.BoolFormat}}, records)
+	dataframe := inmemory.NewDataframeFromRow(schema, &records)
 
 	source := ParquetDataSource{}
 	writer, _ := source.Writer(dataframe, map[string]string{

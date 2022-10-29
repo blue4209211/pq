@@ -15,10 +15,11 @@ import (
 	"github.com/apache/arrow/go/v7/parquet/file"
 	"github.com/apache/arrow/go/v7/parquet/schema"
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/df/inmemory"
 	"github.com/blue4209211/pq/internal/log"
 )
 
-func parquetReadByLine(reader io.Reader) (schema []df.Column, data [][]any, err error) {
+func parquetReadByLine(reader io.Reader) (schema df.DataFrameSchema, data []df.Row, err error) {
 	bufferedReader := bufio.NewReader(reader)
 	jobs := make(chan string, 5)
 	results := make(chan parquetAsyncReadResult, 100)
@@ -56,18 +57,18 @@ func parquetReadByLine(reader io.Reader) (schema []df.Column, data [][]any, err 
 	for r := range objMapListChannel {
 		return r.schema, r.data, r.err
 	}
-	return schema, data, errors.New("Unable to read data")
+	return schema, data, errors.New("unable to read data")
 }
 
 type parquetAsyncReadResult struct {
-	schema []df.Column
-	data   [][]any
+	schema df.DataFrameSchema
+	data   []df.Row
 	err    error
 }
 
 func parquetResultCollector(collector chan<- parquetAsyncReadResult, results <-chan parquetAsyncReadResult) {
-	var schema []df.Column
-	records := make([][]any, 0)
+	var schema df.DataFrameSchema
+	records := make([]df.Row, 0)
 	for r := range results {
 		if r.err != nil {
 			collector <- parquetAsyncReadResult{err: r.err}
@@ -94,7 +95,7 @@ func parquetReadByArrayAsync(jobs <-chan string, results chan<- parquetAsyncRead
 
 }
 
-func parquetReadToArray(parquetText string) (schema []df.Column, data [][]any, err error) {
+func parquetReadToArray(parquetText string) (schema df.DataFrameSchema, data []df.Row, err error) {
 	parquetReader, err := file.NewParquetReader(bytes.NewReader([]byte(parquetText)))
 	if err != nil {
 		log.Error("unable to read parquet", err)
@@ -102,12 +103,11 @@ func parquetReadToArray(parquetText string) (schema []df.Column, data [][]any, e
 	}
 	defer parquetReader.Close()
 
-	dfSchema := make([]df.Column, parquetReader.MetaData().Schema.NumColumns())
+	dfSchema := make([]df.SeriesSchema, parquetReader.MetaData().Schema.NumColumns())
 	dataArr := make([][]any, parquetReader.NumRows())
 	for i := int64(0); i < parquetReader.NumRows(); i++ {
 		dataArr[i] = make([]any, parquetReader.MetaData().Schema.NumColumns())
 	}
-
 	for r := 0; r < parquetReader.NumRowGroups(); r++ {
 		rowGroupReader := parquetReader.RowGroup(r)
 		for c := 0; c < rowGroupReader.NumColumns(); c++ {
@@ -117,7 +117,7 @@ func parquetReadToArray(parquetText string) (schema []df.Column, data [][]any, e
 				log.Error("unable to get schema", colReader.Descriptor().PhysicalType(), err)
 				return schema, data, err
 			}
-			dfSchema[c] = df.Column{Name: colReader.Descriptor().Name(), Format: dfType}
+			dfSchema[c] = df.SeriesSchema{Name: colReader.Descriptor().Name(), Format: dfType}
 
 			switch colReader.Descriptor().PhysicalType() {
 			case parquet.Types.FixedLenByteArray:
@@ -214,7 +214,13 @@ func parquetReadToArray(parquetText string) (schema []df.Column, data [][]any, e
 
 		}
 	}
-	return dfSchema, dataArr, err
+
+	schema = df.NewSchema(dfSchema)
+	rows := make([]df.Row, len(dataArr))
+	for i, r := range dataArr {
+		rows[i] = inmemory.NewRowFromAny(schema, &r)
+	}
+	return schema, rows, err
 }
 
 // ConfigParquetSingleLine While parsing Input, treat eachline as parquet object or Single Object/Array in the file
@@ -253,7 +259,7 @@ type parquetDataSourceWriter struct {
 func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 	dfSchema := t.data.Schema()
 	fields := make([]schema.Node, dfSchema.Len())
-	for i, f := range dfSchema.Columns() {
+	for i, f := range dfSchema.Series() {
 		fields[i], _ = schema.NewPrimitiveNode(f.Name, parquet.Repetitions.Optional, parquetKindToParquetTypeMap[f.Format.Type()], int32(i), -1)
 	}
 
@@ -290,30 +296,30 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 
 		switch dfSchema.Get(col).Format.Type() {
 		case reflect.Int64:
-			writerValue = make([]int64, t.data.Len(), t.data.Len())
+			writerValue = make([]int64, t.data.Len())
 		case reflect.Float64:
-			writerValue = make([]float64, t.data.Len(), t.data.Len())
+			writerValue = make([]float64, t.data.Len())
 		case reflect.String:
-			writerValue = make([]string, t.data.Len(), t.data.Len())
+			writerValue = make([]string, t.data.Len())
 		case reflect.Bool:
-			writerValue = make([]bool, t.data.Len(), t.data.Len())
+			writerValue = make([]bool, t.data.Len())
 		}
 
 		for i := int64(0); i < t.data.Len(); i++ {
-			r := t.data.Get(i)
-			if r.Data()[col] == nil {
+			r := t.data.GetRow(i)
+			if r.Get(col) == nil {
 				continue
 			}
 
 			switch arr := writerValue.(type) {
 			case []bool:
-				arr[i] = r.Data()[col].(bool)
+				arr[i] = r.GetAsBool(col)
 			case []int64:
-				arr[i] = r.Data()[col].(int64)
+				arr[i] = r.GetAsInt(col)
 			case []string:
-				arr[i] = r.Data()[col].(string)
+				arr[i] = r.GetAsString(col)
 			case []float64:
-				arr[i] = r.Data()[col].(float64)
+				arr[i] = r.GetAsDouble(col)
 			}
 		}
 
@@ -340,20 +346,20 @@ func (t *parquetDataSourceWriter) Write(writer io.Writer) (err error) {
 
 type parquetDataSourceReader struct {
 	args    map[string]string
-	cols    []df.Column
-	records [][]any
+	cols    df.DataFrameSchema
+	records []df.Row
 }
 
-func (t *parquetDataSourceReader) Schema() (columns []df.Column) {
+func (t *parquetDataSourceReader) Schema() (columns df.DataFrameSchema) {
 	return t.cols
 }
 
-func (t *parquetDataSourceReader) Data() (data [][]any) {
-	return t.records
+func (t *parquetDataSourceReader) Data() *[]df.Row {
+	return &t.records
 
 }
 
-func (t *parquetDataSourceReader) readParquet(reader io.Reader) (schema []df.Column, data [][]any, err error) {
+func (t *parquetDataSourceReader) readParquet(reader io.Reader) (schema df.DataFrameSchema, data []df.Row, err error) {
 
 	singlelineParse, err := parquetIsSingleLineParse(t.args)
 	if err != nil {

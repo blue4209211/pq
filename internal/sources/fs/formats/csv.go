@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/df/inmemory"
 )
 
 // ConfigCsvHeader Is First valid line header
@@ -65,19 +66,18 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 		schema := t.data.Schema()
 		cols := make([]string, schema.Len())
 
-		for i, c := range schema.Columns() {
+		for i, c := range schema.Series() {
 			cols[i] = c.Name
 		}
 		csvWriter.Write(cols)
 	}
 
-	format, err := df.GetFormat("string")
 	for i := int64(0); i < t.data.Len(); i++ {
-		rowInterface := t.data.Get(i)
+		rowInterface := t.data.GetRow(i)
 		row := make([]string, rowInterface.Len())
-		for i, r := range rowInterface.Data() {
-			str, _ := format.Convert(r)
-			row[i] = str.(string)
+		for j := 0; j < rowInterface.Len(); j++ {
+			str := rowInterface.GetAsString(j)
+			row[j] = str
 		}
 		csvWriter.Write(row)
 	}
@@ -88,38 +88,43 @@ type csvDataSourceReader struct {
 	args     map[string]string
 	records  [][]string
 	isHeader bool
+	schema   df.DataFrameSchema
 }
 
-func (t *csvDataSourceReader) Schema() (columns []df.Column) {
-	columns = make([]df.Column, len(t.records[0]))
+func (t *csvDataSourceReader) Schema() df.DataFrameSchema {
+	if t.schema != nil {
+		return t.schema
+	}
+	columns := make([]df.SeriesSchema, len(t.records[0]))
 	f, _ := df.GetFormat("string")
 	for i, col := range t.records[0] {
 		if t.isHeader {
-			columns[i] = df.Column{Name: col, Format: f}
+			columns[i] = df.SeriesSchema{Name: col, Format: f}
 		} else {
-			columns[i] = df.Column{Name: "c" + strconv.Itoa(i), Format: f}
+			columns[i] = df.SeriesSchema{Name: "c" + strconv.Itoa(i), Format: f}
 		}
 	}
-	return
+	t.schema = df.NewSchema(columns)
+	return t.schema
 }
 
-func (t *csvDataSourceReader) Data() (data [][]any) {
+func (t *csvDataSourceReader) Data() *[]df.Row {
 	index := 0
 	if t.isHeader {
 		index = 1
 	}
 
-	data = make([][]any, len(t.records)-index)
+	data := make([]df.Row, len(t.records)-index)
+	schema := t.Schema()
 
 	for i, record := range t.records[index:] {
-		row := make([]any, len(record))
+		row := make([]df.Value, len(record))
 		for j, cell := range record {
-			row[j] = cell
+			row[j] = inmemory.NewStringValue(cell)
 		}
-
-		data[i] = row
+		data[i] = inmemory.NewRow(schema, &row)
 	}
-	return
+	return &data
 }
 
 func (t *csvDataSourceReader) init(reader io.Reader) (err error) {

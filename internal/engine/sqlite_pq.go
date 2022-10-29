@@ -36,7 +36,7 @@ func (t *sqlitePQQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 		return errors.New("Columns are empty for source - " + dataFrame.Name())
 	}
 
-	err := t.createTable(dataFrame.Name(), schema.Columns())
+	err := t.createTable(dataFrame.Name(), schema.Series())
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (t *sqlitePQQueryEngine) RegisterDataFrame(dataFrame df.DataFrame) error {
 	return err
 }
 
-func (t *sqlitePQQueryEngine) createTable(tableName string, cols []df.Column) (err error) {
+func (t *sqlitePQQueryEngine) createTable(tableName string, cols []df.SeriesSchema) (err error) {
 	sqlStmt := `create virtual table "%s" using pq (%s);`
 	columnStr := ""
 	for _, col := range cols {
@@ -64,7 +64,7 @@ type pqModule struct {
 	data []df.DataFrame
 }
 
-func (t *pqModule) createTable(c *sqlite3.SQLiteConn, tableName string, cols []df.Column) (err error) {
+func (t *pqModule) createTable(c *sqlite3.SQLiteConn, tableName string, cols []df.SeriesSchema) (err error) {
 	sqlStmt := `create table "%s" (%s);`
 	columnStr := ""
 	for _, col := range cols {
@@ -86,7 +86,7 @@ func (t *pqModule) Create(c *sqlite3.SQLiteConn, args []string) (sqlite3.VTab, e
 		if d.Name() == args[2] {
 
 			schema := d.Schema()
-			err := t.createTable(c, d.Name(), schema.Columns())
+			err := t.createTable(c, d.Name(), schema.Series())
 			if err != nil {
 				return nil, err
 			}
@@ -195,20 +195,22 @@ type pqCursor struct {
 func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 	cType := (*t.data).Schema().Get(col)
 	//i, _ := cType.Format.Convert((*t.data)[t.index][col])
-	i := (*t.data).Get(int64(t.index)).Data()[col]
-	if i == nil {
+	i := (*t.data).GetRow(int64(t.index)).Get(col)
+	if i == nil || i.Get() == nil {
 		c.ResultNull()
 		return err
 	}
-	switch cType.Format.Type() {
-	case reflect.String:
-		c.ResultText(i.(string))
-	case reflect.Int64:
-		c.ResultInt64(i.(int64))
-	case reflect.Float64:
-		c.ResultDouble(i.(float64))
-	case reflect.Bool:
-		c.ResultBool(i.(bool))
+	switch cType.Format {
+	case df.StringFormat:
+		c.ResultText(i.GetAsString())
+	case df.IntegerFormat:
+		c.ResultInt64(i.GetAsInt())
+	case df.DoubleFormat:
+		c.ResultDouble(i.GetAsDouble())
+	case df.BoolFormat:
+		c.ResultBool(i.GetAsBool())
+	case df.DateTimeFormat:
+		c.ResultText(i.GetAsDatetime().String())
 	}
 	return nil
 }
@@ -216,7 +218,7 @@ func (t pqCursor) Column(c *sqlite3.SQLiteContext, col int) (err error) {
 type filterOp struct {
 	idx    int
 	op     string
-	schema df.DataFrameSeriesFormat
+	schema df.Format
 }
 
 func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
@@ -239,38 +241,38 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			colIdxAndOps[i] = filterOp{idx: idx, op: colIdxAndOp[1], schema: (*t.data).Schema().Get(idx).Format}
 		}
 
-		d := (*t.data).Filter(func(dfr df.DataFrameRow) bool {
+		d := (*t.data).WhereRow(func(dfr df.Row) bool {
 			f := true
 			for i, colOp := range colIdxAndOps {
 				switch colOp.op {
 				case "is", "=":
-					f = f && (dfr.Get(colOp.idx) == vals[i])
+					f = f && (dfr.Get(colOp.idx).Get() == vals[i])
 				case "isnot", "not":
-					f = f && (dfr.Get(colOp.idx) != vals[i])
+					f = f && (dfr.Get(colOp.idx).Get() != vals[i])
 				case "isnull":
-					f = f && (dfr.Get(colOp.idx) == nil)
+					f = f && (dfr.Get(colOp.idx).Get() == nil)
 				case "notnull":
-					f = f && (dfr.Get(colOp.idx) != nil)
+					f = f && (dfr.Get(colOp.idx).Get() != nil)
 				case "match":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Matches(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Matches(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "regexp":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Regexp(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Regexp(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "like":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Like(vals[i].(string), dfr.Get(colOp.idx).(string)))
+					f = f && (fns.Like(vals[i].(string), dfr.GetAsString(colOp.idx)))
 				case "glob":
 					if vals[i] == nil || dfr.Get(colOp.idx) == nil {
 						f = false
 					}
-					f = f && (fns.Glob(dfr.Get(colOp.idx).(string), vals[i].(string)))
+					f = f && (fns.Glob(dfr.GetAsString(colOp.idx), vals[i].(string)))
 				case "<":
 					if colOp.schema.Type() == reflect.Int64 {
 						v, e := df.IntegerFormat.Convert(vals[i])
@@ -278,14 +280,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) < v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) < v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) < v.(float64))
+						f = f && (dfr.Get(colOp.idx).GetAsDouble() < v.(float64))
 					}
 				case "<=":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -294,14 +296,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) <= v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) <= v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) <= v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) <= v.(float64))
 					}
 				case ">":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -310,14 +312,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) > v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) > v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) > v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) > v.(float64))
 					}
 				case ">=":
 					if colOp.schema.Type() == reflect.Int64 {
@@ -326,14 +328,14 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(int64) >= v.(int64))
+						f = f && (dfr.GetAsInt(colOp.idx) >= v.(int64))
 					} else {
 						v, e := df.DoubleFormat.Convert(vals[i])
 						if e != nil {
 							f = false
 							break
 						}
-						f = f && (dfr.Get(colOp.idx).(float64) >= v.(float64))
+						f = f && (dfr.GetAsDouble(colOp.idx) >= v.(float64))
 					}
 
 				}
@@ -356,7 +358,7 @@ func (t *pqCursor) Filter(idxNum int, filterOrderStr string, vals []any) error {
 			if colIdxAndOp[1] == "true" {
 				order = df.SortOrderDESC
 			}
-			orderOps[i] = df.SortByIndex{Column: idx, Order: order}
+			orderOps[i] = df.SortByIndex{Series: idx, Order: order}
 		}
 
 		d := (*t.data).Sort(orderOps...)

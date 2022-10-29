@@ -2,37 +2,49 @@ package df
 
 import (
 	"reflect"
+	"time"
 )
 
-// Column metadata for dataframe column
-type Column struct {
+// Series metadata for dataframe column
+type SeriesSchema struct {
 	Name   string
-	Format DataFrameSeriesFormat
+	Format Format
 }
 
 // SortOrder defines type for sorting
 type SortOrder int
 
 // SortOrderASC ascending sort order
-const SortOrderASC SortOrder = 0
+const (
+	SortOrderASC  SortOrder = 0
+	SortOrderDESC SortOrder = 1
+)
 
-// SortOrderDESC descendin sort order
-const SortOrderDESC SortOrder = 1
+// JoinType defines type for joining
+type JoinType string
 
-// DataFrameSeriesFormat Datatype of Dataframe Column
-type DataFrameSeriesFormat interface {
+const (
+	JoinLeft  JoinType = "left"
+	JoinEqui  JoinType = "equi"
+	JoinRight JoinType = "right"
+	JoinOuter JoinType = "outer"
+	JoinCross JoinType = "cross"
+)
+
+// Format Datatype of Dataframe Column
+type Format interface {
 	Name() string
 	Type() reflect.Kind
 	Convert(i any) (any, error)
 }
 
 type SortByIndex struct {
-	Column int
+	Series int
 	Order  SortOrder
 }
 
 type SortByName struct {
-	Column string
+	Series string
 	Order  SortOrder
 }
 
@@ -40,57 +52,119 @@ type SortByName struct {
 type DataFrame interface {
 	Schema() DataFrameSchema
 	Name() string
-	Get(i int64) DataFrameRow
 	Len() int64
-
 	Rename(name string, inplace bool) DataFrame
-	Column(index int) DataFrameSeries
-	ColumnByName(s string) DataFrameSeries
-	AddColumn(name string, series DataFrameSeries) (DataFrame, error)
-	RemoveColumn(index int) DataFrame
-	RemoveColumnByName(s string) DataFrame
-	RenameColumn(index int, name string, inplace bool) (DataFrame, error)
-	RenameColumnByName(col string, name string, inplace bool) (DataFrame, error)
-	SelectColumn(index ...int) (DataFrame, error)
-	SelectColumnByName(col ...string) (DataFrame, error)
 
-	ForEach(function func(DataFrameRow))
+	Limit(offset int, size int) DataFrame
 	Sort(order ...SortByIndex) DataFrame
 	SortByName(order ...SortByName) DataFrame
-	Map(schema []Column, function func(DataFrameRow) []any) DataFrame
-	FlatMap(schema []Column, function func(DataFrameRow) [][]any) DataFrame
-	Filter(function func(DataFrameRow) bool) DataFrame
-	Limit(offset int, size int) DataFrame
+
+	SelectSeries(index ...int) DataFrame
+	SelectSeriesByName(col ...string) DataFrame
+	MapRow(schema DataFrameSchema, f func(Row) Row) DataFrame
+	FlatMapRow(schema DataFrameSchema, f func(Row) []Row) DataFrame
+	WhereRow(f func(Row) bool) DataFrame
+	SelectRow(b Series) DataFrame
+
+	GetSeries(index int) Series
+	GetSeriesByName(s string) Series
+
+	AddSeries(name string, series Series) DataFrame
+	UpdateSeries(index int, series Series) DataFrame
+	UpdateSeriesByName(name string, series Series) DataFrame
+	RenameSeries(index int, name string, inplace bool) DataFrame
+	RenameSeriesByName(col string, name string, inplace bool) DataFrame
+	RemoveSeries(index int) DataFrame
+	RemoveSeriesByName(s string) DataFrame
+
+	GetRow(i int64) Row
+	ForEachRow(f func(Row))
+
+	Group(key string, others ...string) GroupedDataFrame
+	Append(df DataFrame) DataFrame
+	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
+
+	GetValue(rowIndx, colIndx int) Value
 }
 
-// DataFrameSeries Type for Storing column data of Dataframe
-type DataFrameSeries interface {
-	Schema() DataFrameSeriesFormat
+type GroupedDataFrame interface {
+	GetGroupColumns() []string
+	Get(index Row) DataFrame
+	GetKeys() []Row
+	ForEach(f func(Row, DataFrame))
+	Map(f func(Row, DataFrame) DataFrame) GroupedDataFrame
+	Where(f func(Row, DataFrame) bool) GroupedDataFrame
 	Len() int64
-	Get(index int64) any
-	ForEach(f func(any))
-	Sort(order SortOrder) DataFrameSeries
-	Map(schema DataFrameSeriesFormat, function func(any) any) DataFrameSeries
-	FlatMap(schema DataFrameSeriesFormat, function func(any) []any) DataFrameSeries
-	Filter(function func(any) bool) DataFrameSeries
-	Limit(offset int, size int) DataFrameSeries
-	Distinct() DataFrameSeries
 }
 
-// DataFrameRow Type representing row data of Dataframe
-type DataFrameRow interface {
+// Series Type for Storing column data of Dataframe
+type Series interface {
+	Schema() SeriesSchema
+	Len() int64
+	Get(index int64) Value
+	ForEach(f func(Value))
+	Sort(order SortOrder) Series
+	//TODO remove type args ?
+	Map(schema Format, f func(Value) Value) Series
+	FlatMap(schema Format, f func(Value) []Value) Series
+	Reduce(f func(Value, Value) Value, startValue Value) Value
+	Where(f func(Value) bool) Series
+	Select(b Series) Series
+	Limit(offset int, size int) Series
+	Distinct() Series
+	Copy() Series
+	Group() GroupedSeries
+
+	Append(series Series) Series
+	Join(schema Format, series Series, jointype JoinType, f func(Value, Value) []Value) Series
+}
+
+type Value interface {
+	Schema() Format
+	Get() any
+	GetAsString() string
+	GetAsInt() int64
+	GetAsDouble() float64
+	GetAsBool() bool
+	GetAsDatetime() time.Time
+	IsNil() bool
+}
+
+type GroupedSeries interface {
+	Get(index Value) Series
+	GetKeys() []Value
+	ForEach(f func(Value, Series))
+	Map(f func(Value, Series) Series) GroupedSeries
+	Where(f func(Value, Series) bool) GroupedSeries
+	Len() int64
+}
+
+// Row Type representing row data of Dataframe
+type Row interface {
 	Schema() DataFrameSchema
-	Get(i int) any
-	GetByName(s string) any
-	Data() []any
+	GetRaw(i int) any
+	Get(i int) Value
+	GetByName(s string) Value
 	Len() int
+	GetAsString(i int) string
+	GetAsInt(i int) int64
+	GetAsDouble(i int) float64
+	GetAsBool(i int) bool
+	GetAsDatetime(i int) time.Time
+	GetMap() (r map[string]Value)
+	IsAnyNil() bool
+	IsNil(i int) bool
+	Copy() Row
+	Select(i ...int) Row
+	Append(name string, v Value) Row
 }
 
 // DataFrameSchema Type representing schema of Dataframe
 type DataFrameSchema interface {
-	Columns() []Column
-	GetByName(s string) (Column, error)
-	GetIndexByName(s string) (int, error)
-	Get(i int) Column
+	Series() []SeriesSchema
+	GetByName(s string) SeriesSchema
+	GetIndexByName(s string) int
+	HasName(s string) bool
+	Get(i int) SeriesSchema
 	Len() int
 }
