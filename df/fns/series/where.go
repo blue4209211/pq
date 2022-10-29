@@ -24,7 +24,7 @@ const (
 	BetweenIncludeNeighter BetweenInclude = "neighter"
 )
 
-func IsAny(s df.Series, data ...any) (r df.Series) {
+func HasAny(s df.Series, data ...any) (r df.Series) {
 	if len(data) == 0 {
 		r = s
 	} else if len(data) == 1 {
@@ -44,7 +44,7 @@ func IsAny(s df.Series, data ...any) (r df.Series) {
 	return r
 }
 
-func IsNotAny(s df.Series, data ...any) (r df.Series) {
+func HasNotAny(s df.Series, data ...any) (r df.Series) {
 	if len(data) == 0 {
 		r = s
 	} else if len(data) == 1 {
@@ -64,10 +64,10 @@ func IsNotAny(s df.Series, data ...any) (r df.Series) {
 	return r
 }
 
-func IsNil(s df.Series) (r df.Series) {
-	return IsAny(s, nil)
+func HasNil(s df.Series) (r df.Series) {
+	return HasAny(s, nil)
 }
 
-func IsNotNil(s df.Series) (r df.Series) {
-	return IsNotAny(s, nil)
+func HasNotNil(s df.Series) (r df.Series) {
+	return HasNotAny(s, nil)
 }

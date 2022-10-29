@@ -80,8 +80,9 @@ type DataFrame interface {
 	GetRow(i int64) Row
 	ForEachRow(f func(Row))
 
-	Group(key string, others ...string) GroupedDataFrame
+	Group(others ...string) GroupedDataFrame
 	Append(df DataFrame) DataFrame
+	Distinct() DataFrame
 	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
 
 	GetValue(rowIndx, colIndx int) Value
@@ -128,6 +129,7 @@ type Value interface {
 	GetAsBool() bool
 	GetAsDatetime() time.Time
 	IsNil() bool
+	Equals(other Value) bool
 }
 
 type GroupedSeries interface {
@@ -162,9 +164,11 @@ type Row interface {
 // DataFrameSchema Type representing schema of Dataframe
 type DataFrameSchema interface {
 	Series() []SeriesSchema
+	Names() []string
 	GetByName(s string) SeriesSchema
 	GetIndexByName(s string) int
 	HasName(s string) bool
 	Get(i int) SeriesSchema
 	Len() int
+	Equals(other DataFrameSchema) bool
 }

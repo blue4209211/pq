@@ -5,7 +5,7 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func WhereNil(s df.Series, v bool) (r df.Series) {
+func MaskNil(s df.Series, v bool) (r df.Series) {
 	if s.Schema().Format != df.BoolFormat {
 		panic("only supported for bool format")
 	}

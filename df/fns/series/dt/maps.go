@@ -7,7 +7,7 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func WhereNil(s df.Series, v time.Time) (r df.Series) {
+func MaskNil(s df.Series, v time.Time) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}

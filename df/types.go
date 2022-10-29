@@ -396,6 +396,32 @@ func (t *inMemorySchema) HasName(s string) bool {
 	return false
 }
 
+func (t *inMemorySchema) Names() []string {
+	sn := make([]string, t.Len())
+	for i, s := range t.Series() {
+		sn[i] = s.Name
+	}
+	return sn
+}
+
+func (t *inMemorySchema) Equals(other DataFrameSchema) bool {
+	if other == nil {
+		return false
+	}
+
+	if t.Len() != other.Len() {
+		return false
+	}
+
+	for i, s := range t.cols {
+		if s != other.Get(i) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // NewSchema returns new schema based on given columns
 func NewSchema(cols []SeriesSchema) DataFrameSchema {
 	return &inMemorySchema{cols: cols}

@@ -70,14 +70,12 @@ func getKey(r df.Row) string {
 	return b.String()
 }
 
-func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDataFrame {
-	indexes := []int{}
-	i := data.Schema().GetIndexByName(key)
-	if i < 0 {
-		panic("Col not found " + key)
+func NewGroupedDf(data df.DataFrame, others ...string) (d df.GroupedDataFrame) {
+	if len(others) == 0 {
+		return d
 	}
-	indexes = append(indexes, i)
 
+	indexes := []int{}
 	for _, o := range others {
 		i := data.Schema().GetIndexByName(o)
 		if i < 0 {
@@ -100,5 +98,5 @@ func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDat
 		groupedData2[k] = NewDataframeFromRow(data.Schema(), &v)
 	}
 
-	return &inmemoryGroupedDataFrame{data: groupedData2, groupColumns: []string{key}, keys: groupedRowKey}
+	return &inmemoryGroupedDataFrame{data: groupedData2, groupColumns: others, keys: groupedRowKey}
 }

@@ -87,7 +87,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 	return r
 }
 
-func WhereNilDouble(s df.Series, v float64) (r df.Series) {
+func MaskNilDouble(s df.Series, v float64) (r df.Series) {
 	if s.Schema().Format != df.DoubleFormat {
 		panic("only supported for double format")
 	}
@@ -100,7 +100,7 @@ func WhereNilDouble(s df.Series, v float64) (r df.Series) {
 	return r
 }
 
-func WhereNilInt(s df.Series, v int64) (r df.Series) {
+func MaskNilInt(s df.Series, v int64) (r df.Series) {
 	if s.Schema().Format != df.IntegerFormat {
 		panic("only supported for int format")
 	}

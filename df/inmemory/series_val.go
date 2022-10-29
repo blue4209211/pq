@@ -64,6 +64,10 @@ func (t *inmemoryDataFrameSeriesVal) IsNil() (r bool) {
 	return t.data == nil
 }
 
+func (t *inmemoryDataFrameSeriesVal) Equals(other df.Value) (r bool) {
+	return other != nil && t.data == other.Get() && t.schema == other.Schema()
+}
+
 // NewDataFrameRow returns new Row based on schema and data
 func NewValue(schema df.Format, data any) df.Value {
 	if data == nil {
