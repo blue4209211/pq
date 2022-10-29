@@ -3,7 +3,7 @@ package df
 import "github.com/blue4209211/pq/df"
 
 func Distinct(s df.DataFrame) (r df.DataFrame) {
-	return r.Distinct()
+	return s.Distinct()
 }
 
 func Union(s df.DataFrame, s1 df.DataFrame, all bool) (r df.DataFrame) {
@@ -27,7 +27,7 @@ func Intersection(s df.DataFrame, s1 df.DataFrame) (r df.DataFrame) {
 
 	return s.Join(s.Schema(), s1, df.JoinEqui, cols, func(r1, r2 df.Row) []df.Row {
 		return []df.Row{r1}
-	})
+	}).Distinct()
 }
 
 func Substract(s df.DataFrame, s1 df.DataFrame) (r df.DataFrame) {

@@ -87,7 +87,7 @@ func (t *inmemoryDataFrame) AddSeries(name string, series df.Series) (d df.DataF
 
 func (t *inmemoryDataFrame) UpdateSeries(index int, series df.Series) (d df.DataFrame) {
 	if index < 0 || index >= t.Schema().Len() {
-		panic(fmt.Sprintf("Column Doesnt Exists - %d", index))
+		panic(fmt.Sprintf("column Doesnt Exists - %d", index))
 	}
 
 	cols := make([]df.SeriesSchema, 0, t.schema.Len())
@@ -417,7 +417,7 @@ func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, j
 
 				b2 := true
 				for k, v := range colIdx {
-					if r1.Get(k) != r2.Get(v) {
+					if !r1.Get(k).Equals(r2.Get(v)) {
 						b2 = false
 						break
 					}

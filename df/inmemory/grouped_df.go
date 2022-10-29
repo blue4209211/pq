@@ -65,7 +65,7 @@ func (t *inmemoryGroupedDataFrame) Len() int64 {
 func getKey(r df.Row) string {
 	var b strings.Builder
 	for i := 0; i < r.Len(); i++ {
-		fmt.Fprintf(&b, "%v", r.Get(i))
+		fmt.Fprintf(&b, "%v", r.Get(i).Get())
 	}
 	return b.String()
 }
@@ -79,7 +79,7 @@ func NewGroupedDf(data df.DataFrame, others ...string) (d df.GroupedDataFrame) {
 	for _, o := range others {
 		i := data.Schema().GetIndexByName(o)
 		if i < 0 {
-			panic("Col not found " + o)
+			panic("col not found - " + o)
 		}
 		indexes = append(indexes, i)
 	}

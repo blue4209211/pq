@@ -170,7 +170,7 @@ func Parse(s df.Series, pattern string) (r df.Series) {
 }
 
 func Format(s df.Series, pattern string) (r df.Series) {
-	if s.Schema().Format != df.StringFormat {
+	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
 	r = s.Map(df.StringFormat, func(sv df.Value) df.Value {
@@ -198,7 +198,7 @@ func ToUnixMilli(s df.Series, pattern string) (r df.Series) {
 }
 
 func FromUnixMilli(s df.Series) (r df.Series) {
-	if s.Schema().Format != df.StringFormat {
+	if s.Schema().Format != df.IntegerFormat {
 		panic("only supported for int format")
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {

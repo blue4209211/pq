@@ -39,9 +39,13 @@ func IsBetween(s df.Series, min time.Time, max time.Time, between series.Between
 	return r
 }
 
+func IsBetweenBool(s df.Series, min time.Time, max time.Time, between series.BetweenInclude) (r bool) {
+	return IsBetween(s, min, max, between).Len() > 0
+}
+
 func IsCompare(s df.Series, dt time.Time, condition series.CompareCondition) (r df.Series) {
-	if s.Schema().Format != df.DoubleFormat {
-		panic("only supported for doble format")
+	if s.Schema().Format != df.DateTimeFormat {
+		panic("only supported for datetime format")
 	}
 	switch condition {
 	case series.LessThan:
@@ -78,4 +82,8 @@ func IsCompare(s df.Series, dt time.Time, condition series.CompareCondition) (r 
 	}
 
 	return r
+}
+
+func IsCompareBool(s df.Series, dt time.Time, condition series.CompareCondition) (r bool) {
+	return IsCompare(s, dt, condition).Len() > 0
 }

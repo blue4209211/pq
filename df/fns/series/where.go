@@ -44,6 +44,10 @@ func HasAny(s df.Series, data ...any) (r df.Series) {
 	return r
 }
 
+func HasAnyBool(s df.Series, data ...any) (r bool) {
+	return HasAny(s, data...).Len() > 0
+}
+
 func HasNotAny(s df.Series, data ...any) (r df.Series) {
 	if len(data) == 0 {
 		r = s
@@ -64,10 +68,22 @@ func HasNotAny(s df.Series, data ...any) (r df.Series) {
 	return r
 }
 
+func HasNotAnyBool(s df.Series, data ...any) (r bool) {
+	return HasNotAny(s, data...).Len() > 0
+}
+
 func HasNil(s df.Series) (r df.Series) {
 	return HasAny(s, nil)
 }
 
+func HasNilBool(s df.Series) (r bool) {
+	return HasAny(s, nil).Len() > 0
+}
+
 func HasNotNil(s df.Series) (r df.Series) {
 	return HasNotAny(s, nil)
+}
+
+func HasNotNilBool(s df.Series) (r bool) {
+	return HasNotAny(s, nil).Len() > 0
 }
