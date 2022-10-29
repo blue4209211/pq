@@ -326,7 +326,7 @@ func (t *inmemoryDataFrame) Limit(offset int, size int) df.DataFrame {
 }
 
 func (t *inmemoryDataFrame) Append(d df.DataFrame) df.DataFrame {
-	if d.Schema().Len() != t.schema.Len() {
+	if !t.schema.Equals(d.Schema()) {
 		panic("schema are not same")
 	}
 
@@ -346,8 +346,19 @@ func (t *inmemoryDataFrame) Append(d df.DataFrame) df.DataFrame {
 	return NewDataframeFromRow(t.schema, &s1)
 }
 
-func (t *inmemoryDataFrame) Group(key string, others ...string) df.GroupedDataFrame {
-	return NewGroupedDf(t, key, others...)
+func (t *inmemoryDataFrame) Group(others ...string) df.GroupedDataFrame {
+	return NewGroupedDf(t, others...)
+}
+
+func (t *inmemoryDataFrame) Distinct() df.DataFrame {
+	gdf := NewGroupedDf(t, t.schema.Names()...)
+	rows := []df.Row{}
+	gdf.ForEach(func(r df.Row, df df.DataFrame) {
+		if df.Len() > 0 {
+			rows = append(rows, df.GetRow(0))
+		}
+	})
+	return NewDataframeFromRow(t.schema, &rows)
 }
 
 func (t *inmemoryDataFrame) GetValue(rowIndx, colIndx int) (v df.Value) {

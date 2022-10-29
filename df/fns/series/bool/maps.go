@@ -5,12 +5,12 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func WhereNil(s df.Series, v bool) (r df.Series) {
+func MaskNil(s df.Series, v bool) (r df.Series) {
 	if s.Schema().Format != df.BoolFormat {
 		panic("only supported for bool format")
 	}
 	r = s.Map(df.BoolFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
+		if sv == nil || sv.Get() == nil {
 			return inmemory.NewBoolValue(v)
 		}
 		return inmemory.NewBoolValue(sv.GetAsBool())
@@ -24,6 +24,9 @@ func Not(bs df.Series) (r df.Series) {
 		panic("series is not bool")
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
+		if dfsv == nil || dfsv.Get() == nil {
+			return inmemory.NewBoolValue(true)
+		}
 		return inmemory.NewBoolValue(!dfsv.GetAsBool())
 	})
 }
@@ -33,6 +36,9 @@ func And(bs df.Series, v bool) (r df.Series) {
 		panic("series is not bool")
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
+		if dfsv == nil || dfsv.Get() == nil {
+			return inmemory.NewBoolValue(false)
+		}
 		return inmemory.NewBoolValue(dfsv.GetAsBool() && v)
 	})
 }
@@ -42,6 +48,9 @@ func Or(bs df.Series, v bool) (r df.Series) {
 		panic("series is not bool")
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
+		if dfsv == nil || dfsv.Get() == nil {
+			return inmemory.NewBoolValue(false)
+		}
 		return inmemory.NewBoolValue(dfsv.GetAsBool() || v)
 	})
 }
@@ -54,6 +63,9 @@ func AndSeries(s df.Series, bs df.Series) (r df.Series) {
 		panic("series is not bool")
 	}
 	r = s.Join(s.Schema().Format, bs, df.JoinEqui, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
+		if dfsv1 == nil || dfsv1.Get() == nil || dfsv2 == nil || dfsv2.Get() == nil {
+			return r
+		}
 		return append(r, inmemory.NewBoolValue(dfsv1.GetAsBool() && dfsv2.GetAsBool()))
 	})
 
@@ -69,6 +81,9 @@ func OrSeries(s df.Series, bs df.Series) (r df.Series) {
 		panic("series is not bool")
 	}
 	r = s.Join(s.Schema().Format, bs, df.JoinEqui, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
+		if dfsv1 == nil || dfsv1.Get() == nil || dfsv2 == nil || dfsv2.Get() == nil {
+			return r
+		}
 		return append(r, inmemory.NewBoolValue(dfsv1.GetAsBool() || dfsv2.GetAsBool()))
 	})
 	return r

@@ -6,7 +6,7 @@ import (
 )
 
 func Sum(s df.Series) (r df.Value) {
-	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+	if !(s.Schema().Format == df.IntegerFormat || s.Schema().Format == df.DoubleFormat) {
 		panic("only int/double format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.Value) df.Value {
@@ -16,28 +16,34 @@ func Sum(s df.Series) (r df.Value) {
 }
 
 func Min(s df.Series) (r df.Value) {
-	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
-		panic("only int/double format supported")
+	if !(s.Schema().Format == df.IntegerFormat || s.Schema().Format == df.DoubleFormat || s.Schema().Format == df.DateTimeFormat) {
+		panic("only int/double/datetime format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.Value) df.Value {
+		if dfsv1 == nil || dfsv1.IsNil() {
+			return dfsv2
+		}
 		if dfsv2.GetAsDouble() < dfsv1.GetAsDouble() {
 			return dfsv2
 		}
 		return dfsv1
-	}, inmemory.NewIntValue(0))
+	}, inmemory.NewValue(s.Schema().Format, nil))
 	return val
 }
 
 func Max(s df.Series) (r df.Value) {
-	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
-		panic("only int/double format supported")
+	if !(s.Schema().Format == df.IntegerFormat || s.Schema().Format == df.DoubleFormat || s.Schema().Format == df.DateTimeFormat) {
+		panic("only int/double/datetime format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.Value) df.Value {
+		if dfsv1 == nil || dfsv1.IsNil() {
+			return dfsv2
+		}
 		if dfsv2.GetAsDouble() > dfsv1.GetAsDouble() {
 			return dfsv2
 		}
 		return dfsv1
-	}, inmemory.NewIntValue(0))
+	}, inmemory.NewValue(s.Schema().Format, nil))
 	return val
 }
 
@@ -46,7 +52,7 @@ func Mean(s df.Series) (r df.Value) {
 }
 
 func Median(s df.Series) (r df.Value) {
-	if s.Schema().Format != df.IntegerFormat || s.Schema().Format != df.DoubleFormat {
+	if !(s.Schema().Format == df.IntegerFormat || s.Schema().Format == df.DoubleFormat) {
 		panic("only int/double format supported")
 	}
 	s = s.Sort(df.SortOrderASC)
@@ -63,9 +69,10 @@ func Describe(s df.Series) (r df.DataFrame) {
 	return r
 }
 
-func CountValues(s df.Series) (r map[df.Value]int64) {
+func CountDistinctValues(s df.Series) (r map[string]int64) {
+	r = map[string]int64{}
 	s.Group().ForEach(func(a df.Value, dfs df.Series) {
-		r[a] = dfs.Len()
+		r[a.GetAsString()] = dfs.Len()
 	})
 	return r
 }
@@ -84,7 +91,7 @@ func Intersection(s df.Series, s1 df.Series) (r df.Series) {
 	}
 	r = s.Join(df.StringFormat, s1, df.JoinCross, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
 		if dfsv1.Get() == dfsv2.Get() {
-			return append(r, inmemory.NewValue(s.Schema().Format, dfsv1))
+			return append(r, inmemory.NewValue(s.Schema().Format, dfsv1.Get()))
 		}
 		return r
 	})
@@ -100,7 +107,7 @@ func Substract(s df.Series, s1 df.Series) (r df.Series) {
 }
 
 func CountNotNil(s df.Series) (r int64) {
-	return IsNotNil(s).Len()
+	return HasNotNil(s).Len()
 }
 
 func Covariance(s df.Series) (r float64) {

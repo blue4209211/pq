@@ -5,7 +5,7 @@ import (
 	"github.com/blue4209211/pq/df/inmemory"
 )
 
-func Where(s df.Series, f df.Format, v map[any]any) (r df.Series) {
+func Mask(s df.Series, f df.Format, v map[any]any) (r df.Series) {
 	r = s.Map(f, func(sv df.Value) df.Value {
 		k, ok := v[sv.Get()]
 		if ok {

@@ -13,6 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.10
 	github.com/stretchr/testify v1.8.0
 	github.com/xo/dburl v0.9.0
+	golang.org/x/exp v0.0.0-20220218215828-6cf2b201936e
 	google.golang.org/api v0.97.0
 )
 
@@ -41,7 +42,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/zeebo/xxh3 v0.13.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/exp v0.0.0-20220218215828-6cf2b201936e // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1 // indirect
