@@ -25,7 +25,10 @@ func Year(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Year()))
 	})
 
@@ -36,7 +39,10 @@ func Month(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Month()))
 	})
 
@@ -47,7 +53,10 @@ func Day(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Day()))
 	})
 
@@ -58,7 +67,10 @@ func Hour(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Hour()))
 	})
 
@@ -69,7 +81,10 @@ func Minute(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Minute()))
 	})
 
@@ -80,7 +95,10 @@ func Second(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Second()))
 	})
 
@@ -91,7 +109,10 @@ func UnixMilli(s df.Series) (r df.Series) {
 	if s.Schema().Format != df.DateTimeFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(int64(sv.GetAsDatetime().UnixMilli()))
 	})
 
@@ -103,6 +124,9 @@ func AddDate(s df.Series, y int, m int, d int) (r df.Series) {
 		panic("only supported for datetime format")
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.DateTimeFormat, nil)
+		}
 		return inmemory.NewDatetimeValue(sv.GetAsDatetime().AddDate(y, m, d))
 	})
 
@@ -114,6 +138,9 @@ func AddTime(s df.Series, h time.Duration, m time.Duration, sec time.Duration) (
 		panic("only supported for datetime format")
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		dt := sv.GetAsDatetime()
 		if h != 0 {
 			dt = dt.Add(time.Hour * h)
@@ -146,7 +173,10 @@ func Format(s df.Series, pattern string) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.StringFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.StringFormat, nil)
+		}
 		return inmemory.NewStringValue(sv.GetAsDatetime().Format(pattern))
 	})
 
@@ -157,7 +187,10 @@ func ToUnixMilli(s df.Series, pattern string) (r df.Series) {
 	if s.Schema().Format != df.StringFormat {
 		panic("only supported for datetime format")
 	}
-	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.IntegerFormat, nil)
+		}
 		return inmemory.NewIntValue(sv.GetAsDatetime().UnixMilli())
 	})
 
@@ -169,6 +202,9 @@ func FromUnixMilli(s df.Series) (r df.Series) {
 		panic("only supported for int format")
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
+		if sv == nil || sv.IsNil() {
+			return inmemory.NewValue(df.DateTimeFormat, nil)
+		}
 		return inmemory.NewDatetimeValue(time.UnixMilli(sv.GetAsInt()))
 	})
 

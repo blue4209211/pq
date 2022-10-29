@@ -15,6 +15,7 @@ const (
 	NumAddOp NumOp = "add"
 	NumSubOp NumOp = "sub"
 	NumDivOp NumOp = "div"
+	NumModOp NumOp = "mod"
 	NumPowOp NumOp = "pow"
 )
 
@@ -25,26 +26,49 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 	switch op {
 	case NumMulOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsInt()
 			return inmemory.NewIntValue(i * v)
 		})
 	case NumAddOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsInt()
 			return inmemory.NewIntValue(i + v)
 		})
 	case NumSubOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsInt()
 			return inmemory.NewIntValue(i - v)
 		})
 	case NumDivOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsInt()
 			return inmemory.NewIntValue(i / v)
 		})
+	case NumModOp:
+		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
+			i := sv.GetAsInt()
+			return inmemory.NewIntValue(i % v)
+		})
 	case NumPowOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsInt()
 			return inmemory.NewIntValue(int64(math.Pow(float64(i), float64(v))))
 		})
@@ -60,26 +84,41 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 	switch op {
 	case NumMulOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsDouble()
 			return inmemory.NewDoubleValue(i * v)
 		})
 	case NumAddOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsDouble()
 			return inmemory.NewDoubleValue(i + v)
 		})
 	case NumSubOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsDouble()
 			return inmemory.NewDoubleValue(i - v)
 		})
 	case NumDivOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsDouble()
 			return inmemory.NewDoubleValue(i / v)
 		})
 	case NumPowOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+			if sv == nil || sv.IsNil() {
+				return sv
+			}
 			i := sv.GetAsDouble()
 			return inmemory.NewDoubleValue(math.Pow(i, v))
 		})
@@ -143,7 +182,7 @@ func NumOpSeries(s df.Series, s2 df.Series, op NumOp) (r df.Series) {
 		panic("both formats are not same")
 	}
 
-	if s.Schema().Format != df.DoubleFormat || s.Schema().Format != df.IntegerFormat {
+	if !(s.Schema().Format == df.DoubleFormat || s.Schema().Format == df.IntegerFormat) {
 		panic("only int and double formats supported")
 	}
 
