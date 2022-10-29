@@ -59,8 +59,8 @@ type DataFrame interface {
 	Sort(order ...SortByIndex) DataFrame
 	SortByName(order ...SortByName) DataFrame
 
-	SelectSeries(index ...int) (DataFrame, error)
-	SelectSeriesByName(col ...string) (DataFrame, error)
+	SelectSeries(index ...int) DataFrame
+	SelectSeriesByName(col ...string) DataFrame
 	MapRow(schema DataFrameSchema, f func(Row) Row) DataFrame
 	FlatMapRow(schema DataFrameSchema, f func(Row) []Row) DataFrame
 	WhereRow(f func(Row) bool) DataFrame
@@ -69,11 +69,11 @@ type DataFrame interface {
 	GetSeries(index int) Series
 	GetSeriesByName(s string) Series
 
-	AddSeries(name string, series Series) (DataFrame, error)
-	UpdateSeries(index int, series Series) (DataFrame, error)
-	UpdateSeriesByName(name string, series Series) (DataFrame, error)
-	RenameSeries(index int, name string, inplace bool) (DataFrame, error)
-	RenameSeriesByName(col string, name string, inplace bool) (DataFrame, error)
+	AddSeries(name string, series Series) DataFrame
+	UpdateSeries(index int, series Series) DataFrame
+	UpdateSeriesByName(name string, series Series) DataFrame
+	RenameSeries(index int, name string, inplace bool) DataFrame
+	RenameSeriesByName(col string, name string, inplace bool) DataFrame
 	RemoveSeries(index int) DataFrame
 	RemoveSeriesByName(s string) DataFrame
 
@@ -81,7 +81,7 @@ type DataFrame interface {
 	ForEachRow(f func(Row))
 
 	Group(key string, others ...string) GroupedDataFrame
-	Append(series DataFrame) DataFrame
+	Append(df DataFrame) DataFrame
 	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
 }
 
@@ -160,8 +160,9 @@ type Row interface {
 // DataFrameSchema Type representing schema of Dataframe
 type DataFrameSchema interface {
 	Series() []SeriesSchema
-	GetByName(s string) (SeriesSchema, error)
-	GetIndexByName(s string) (int, error)
+	GetByName(s string) SeriesSchema
+	GetIndexByName(s string) int
+	HasName(s string) bool
 	Get(i int) SeriesSchema
 	Len() int
 }

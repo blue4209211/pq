@@ -13,10 +13,7 @@ import (
 
 func AsType(s df.DataFrame, t map[string]df.Format) (r df.DataFrame) {
 	for k, v := range t {
-		s, err := s.UpdateSeriesByName(k, series.AsType(s.GetSeriesByName(k), v))
-		if err != nil {
-			panic(err)
-		}
+		s := s.UpdateSeriesByName(k, series.AsType(s.GetSeriesByName(k), v))
 		r = s
 
 	}
@@ -31,34 +28,19 @@ func WhereNill(s df.DataFrame, t map[string]any) (r df.DataFrame) {
 		}
 		switch schema.Format {
 		case df.DateTimeFormat:
-			s, err := s.UpdateSeriesByName(schema.Name, dt.WhereNil(s.GetSeriesByName(schema.Name), val.(time.Time)))
-			if err != nil {
-				panic(err)
-			}
+			s := s.UpdateSeriesByName(schema.Name, dt.WhereNil(s.GetSeriesByName(schema.Name), val.(time.Time)))
 			r = s
 		case df.IntegerFormat:
-			s, err := s.UpdateSeriesByName(schema.Name, num.WhereNilInt(s.GetSeriesByName(schema.Name), val.(int64)))
-			if err != nil {
-				panic(err)
-			}
+			s := s.UpdateSeriesByName(schema.Name, num.WhereNilInt(s.GetSeriesByName(schema.Name), val.(int64)))
 			r = s
 		case df.DoubleFormat:
-			s, err := s.UpdateSeriesByName(schema.Name, num.WhereNilDouble(s.GetSeriesByName(schema.Name), val.(float64)))
-			if err != nil {
-				panic(err)
-			}
+			s := s.UpdateSeriesByName(schema.Name, num.WhereNilDouble(s.GetSeriesByName(schema.Name), val.(float64)))
 			r = s
 		case df.StringFormat:
-			s, err := s.UpdateSeriesByName(schema.Name, str.WhereNil(s.GetSeriesByName(schema.Name), val.(string)))
-			if err != nil {
-				panic(err)
-			}
+			s := s.UpdateSeriesByName(schema.Name, str.WhereNil(s.GetSeriesByName(schema.Name), val.(string)))
 			r = s
 		case df.BoolFormat:
-			s, err := s.UpdateSeriesByName(schema.Name, boolean.WhereNil(s.GetSeriesByName(schema.Name), val.(bool)))
-			if err != nil {
-				panic(err)
-			}
+			s := s.UpdateSeriesByName(schema.Name, boolean.WhereNil(s.GetSeriesByName(schema.Name), val.(bool)))
 			r = s
 		}
 	}
@@ -71,10 +53,7 @@ func Where(s df.DataFrame, t map[string]map[any]any) (r df.DataFrame) {
 		if !ok {
 			continue
 		}
-		s, err := s.UpdateSeriesByName(schema.Name, series.Where(s.GetSeriesByName(schema.Name), schema.Format, val))
-		if err != nil {
-			panic(err)
-		}
+		s := s.UpdateSeriesByName(schema.Name, series.Where(s.GetSeriesByName(schema.Name), schema.Format, val))
 		r = s
 	}
 	return r

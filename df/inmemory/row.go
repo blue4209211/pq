@@ -47,9 +47,9 @@ func (t *inmemoryRow) Get(i int) df.Value {
 }
 
 func (t *inmemoryRow) GetByName(s string) df.Value {
-	index, err := t.schema.GetIndexByName(s)
-	if err != nil {
-		panic(err)
+	index := t.schema.GetIndexByName(s)
+	if index < 0 {
+		panic("col not found - " + s)
 	}
 	return t.Get(index)
 }

@@ -72,16 +72,16 @@ func getKey(r df.Row) string {
 
 func NewGroupedDf(data df.DataFrame, key string, others ...string) df.GroupedDataFrame {
 	indexes := []int{}
-	i, err := data.Schema().GetIndexByName(key)
-	if err != nil {
-		panic(err)
+	i := data.Schema().GetIndexByName(key)
+	if i < 0 {
+		panic("Col not found " + key)
 	}
 	indexes = append(indexes, i)
 
 	for _, o := range others {
-		i, err := data.Schema().GetIndexByName(o)
-		if err != nil {
-			panic(err)
+		i := data.Schema().GetIndexByName(o)
+		if i < 0 {
+			panic("Col not found " + o)
 		}
 		indexes = append(indexes, i)
 	}

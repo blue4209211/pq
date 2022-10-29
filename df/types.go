@@ -361,22 +361,22 @@ type inMemorySchema struct {
 func (t *inMemorySchema) Series() []SeriesSchema {
 	return t.cols
 }
-func (t *inMemorySchema) GetByName(s string) (c SeriesSchema, e error) {
+func (t *inMemorySchema) GetByName(s string) (c1 SeriesSchema) {
 	for _, c := range t.cols {
 		if strings.EqualFold(c.Name, s) {
-			return c, e
+			return c
 		}
 	}
-	return c, errors.New("column Not Found")
+	return c1
 }
 
-func (t *inMemorySchema) GetIndexByName(s string) (index int, e error) {
+func (t *inMemorySchema) GetIndexByName(s string) (index int) {
 	for i, c := range t.cols {
 		if strings.EqualFold(c.Name, s) {
-			return i, e
+			return i
 		}
 	}
-	return index, errors.New("column Not Found")
+	return -1
 }
 
 func (t *inMemorySchema) Get(i int) SeriesSchema {
@@ -385,6 +385,15 @@ func (t *inMemorySchema) Get(i int) SeriesSchema {
 
 func (t *inMemorySchema) Len() int {
 	return len(t.cols)
+}
+
+func (t *inMemorySchema) HasName(s string) bool {
+	for _, c := range t.cols {
+		if strings.EqualFold(c.Name, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewSchema returns new schema based on given columns

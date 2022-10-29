@@ -144,11 +144,10 @@ func TestNewSchema(t *testing.T) {
 		{Name: "c4", Format: BoolFormat},
 	})
 
-	c, e := s.GetByName("c1")
-	assert.Nil(t, e)
+	c := s.GetByName("c1")
 	assert.Equal(t, "c1", c.Name)
-	c, e = s.GetByName("c11")
-	assert.Error(t, e)
+	c = s.GetByName("c11")
+	assert.Equal(t, "", c.Name)
 
 	assert.Equal(t, "c3", s.Get(2).Name)
 	assert.Equal(t, 4, s.Len())
