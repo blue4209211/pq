@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/blue4209211/pq/df"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 type inmemoryDataFrame struct {
@@ -306,7 +308,7 @@ func (t *inmemoryDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 
 func (t *inmemoryDataFrame) SelectRow(b df.Series) df.DataFrame {
 	if b.Schema().Format != df.BoolFormat {
-		panic("Only bool series supported")
+		panic("only bool series supported")
 	}
 	data := make([]df.Row, 0, len(t.data))
 	seriesLength := b.Len()
@@ -348,33 +350,94 @@ func (t *inmemoryDataFrame) Group(key string, others ...string) df.GroupedDataFr
 	return NewGroupedDf(t, key, others...)
 }
 
+func (t *inmemoryDataFrame) GetValue(rowIndx, colIndx int) (v df.Value) {
+	return t.data[rowIndx].Get(colIndx)
+}
+
 func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, jointype df.JoinType, cols map[string]string, f func(df.Row, df.Row) []df.Row) (r df.DataFrame) {
-	val := []df.Row{}
-	if jointype == df.JoinLeft || jointype == df.JoinReft || jointype == df.JoinEqui {
-		min := int64(len(t.data))
-		if data.Len() < min {
-			min = data.Len()
+	if len(cols) == 0 || jointype == df.JoinCross {
+		val := []df.Row{}
+		if jointype == df.JoinLeft || jointype == df.JoinRight || jointype == df.JoinEqui {
+			min := int64(len(t.data))
+			if data.Len() < min {
+				min = data.Len()
+			}
+			for i := int64(0); i < min; i++ {
+				val = append(val, f(t.GetRow(i), data.GetRow(i))...)
+			}
+			if jointype == df.JoinLeft {
+				for i := int64(min); i < int64(len(t.data)); i++ {
+					val = append(val, f(t.GetRow(i), nil)...)
+				}
+			} else if jointype == df.JoinRight {
+				for i := int64(min); i < int64(len(t.data)); i++ {
+					val = append(val, f(nil, data.GetRow(i))...)
+				}
+			}
+		} else if jointype == df.JoinCross {
+			for i := int64(0); i < t.Len(); i++ {
+				for j := int64(0); j < data.Len(); j++ {
+					val = append(val, f(t.GetRow(i), data.GetRow(j))...)
+				}
+			}
 		}
-		for i := int64(0); i < min; i++ {
-			val = append(val, f(t.GetRow(i), data.GetRow(i))...)
+		return NewDataframeFromRow(schema, &val)
+	} else {
+		colIdx := map[int]int{}
+		for k, v := range cols {
+			i1 := t.schema.GetIndexByName(k)
+			if i1 < 0 {
+				panic("col not found - " + k)
+			}
+			i2 := data.Schema().GetIndexByName(v)
+			if i2 < 0 {
+				panic("col not found - " + v)
+			}
+			colIdx[i1] = i2
 		}
+
+		matched := map[int64]int64{}
+
+		val := []df.Row{}
+		for i := int64(0); i < t.Len(); i++ {
+			r1 := t.GetRow(i)
+			for j := int64(0); j < data.Len(); j++ {
+				r2 := data.GetRow(j)
+
+				b2 := true
+				for k, v := range colIdx {
+					if r1.Get(k) != r2.Get(v) {
+						b2 = false
+						break
+					}
+				}
+				if b2 {
+					val = append(val, f(r1, r2)...)
+					matched[i] = j
+				}
+			}
+		}
+
 		if jointype == df.JoinLeft {
-			for i := int64(min); i < int64(len(t.data)); i++ {
+			leftMatched := maps.Keys(matched)
+			for i := int64(0); i < t.Len(); i++ {
+				if slices.Contains(leftMatched, i) {
+					continue
+				}
 				val = append(val, f(t.GetRow(i), nil)...)
 			}
-		} else if jointype == df.JoinReft {
-			for i := int64(min); i < int64(len(t.data)); i++ {
-				val = append(val, f(nil, data.GetRow(i))...)
+		} else if jointype == df.JoinRight {
+			rightMatched := maps.Values(matched)
+			for i := int64(0); i < data.Len(); i++ {
+				if slices.Contains(rightMatched, i) {
+					continue
+				}
+				val = append(val, f(data.GetRow(i), nil)...)
 			}
 		}
-	} else if jointype == df.JoinCross {
-		for i := int64(0); i < t.Len(); i++ {
-			for j := int64(0); j < data.Len(); j++ {
-				val = append(val, f(t.GetRow(i), data.GetRow(j))...)
-			}
-		}
+
+		return NewDataframeFromRow(schema, &val)
 	}
-	return NewDataframeFromRow(schema, &val)
 }
 
 var dfCounter = 0

@@ -112,5 +112,14 @@ func TestInMemoryDf(t *testing.T) {
 	assert.Equal(t, int64(8), appended.Len())
 
 	// Join
-	/// data.Join()
+	equiJoined := data.Join(appended.Schema(), appended, df.JoinEqui, map[string]string{"c1": "c1"}, func(r1, r2 df.Row) []df.Row {
+		return []df.Row{r1}
+	})
+	assert.Equal(t, int64(8), equiJoined.Len())
+
+	crossJoined := data.Join(appended.Schema(), appended, df.JoinCross, map[string]string{}, func(r1, r2 df.Row) []df.Row {
+		return []df.Row{r1}
+	})
+	assert.Equal(t, int64(32), crossJoined.Len())
+
 }

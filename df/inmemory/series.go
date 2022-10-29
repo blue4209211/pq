@@ -171,7 +171,7 @@ func (t *inmemorySeries) Sort(order df.SortOrder) df.Series {
 
 func (t *inmemorySeries) Join(schema df.Format, series df.Series, jointype df.JoinType, f func(df.Value, df.Value) []df.Value) (s df.Series) {
 	val := []df.Value{}
-	if jointype == df.JoinLeft || jointype == df.JoinReft || jointype == df.JoinEqui {
+	if jointype == df.JoinLeft || jointype == df.JoinRight || jointype == df.JoinEqui {
 		min := int64(len(t.data))
 		if series.Len() < min {
 			min = series.Len()
@@ -183,7 +183,7 @@ func (t *inmemorySeries) Join(schema df.Format, series df.Series, jointype df.Jo
 			for i := int64(min); i < int64(len(t.data)); i++ {
 				val = append(val, f(t.Get(i), nil)...)
 			}
-		} else if jointype == df.JoinReft {
+		} else if jointype == df.JoinRight {
 			for i := int64(min); i < int64(len(t.data)); i++ {
 				val = append(val, f(nil, series.Get(i))...)
 			}

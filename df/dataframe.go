@@ -26,7 +26,7 @@ type JoinType string
 const (
 	JoinLeft  JoinType = "left"
 	JoinEqui  JoinType = "equi"
-	JoinReft  JoinType = "right"
+	JoinRight JoinType = "right"
 	JoinOuter JoinType = "outer"
 	JoinCross JoinType = "cross"
 )
@@ -83,6 +83,8 @@ type DataFrame interface {
 	Group(key string, others ...string) GroupedDataFrame
 	Append(df DataFrame) DataFrame
 	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
+
+	GetValue(rowIndx, colIndx int) Value
 }
 
 type GroupedDataFrame interface {
