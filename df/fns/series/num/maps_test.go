@@ -23,6 +23,7 @@ func TestIntOp(t *testing.T) {
 
 func TestDoubleOp(t *testing.T) {
 	s1 := inmemory.NewDoubleSeriesVarArg(1, 2, 3, 4)
+	assert.Equal(t, float64(2), s1.Get(1).GetAsDouble())
 	s2 := DoubleOp(s1, float64(1), NumAddOp)
 	assert.Equal(t, float64(2), s2.Get(0).GetAsDouble())
 	s2 = DoubleOp(s1, float64(1), NumSubOp)

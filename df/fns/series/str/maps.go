@@ -14,10 +14,10 @@ func MaskNil(s df.Series, v string) (r df.Series) {
 		panic("only supported for string format")
 	}
 	r = s.Map(df.StringFormat, func(sv df.Value) df.Value {
-		if sv == nil || sv.IsNil() {
-			return inmemory.NewStringValue(nil)
+		if sv.IsNil() {
+			return inmemory.NewStringValueConst(v)
 		}
-		return inmemory.NewStringValueConst(sv.GetAsString())
+		return sv
 	})
 	return r
 }

@@ -130,11 +130,11 @@ func MaskNilDouble(s df.Series, v float64) (r df.Series) {
 	if s.Schema().Format != df.DoubleFormat {
 		panic("only supported for double format")
 	}
-	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
-			return inmemory.NewDoubleValue(nil)
+	r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+		if sv.IsNil() {
+			return inmemory.NewDoubleValueConst(v)
 		}
-		return inmemory.NewDoubleValueConst(sv.GetAsDouble())
+		return sv
 	})
 	return r
 }
@@ -144,10 +144,10 @@ func MaskNilInt(s df.Series, v int64) (r df.Series) {
 		panic("only supported for int format")
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
-			return inmemory.NewIntValue(nil)
+		if sv.IsNil() {
+			return inmemory.NewIntValueConst(v)
 		}
-		return inmemory.NewIntValueConst(sv.GetAsInt())
+		return sv
 	})
 
 	return r

@@ -18,7 +18,8 @@ func NewDatetimeSeries(data []*time.Time) df.Series {
 func NewDatetimeSeriesVarArg(data ...time.Time) df.Series {
 	d := make([]df.Value, len(data))
 	for i, e := range data {
-		d[i] = NewDatetimeValue(&e)
+		e2 := e
+		d[i] = NewDatetimeValue(&e2)
 	}
 	return NewSeries(d, df.DateTimeFormat)
 }

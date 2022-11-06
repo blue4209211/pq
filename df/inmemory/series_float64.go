@@ -18,7 +18,8 @@ func NewDoubleSeries(data []*float64) df.Series {
 func NewDoubleSeriesVarArg(data ...float64) df.Series {
 	d := make([]df.Value, len(data))
 	for i, e := range data {
-		d[i] = NewDoubleValue(&e)
+		e2 := e
+		d[i] = NewDoubleValue(&e2)
 	}
 	return NewSeries(d, df.DoubleFormat)
 }

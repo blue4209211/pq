@@ -39,6 +39,8 @@ func GetFormatHandler(fmt string) (src FormatSource, err error) {
 		return &XmlDataSource{}, err
 	} else if fmt == "parquet" {
 		return &ParquetDataSource{}, err
+	} else if fmt == "table" {
+		return &TableDataSource{}, err
 	} else {
 		return &TextDataSource{}, err
 	}

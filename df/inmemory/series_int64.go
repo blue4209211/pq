@@ -18,7 +18,8 @@ func NewIntSeries(data []*int64) df.Series {
 func NewIntSeriesVarArg(data ...int64) df.Series {
 	d := make([]df.Value, len(data))
 	for i, e := range data {
-		d[i] = NewIntValue(&e)
+		e2 := e
+		d[i] = NewIntValue(&e2)
 	}
 	return NewSeries(d, df.IntegerFormat)
 }

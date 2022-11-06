@@ -10,10 +10,10 @@ func MaskNil(s df.Series, v bool) (r df.Series) {
 		panic("only supported for bool format")
 	}
 	r = s.Map(df.BoolFormat, func(sv df.Value) df.Value {
-		if sv == nil || sv.Get() == nil {
+		if sv.IsNil() {
 			return inmemory.NewBoolValueConst(v)
 		}
-		return inmemory.NewBoolValueConst(sv.GetAsBool())
+		return sv
 	})
 
 	return r

@@ -18,7 +18,8 @@ func NewBoolSeries(data []*bool) df.Series {
 func NewBoolSeriesVarArg(data ...bool) df.Series {
 	d := make([]df.Value, len(data))
 	for i, e := range data {
-		d[i] = NewBoolValue(&e)
+		e2 := e
+		d[i] = NewBoolValue(&e2)
 	}
 	return NewSeries(d, df.BoolFormat)
 }

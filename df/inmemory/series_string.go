@@ -18,7 +18,8 @@ func NewStringSeries(data []*string) df.Series {
 func NewStringSeriesVarArg(data ...string) df.Series {
 	d := make([]df.Value, len(data))
 	for i, e := range data {
-		d[i] = NewStringValue(&e)
+		e2 := e
+		d[i] = NewStringValue(&e2)
 	}
 	return NewSeries(d, df.StringFormat)
 }

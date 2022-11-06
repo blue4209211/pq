@@ -12,10 +12,10 @@ func MaskNil(s df.Series, v time.Time) (r df.Series) {
 		panic("only supported for datetime format")
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
+		if sv.IsNil() {
 			return inmemory.NewDatetimeValue(&v)
 		}
-		return inmemory.NewDatetimeValueConst(sv.GetAsDatetime())
+		return sv
 	})
 
 	return r
