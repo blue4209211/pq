@@ -42,7 +42,7 @@ func (t *inmemoryDataFrame) GetSeries(i int) df.Series {
 	for j, e := range t.data {
 		series[j] = e.Get(i)
 	}
-	return NewSeriesWihNameAndCopy(&series, t.schema.Get(i).Format, t.schema.Get(i).Name, false)
+	return NewSeriesWihNameAndCopy(series, t.schema.Get(i).Format, t.schema.Get(i).Name, false)
 }
 
 func (t *inmemoryDataFrame) GetSeriesByName(s string) df.Series {

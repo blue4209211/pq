@@ -11,9 +11,9 @@ func MaskNil(s df.Series, v bool) (r df.Series) {
 	}
 	r = s.Map(df.BoolFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.Get() == nil {
-			return inmemory.NewBoolValue(v)
+			return inmemory.NewBoolValueConst(v)
 		}
-		return inmemory.NewBoolValue(sv.GetAsBool())
+		return inmemory.NewBoolValueConst(sv.GetAsBool())
 	})
 
 	return r
@@ -25,9 +25,9 @@ func Not(bs df.Series) (r df.Series) {
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
 		if dfsv == nil || dfsv.Get() == nil {
-			return inmemory.NewBoolValue(true)
+			return inmemory.NewBoolValueConst(true)
 		}
-		return inmemory.NewBoolValue(!dfsv.GetAsBool())
+		return inmemory.NewBoolValueConst(!dfsv.GetAsBool())
 	})
 }
 
@@ -37,9 +37,9 @@ func And(bs df.Series, v bool) (r df.Series) {
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
 		if dfsv == nil || dfsv.Get() == nil {
-			return inmemory.NewBoolValue(false)
+			return inmemory.NewBoolValueConst(false)
 		}
-		return inmemory.NewBoolValue(dfsv.GetAsBool() && v)
+		return inmemory.NewBoolValueConst(dfsv.GetAsBool() && v)
 	})
 }
 
@@ -49,9 +49,9 @@ func Or(bs df.Series, v bool) (r df.Series) {
 	}
 	return bs.Map(df.BoolFormat, func(dfsv df.Value) df.Value {
 		if dfsv == nil || dfsv.Get() == nil {
-			return inmemory.NewBoolValue(false)
+			return inmemory.NewBoolValueConst(false)
 		}
-		return inmemory.NewBoolValue(dfsv.GetAsBool() || v)
+		return inmemory.NewBoolValueConst(dfsv.GetAsBool() || v)
 	})
 }
 
@@ -66,7 +66,7 @@ func AndSeries(s df.Series, bs df.Series) (r df.Series) {
 		if dfsv1 == nil || dfsv1.Get() == nil || dfsv2 == nil || dfsv2.Get() == nil {
 			return r
 		}
-		return append(r, inmemory.NewBoolValue(dfsv1.GetAsBool() && dfsv2.GetAsBool()))
+		return append(r, inmemory.NewBoolValueConst(dfsv1.GetAsBool() && dfsv2.GetAsBool()))
 	})
 
 	return r
@@ -84,7 +84,7 @@ func OrSeries(s df.Series, bs df.Series) (r df.Series) {
 		if dfsv1 == nil || dfsv1.Get() == nil || dfsv2 == nil || dfsv2.Get() == nil {
 			return r
 		}
-		return append(r, inmemory.NewBoolValue(dfsv1.GetAsBool() || dfsv2.GetAsBool()))
+		return append(r, inmemory.NewBoolValueConst(dfsv1.GetAsBool() || dfsv2.GetAsBool()))
 	})
 	return r
 }

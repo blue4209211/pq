@@ -12,10 +12,10 @@ func TestGroupedSeries(t *testing.T) {
 		"abc", "def", "geh", "ijk", "lmn", "abc",
 	}
 
-	s := NewStringSeries(&data)
+	s := NewStringSeriesVarArg(data...)
 	//group
 	sg := NewGroupedSeries(s)
 	assert.Equal(t, sg.Len(), int64(5))
 	assert.Equal(t, len(sg.GetKeys()), 5)
-	assert.Equal(t, sg.Get(NewStringValue("abc")).Len(), int64(2))
+	assert.Equal(t, sg.Get(NewStringValueConst("abc")).Len(), int64(2))
 }

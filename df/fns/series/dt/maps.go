@@ -13,9 +13,9 @@ func MaskNil(s df.Series, v time.Time) (r df.Series) {
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		if sv.Get() == nil {
-			return inmemory.NewDatetimeValue(v)
+			return inmemory.NewDatetimeValue(&v)
 		}
-		return inmemory.NewDatetimeValue(sv.GetAsDatetime())
+		return inmemory.NewDatetimeValueConst(sv.GetAsDatetime())
 	})
 
 	return r
@@ -27,9 +27,9 @@ func Year(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Year()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Year()))
 	})
 
 	return r
@@ -41,9 +41,9 @@ func Month(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Month()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Month()))
 	})
 
 	return r
@@ -55,9 +55,9 @@ func Day(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Day()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Day()))
 	})
 
 	return r
@@ -69,9 +69,9 @@ func Hour(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Hour()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Hour()))
 	})
 
 	return r
@@ -83,9 +83,9 @@ func Minute(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Minute()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Minute()))
 	})
 
 	return r
@@ -97,9 +97,9 @@ func Second(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().Second()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().Second()))
 	})
 
 	return r
@@ -111,9 +111,9 @@ func UnixMilli(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(int64(sv.GetAsDatetime().UnixMilli()))
+		return inmemory.NewIntValueConst(int64(sv.GetAsDatetime().UnixMilli()))
 	})
 
 	return r
@@ -125,9 +125,9 @@ func AddDate(s df.Series, y int, m int, d int) (r df.Series) {
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.DateTimeFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewDatetimeValue(sv.GetAsDatetime().AddDate(y, m, d))
+		return inmemory.NewDatetimeValueConst(sv.GetAsDatetime().AddDate(y, m, d))
 	})
 
 	return r
@@ -139,7 +139,7 @@ func AddTime(s df.Series, h time.Duration, m time.Duration, sec time.Duration) (
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
 		dt := sv.GetAsDatetime()
 		if h != 0 {
@@ -151,7 +151,7 @@ func AddTime(s df.Series, h time.Duration, m time.Duration, sec time.Duration) (
 		if m != 0 {
 			dt = dt.Add(time.Second * sec)
 		}
-		return inmemory.NewDatetimeValue(dt)
+		return inmemory.NewDatetimeValue(&dt)
 	})
 
 	return r
@@ -163,7 +163,7 @@ func Parse(s df.Series, pattern string) (r df.Series) {
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		dt, _ := time.Parse(pattern, sv.GetAsString())
-		return inmemory.NewDatetimeValue(dt)
+		return inmemory.NewDatetimeValue(&dt)
 	})
 
 	return r
@@ -175,9 +175,9 @@ func Format(s df.Series, pattern string) (r df.Series) {
 	}
 	r = s.Map(df.StringFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.StringFormat, nil)
+			return inmemory.NewStringValue(nil)
 		}
-		return inmemory.NewStringValue(sv.GetAsDatetime().Format(pattern))
+		return inmemory.NewStringValueConst(sv.GetAsDatetime().Format(pattern))
 	})
 
 	return r
@@ -189,9 +189,9 @@ func ToUnixMilli(s df.Series, pattern string) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.IntegerFormat, nil)
+			return inmemory.NewIntValue(nil)
 		}
-		return inmemory.NewIntValue(sv.GetAsDatetime().UnixMilli())
+		return inmemory.NewIntValueConst(sv.GetAsDatetime().UnixMilli())
 	})
 
 	return r
@@ -203,9 +203,9 @@ func FromUnixMilli(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.DateTimeFormat, func(sv df.Value) df.Value {
 		if sv == nil || sv.IsNil() {
-			return inmemory.NewValue(df.DateTimeFormat, nil)
+			return inmemory.NewDatetimeValue(nil)
 		}
-		return inmemory.NewDatetimeValue(time.UnixMilli(sv.GetAsInt()))
+		return inmemory.NewDatetimeValueConst(time.UnixMilli(sv.GetAsInt()))
 	})
 
 	return r

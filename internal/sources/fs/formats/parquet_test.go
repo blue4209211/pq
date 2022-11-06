@@ -121,9 +121,9 @@ func TestParquetDataSourceReader(t *testing.T) {
 func TestParquetDataSourceWriter(t *testing.T) {
 	schema := df.NewSchema([]df.SeriesSchema{{Name: "a", Format: df.IntegerFormat}, {Name: "b", Format: df.DoubleFormat}})
 	rows := []df.Row{
-		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(1), inmemory.NewDoubleValue(1.0)})),
-		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(2), inmemory.NewDoubleValue(2.0)})),
-		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValue(3), inmemory.NewDoubleValue(3.0)})),
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValueConst(1), inmemory.NewDoubleValueConst(1.0)})),
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValueConst(2), inmemory.NewDoubleValueConst(2.0)})),
+		inmemory.NewRow(schema, &([]df.Value{inmemory.NewIntValueConst(3), inmemory.NewDoubleValueConst(3.0)})),
 	}
 
 	dataframe := inmemory.NewDataframeFromRow(schema, &rows)
@@ -159,10 +159,10 @@ func BenchmarkParquetParsing(b *testing.B) {
 
 	for i := range records {
 		records[i] = inmemory.NewRow(schema, &([]df.Value{
-			inmemory.NewIntValue(1),
-			inmemory.NewDoubleValue(1.0),
-			inmemory.NewStringValue("abc"),
-			inmemory.NewBoolValue(true),
+			inmemory.NewIntValueConst(1),
+			inmemory.NewDoubleValueConst(1.0),
+			inmemory.NewStringValueConst("abc"),
+			inmemory.NewBoolValueConst(true),
 		}))
 	}
 

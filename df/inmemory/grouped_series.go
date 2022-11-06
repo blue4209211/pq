@@ -60,7 +60,7 @@ func NewGroupedSeries(data df.Series) df.GroupedSeries {
 	})
 
 	for k, v := range gdv {
-		gd[k] = NewSeries(&v, (data).Schema().Format)
+		gd[k] = NewSeries(v, (data).Schema().Format)
 	}
 
 	return &inmemoryGroupedSeries{data: gd, format: data.Schema().Format}
