@@ -1,6 +1,8 @@
 package df
 
-import "context"
+import (
+	"context"
+)
 
 // DataFrameSource Provides interface for all the data sources
 type DataFrameSource interface {

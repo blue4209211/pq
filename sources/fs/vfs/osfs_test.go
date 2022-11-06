@@ -8,7 +8,7 @@ import (
 )
 
 func TestOSFSOpen(t *testing.T) {
-	u, err := url.Parse("../../../../testdata/json1.json")
+	u, err := url.Parse("../../../testdata/json1.json")
 	assert.NoError(t, err)
 	fs, err := NewOsFS(u)
 	assert.NoError(t, err)

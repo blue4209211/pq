@@ -7,13 +7,13 @@ import (
 	"sync"
 
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/internal/sources/fs"
-	"github.com/blue4209211/pq/internal/sources/rdbms"
-	"github.com/blue4209211/pq/internal/sources/std"
+	"github.com/blue4209211/pq/sources/fs"
+	"github.com/blue4209211/pq/sources/rdbms"
+	"github.com/blue4209211/pq/sources/std"
 )
 
 // WriteDataFrame Write Dataframe to Given Source
-func WriteDataFrame(data df.DataFrame, src string, config map[string]string) (err error) {
+func writeDataFrame(data df.DataFrame, src string, config map[string]string) (err error) {
 
 	s, err := GetDataFrameSource(src)
 	if err != nil {
@@ -24,7 +24,7 @@ func WriteDataFrame(data df.DataFrame, src string, config map[string]string) (er
 }
 
 // ReadDataFrames on given files or directories
-func ReadDataFrames(config map[string]string, sourceUrls ...string) (data []df.DataFrame, err error) {
+func readDataFrames(config map[string]string, sourceUrls ...string) (data []df.DataFrame, err error) {
 	dfs := make([]df.DataFrame, len(sourceUrls))
 	ers := make([]error, len(sourceUrls))
 
@@ -84,4 +84,14 @@ func GetDataFrameSource(sourceURL string) (s df.DataFrameSource, err error) {
 	}
 
 	return s, errors.New("unsupported format - " + proto)
+}
+
+// ReadSources Create Dataframe based on given schema and data
+func ReadSources(config map[string]string, srcs ...string) (data []df.DataFrame, err error) {
+	return readDataFrames(config, srcs...)
+}
+
+// WriteSource Write Dataframe to Given Source
+func WriteSource(data df.DataFrame, config map[string]string, src string) (err error) {
+	return writeDataFrame(data, src, config)
 }

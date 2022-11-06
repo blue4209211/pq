@@ -7,13 +7,13 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/df/inmemory"
-	"github.com/blue4209211/pq/internal/sources"
-	"github.com/blue4209211/pq/internal/sources/fs/formats"
+	"github.com/blue4209211/pq/sources"
+	"github.com/blue4209211/pq/sources/fs/formats"
 	"github.com/stretchr/testify/assert"
 )
 
 func queryFiles(query string, fileOrDrs []string, config map[string]string) (data df.DataFrame, err error) {
-	dfs, err := sources.ReadDataFrames(config, fileOrDrs...)
+	dfs, err := sources.ReadSources(config, fileOrDrs...)
 	if err != nil {
 		return data, err
 	}

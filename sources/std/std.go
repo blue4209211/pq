@@ -6,7 +6,7 @@ import (
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/df/inmemory"
-	"github.com/blue4209211/pq/internal/sources/fs/formats"
+	"github.com/blue4209211/pq/sources/fs/formats"
 )
 
 // ConfigStdType source format for StdIn/Out

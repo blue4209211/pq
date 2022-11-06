@@ -10,9 +10,11 @@ import (
 
 	"github.com/blue4209211/pq/internal/engine"
 	"github.com/blue4209211/pq/internal/log"
-	"github.com/blue4209211/pq/internal/sources/fs/formats"
-	"github.com/blue4209211/pq/internal/sources/rdbms"
-	"github.com/blue4209211/pq/internal/sources/std"
+	"github.com/blue4209211/pq/sources"
+	"github.com/blue4209211/pq/sources/fs/formats"
+	"github.com/blue4209211/pq/sources/rdbms"
+	"github.com/blue4209211/pq/sources/std"
+	"github.com/blue4209211/pq/sql"
 )
 
 func main() {
@@ -91,13 +93,13 @@ func main() {
 
 	log.Debug("files - ", fileNames)
 
-	df, err := QuerySources(query, inputConfig, fileNames...)
+	df, err := sql.QuerySources(query, inputConfig, fileNames...)
 	if err != nil {
 		log.Error("Error - ", err)
 		os.Exit(1)
 	}
 
-	err = WriteSource(df, outputConfig, *confOutputfile)
+	err = sources.WriteSource(df, outputConfig, *confOutputfile)
 
 	if err != nil {
 		log.Error(err)
