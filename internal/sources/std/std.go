@@ -47,7 +47,7 @@ func (t *DataSource) Read(context context.Context, url string, args map[string]s
 func (t *DataSource) Write(context context.Context, data df.DataFrame, path string, args map[string]string) (err error) {
 	streamFormat, ok := args[ConfigStdType]
 	if !ok {
-		streamFormat = "json"
+		streamFormat = "table"
 	}
 	handler, err := formats.GetFormatHandler(streamFormat)
 	if err != nil {

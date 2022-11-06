@@ -68,13 +68,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 		if err == io.EOF {
 			if len(textData) > 0 {
 				rowData := []df.Value{
-					inmemory.NewStringValue(string(textData) + string(textArr)), inmemory.NewIntValue(cnt),
+					inmemory.NewStringValueConst(string(textData) + string(textArr)), inmemory.NewIntValueConst(cnt),
 				}
 				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 				textData = textData[:0]
 			} else if len(textArr) > 0 {
 				rowData := []df.Value{
-					inmemory.NewStringValue(string(textArr)), inmemory.NewIntValue(cnt),
+					inmemory.NewStringValueConst(string(textArr)), inmemory.NewIntValueConst(cnt),
 				}
 				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 			}
@@ -83,13 +83,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 
 		if len(textData) > 0 {
 			rowData := []df.Value{
-				inmemory.NewStringValue(string(textData) + string(textArr)), inmemory.NewIntValue(cnt),
+				inmemory.NewStringValueConst(string(textData) + string(textArr)), inmemory.NewIntValueConst(cnt),
 			}
 			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 			textData = textData[:0]
 		} else {
 			rowData := []df.Value{
-				inmemory.NewStringValue(string(textArr)), inmemory.NewIntValue(cnt),
+				inmemory.NewStringValueConst(string(textArr)), inmemory.NewIntValueConst(cnt),
 			}
 			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
 		}

@@ -14,10 +14,10 @@ func MaskNil(s df.Series, v string) (r df.Series) {
 		panic("only supported for string format")
 	}
 	r = s.Map(df.StringFormat, func(sv df.Value) df.Value {
-		if sv == nil || sv.IsNil() {
-			return inmemory.NewStringValue(v)
+		if sv.IsNil() {
+			return inmemory.NewStringValueConst(v)
 		}
-		return inmemory.NewStringValue(sv.GetAsString())
+		return sv
 	})
 	return r
 }
@@ -170,7 +170,7 @@ func TrimPrefix(s df.Series, suf string) (r df.Series) {
 
 func ConcatSeries(s df.Series, sep string, s1 df.Series) (r df.Series) {
 	r = s.Join(df.StringFormat, s1, df.JoinEqui, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
-		return append(r, inmemory.NewStringValue(fmt.Sprintf("%v%v%v", dfsv1.Get(), sep, dfsv2.Get())))
+		return append(r, inmemory.NewStringValueConst(fmt.Sprintf("%v%v%v", dfsv1.Get(), sep, dfsv2.Get())))
 	})
 	return r
 }

@@ -10,8 +10,8 @@ func Sum(s df.Series) (r df.Value) {
 		panic("only int/double format supported")
 	}
 	val := s.Reduce(func(dfsv1, dfsv2 df.Value) df.Value {
-		return inmemory.NewDoubleValue(dfsv2.GetAsDouble() + dfsv1.GetAsDouble())
-	}, inmemory.NewDoubleValue(0))
+		return inmemory.NewDoubleValueConst(dfsv2.GetAsDouble() + dfsv1.GetAsDouble())
+	}, inmemory.NewDoubleValueConst(0))
 	return val
 }
 
@@ -48,7 +48,7 @@ func Max(s df.Series) (r df.Value) {
 }
 
 func Mean(s df.Series) (r df.Value) {
-	return inmemory.NewDoubleValue(Sum(s).GetAsDouble() / float64(s.Len()))
+	return inmemory.NewDoubleValueConst(Sum(s).GetAsDouble() / float64(s.Len()))
 }
 
 func Median(s df.Series) (r df.Value) {
@@ -58,9 +58,9 @@ func Median(s df.Series) (r df.Value) {
 	s = s.Sort(df.SortOrderASC)
 	middle := s.Len() / 2
 	if s.Len()%2 == 0 {
-		r = inmemory.NewDoubleValue((s.Get(middle-1).GetAsDouble() + s.Get(middle).GetAsDouble()) / 2)
+		r = inmemory.NewDoubleValueConst((s.Get(middle-1).GetAsDouble() + s.Get(middle).GetAsDouble()) / 2)
 	} else {
-		r = inmemory.NewDoubleValue(s.Get(middle).GetAsDouble())
+		r = inmemory.NewDoubleValueConst(s.Get(middle).GetAsDouble())
 	}
 	return r
 }

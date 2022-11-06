@@ -9,9 +9,9 @@ import (
 
 func TestInMemoryDf(t *testing.T) {
 	data := NewDataframeWithNameFromSeries("df1", []string{"c1", "c2", "c3"}, &[]df.Series{
-		NewIntSeries(&[]int64{1, 2, 3, 4}),
-		NewDoubleSeries(&[]float64{1, 2, 3, 4}),
-		NewStringSeries(&[]string{"a1", "a2", "a3", "a4"}),
+		NewIntSeriesVarArg(1, 2, 3, 4),
+		NewDoubleSeriesVarArg(1, 2, 3, 4),
+		NewStringSeriesVarArg("a1", "a2", "a3", "a4"),
 	})
 
 	// name
@@ -22,7 +22,7 @@ func TestInMemoryDf(t *testing.T) {
 	//GetSeriesByName
 	assert.Equal(t, 3.0, data.GetSeries(1).Get(2).Get())
 	// AddSeries
-	data2 := data.AddSeries("c4", NewBoolSeries(&[]bool{true, true, false, false}))
+	data2 := data.AddSeries("c4", NewBoolSeriesVarArg(true, true, false, false))
 	assert.Equal(t, 4, data2.Schema().Len())
 	assert.Equal(t, 3, data.Schema().Len())
 
@@ -57,7 +57,7 @@ func TestInMemoryDf(t *testing.T) {
 	mappedSchema := df.NewSchema([]df.SeriesSchema{{Name: "m1", Format: df.IntegerFormat}})
 	mapped := data.MapRow(mappedSchema, func(r df.Row) df.Row {
 		return NewRowFromMap(&map[string]df.Value{
-			"m1": NewIntValue(r.GetAsInt(0)),
+			"m1": NewIntValueConst(r.GetAsInt(0)),
 		})
 	})
 	assert.Equal(t, int64(4), mapped.Len())
@@ -67,10 +67,10 @@ func TestInMemoryDf(t *testing.T) {
 	mapped = data.FlatMapRow(mappedSchema, func(r df.Row) []df.Row {
 		return []df.Row{
 			NewRowFromMap(&map[string]df.Value{
-				"m1": NewIntValue(r.GetAsInt(0)),
+				"m1": NewIntValueConst(r.GetAsInt(0)),
 			}),
 			NewRowFromMap(&map[string]df.Value{
-				"m1": NewIntValue(r.GetAsInt(0)),
+				"m1": NewIntValueConst(r.GetAsInt(0)),
 			}),
 		}
 	})
@@ -78,7 +78,7 @@ func TestInMemoryDf(t *testing.T) {
 	assert.Equal(t, 1, mapped.Schema().Len())
 
 	// SelectRow
-	selectedRow := data.SelectRow(NewBoolSeries(&[]bool{false, true, false, true}))
+	selectedRow := data.SelectRow(NewBoolSeriesVarArg(false, true, false, true))
 	assert.Equal(t, int64(2), selectedRow.Len())
 
 	// ForEachRow
@@ -88,7 +88,7 @@ func TestInMemoryDf(t *testing.T) {
 
 	// UpdateSeries/UpdateSeriesByName
 	updatedData := data.UpdateSeriesByName("c1", data.GetSeriesByName("c1").Map(df.StringFormat, func(v df.Value) df.Value {
-		return NewStringValue(v.GetAsString())
+		return NewStringValueConst(v.GetAsString())
 	}))
 	s1 := updatedData.Schema().GetByName("c1")
 	assert.Equal(t, df.StringFormat, s1.Format)

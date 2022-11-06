@@ -30,7 +30,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(i * v)
+			return inmemory.NewIntValueConst(i * v)
 		})
 	case NumAddOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
@@ -38,7 +38,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(i + v)
+			return inmemory.NewIntValueConst(i + v)
 		})
 	case NumSubOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
@@ -46,7 +46,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(i - v)
+			return inmemory.NewIntValueConst(i - v)
 		})
 	case NumDivOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
@@ -54,7 +54,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(i / v)
+			return inmemory.NewIntValueConst(i / v)
 		})
 	case NumModOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
@@ -62,7 +62,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(i % v)
+			return inmemory.NewIntValueConst(i % v)
 		})
 	case NumPowOp:
 		r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
@@ -70,7 +70,7 @@ func IntOp(s df.Series, v int64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsInt()
-			return inmemory.NewIntValue(int64(math.Pow(float64(i), float64(v))))
+			return inmemory.NewIntValueConst(int64(math.Pow(float64(i), float64(v))))
 		})
 	}
 
@@ -88,7 +88,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsDouble()
-			return inmemory.NewDoubleValue(i * v)
+			return inmemory.NewDoubleValueConst(i * v)
 		})
 	case NumAddOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
@@ -96,7 +96,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsDouble()
-			return inmemory.NewDoubleValue(i + v)
+			return inmemory.NewDoubleValueConst(i + v)
 		})
 	case NumSubOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
@@ -104,7 +104,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsDouble()
-			return inmemory.NewDoubleValue(i - v)
+			return inmemory.NewDoubleValueConst(i - v)
 		})
 	case NumDivOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
@@ -112,7 +112,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsDouble()
-			return inmemory.NewDoubleValue(i / v)
+			return inmemory.NewDoubleValueConst(i / v)
 		})
 	case NumPowOp:
 		r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
@@ -120,7 +120,7 @@ func DoubleOp(s df.Series, v float64, op NumOp) (r df.Series) {
 				return sv
 			}
 			i := sv.GetAsDouble()
-			return inmemory.NewDoubleValue(math.Pow(i, v))
+			return inmemory.NewDoubleValueConst(math.Pow(i, v))
 		})
 	}
 	return r
@@ -130,11 +130,11 @@ func MaskNilDouble(s df.Series, v float64) (r df.Series) {
 	if s.Schema().Format != df.DoubleFormat {
 		panic("only supported for double format")
 	}
-	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
-			return inmemory.NewDoubleValue(v)
+	r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
+		if sv.IsNil() {
+			return inmemory.NewDoubleValueConst(v)
 		}
-		return inmemory.NewDoubleValue(sv.GetAsDouble())
+		return sv
 	})
 	return r
 }
@@ -144,10 +144,10 @@ func MaskNilInt(s df.Series, v int64) (r df.Series) {
 		panic("only supported for int format")
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
-		if sv.Get() == nil {
-			return inmemory.NewIntValue(v)
+		if sv.IsNil() {
+			return inmemory.NewIntValueConst(v)
 		}
-		return inmemory.NewIntValue(sv.GetAsInt())
+		return sv
 	})
 
 	return r
@@ -159,7 +159,7 @@ func ParseInt(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.IntegerFormat, func(sv df.Value) df.Value {
 		i, _ := strconv.Atoi(sv.GetAsString())
-		return inmemory.NewIntValue(int64(i))
+		return inmemory.NewIntValueConst(int64(i))
 	})
 
 	return r
@@ -171,7 +171,7 @@ func ParseDouble(s df.Series) (r df.Series) {
 	}
 	r = s.Map(df.DoubleFormat, func(sv df.Value) df.Value {
 		i, _ := strconv.ParseFloat(sv.GetAsString(), 64)
-		return inmemory.NewDoubleValue(i)
+		return inmemory.NewDoubleValueConst(i)
 	})
 
 	return r

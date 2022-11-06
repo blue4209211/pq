@@ -32,7 +32,7 @@ func main() {
 	confInputXMLSingleLine := flag.Bool("input."+formats.ConfigXMLSingleLine, true, "Read Xml element from each line")
 	confDBQuery := flag.String("input."+rdbms.ConfigDBQuery, "", "Rdbms Query")
 
-	confOutputStdType := flag.String("output."+std.ConfigStdType, "json", "Format for Writing to Std(console)")
+	confOutputStdType := flag.String("output."+std.ConfigStdType, "table", "Format for Writing to Std(console)")
 	confOutputCSVSep := flag.String("output."+formats.ConfigCsvSep, ",", "CSV File Seprator")
 	confOutputCSVHeader := flag.Bool("output."+formats.ConfigCsvHeader, true, "First Line as Header")
 	confOutputJSONSingleLine := flag.Bool("output."+formats.ConfigJSONSingleLine, true, "Parse JSON in multiline mode")

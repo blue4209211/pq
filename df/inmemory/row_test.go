@@ -10,7 +10,7 @@ import (
 
 func TestRow(t *testing.T) {
 
-	data := []df.Value{NewIntValue(1), NewDoubleValue(2.0), NewStringValue("abc"), NewBoolValue(false), NewDatetimeValue(time.Now()), NewValue(df.StringFormat, nil)}
+	data := []df.Value{NewIntValueConst(1), NewDoubleValueConst(2.0), NewStringValueConst("abc"), NewBoolValueConst(false), NewDatetimeValueConst(time.Now()), NewStringValue(nil)}
 
 	r := NewRow(df.NewSchema([]df.SeriesSchema{
 		{Name: "c1", Format: df.IntegerFormat},
@@ -42,7 +42,7 @@ func TestRow(t *testing.T) {
 	assert.Equal(t, 2.0, r1.GetByName("c2").Get())
 
 	// Append(name string, v Value) Row
-	r1 = r.Append("c7", NewDoubleValue(11.0))
+	r1 = r.Append("c7", NewDoubleValueConst(11.0))
 	assert.Equal(t, int(7), r1.Len())
 	assert.Equal(t, int(6), r.Len())
 

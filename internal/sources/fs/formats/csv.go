@@ -120,7 +120,7 @@ func (t *csvDataSourceReader) Data() *[]df.Row {
 	for i, record := range t.records[index:] {
 		row := make([]df.Value, len(record))
 		for j, cell := range record {
-			row[j] = inmemory.NewStringValue(cell)
+			row[j] = inmemory.NewStringValueConst(cell)
 		}
 		data[i] = inmemory.NewRow(schema, &row)
 	}

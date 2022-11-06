@@ -9,7 +9,7 @@ import (
 )
 
 func TestMask(t *testing.T) {
-	s1 := inmemory.NewIntSeries(&[]int64{1, 2, 3, 4})
+	s1 := inmemory.NewIntSeriesVarArg(1, 2, 3, 4)
 	s2 := Mask(s1, df.IntegerFormat, map[any]any{
 		int64(1): int64(11),
 	})
@@ -17,7 +17,7 @@ func TestMask(t *testing.T) {
 }
 
 func TestAsType(t *testing.T) {
-	s1 := inmemory.NewIntSeries(&[]int64{1, 2, 3, 4})
+	s1 := inmemory.NewIntSeriesVarArg(1, 2, 3, 4)
 	s2 := AsType(s1, df.StringFormat)
 	assert.Equal(t, "1", s2.Get(0).GetAsString())
 }
