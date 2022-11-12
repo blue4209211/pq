@@ -65,51 +65,10 @@ func Median(s df.Series) (r df.Value) {
 	return r
 }
 
-func Describe(s df.Series) (r df.DataFrame) {
-	return r
-}
-
 func CountDistinctValues(s df.Series) (r map[string]int64) {
 	r = map[string]int64{}
 	s.Group().ForEach(func(a df.Value, dfs df.Series) {
 		r[a.GetAsString()] = dfs.Len()
 	})
-	return r
-}
-
-func Union(s df.Series, s1 df.Series, all bool) (r df.Series) {
-	r = s.Append(s1)
-	if !all {
-		r = r.Distinct()
-	}
-	return r
-}
-
-func Intersection(s df.Series, s1 df.Series) (r df.Series) {
-	if s.Schema().Format != s1.Schema().Format {
-		panic("formats should match")
-	}
-	r = s.Join(df.StringFormat, s1, df.JoinCross, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
-		if dfsv1.Get() == dfsv2.Get() {
-			return append(r, inmemory.NewValue(s.Schema().Format, dfsv1.Get()))
-		}
-		return r
-	})
-
-	return r.Distinct()
-}
-
-func Substract(s df.Series, s1 df.Series) (r df.Series) {
-	if s.Schema().Format != s1.Schema().Format {
-		panic("formats should match")
-	}
-	return r
-}
-
-func CountNotNil(s df.Series) (r int64) {
-	return HasNotNil(s).Len()
-}
-
-func Covariance(s df.Series) (r float64) {
 	return r
 }

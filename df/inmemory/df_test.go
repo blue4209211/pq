@@ -49,7 +49,7 @@ func TestInMemoryDf(t *testing.T) {
 	assert.Equal(t, int64(4), data.Len())
 
 	// SelectSeriesByName
-	selectedSeries := data.SelectSeriesByName("c1", "c3")
+	selectedSeries := data.SelectBySeriesName("c1", "c3")
 	assert.Equal(t, int64(4), selectedSeries.Len())
 	assert.Equal(t, 2, selectedSeries.Schema().Len())
 
@@ -76,10 +76,6 @@ func TestInMemoryDf(t *testing.T) {
 	})
 	assert.Equal(t, int64(8), mapped.Len())
 	assert.Equal(t, 1, mapped.Schema().Len())
-
-	// SelectRow
-	selectedRow := data.SelectRow(NewBoolSeriesVarArg(false, true, false, true))
-	assert.Equal(t, int64(2), selectedRow.Len())
 
 	// ForEachRow
 	data.ForEachRow(func(r df.Row) {
@@ -121,5 +117,57 @@ func TestInMemoryDf(t *testing.T) {
 		return []df.Row{r1}
 	})
 	assert.Equal(t, int64(32), crossJoined.Len())
+}
 
+func BenchmarkDfMap(t *testing.B) {
+	s1 := NewIntRangeSeries(10000000)
+	s2 := NewIntRangeSeries(10000000)
+
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+
+	for i := 0; i < t.N; i++ {
+		d.MapRow(d.Schema(), func(r df.Row) df.Row {
+			return NewRow(d.Schema(), &[]df.Value{NewIntValueConst(r.Get(0).GetAsInt() * 2), NewIntValueConst(r.Get(0).GetAsInt() + 2)})
+		})
+	}
+}
+
+func BenchmarkDfMapPar(t *testing.B) {
+	s1 := NewIntRangeSeries(10000000)
+	s2 := NewIntRangeSeries(10000000)
+
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+	d.(*inmemoryDataFrame).partitions = 10
+	for i := 0; i < t.N; i++ {
+		d.MapRow(d.Schema(), func(r df.Row) df.Row {
+			return NewRow(d.Schema(), &[]df.Value{NewIntValueConst(r.Get(0).GetAsInt() * 2), NewIntValueConst(r.Get(0).GetAsInt() + 2)})
+		})
+	}
+}
+
+func BenchmarkDfWhere(t *testing.B) {
+	s1 := NewIntRangeSeries(10000000)
+	s2 := NewIntRangeSeries(10000000)
+
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+
+	for i := 0; i < t.N; i++ {
+		d.WhereRow(func(r df.Row) bool {
+			return r.Get(0).GetAsInt()/2 == 0
+		})
+	}
+}
+
+func BenchmarkDfWherePar(t *testing.B) {
+	s1 := NewIntRangeSeries(10000000)
+	s2 := NewIntRangeSeries(10000000)
+
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+	d.(*inmemoryDataFrame).partitions = 10
+
+	for i := 0; i < t.N; i++ {
+		d.WhereRow(func(r df.Row) bool {
+			return r.Get(0).GetAsInt()/2 == 0
+		})
+	}
 }

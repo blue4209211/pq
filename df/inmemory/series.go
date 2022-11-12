@@ -1,14 +1,19 @@
 package inmemory
 
 import (
+	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/blue4209211/pq/df"
+	"github.com/blue4209211/pq/internal/log"
+	"github.com/samber/lo"
 )
 
 type genericSeries struct {
-	schema df.SeriesSchema
-	data   []df.Value
+	schema     df.SeriesSchema
+	data       []df.Value
+	partitions int
 }
 
 func (t *genericSeries) Schema() df.SeriesSchema {
@@ -24,49 +29,177 @@ func (t *genericSeries) Get(i int64) df.Value {
 }
 
 func (t *genericSeries) ForEach(f func(df.Value)) {
-	for _, d := range t.data {
-		f(d)
+	if t.partitions < 2 {
+		for _, d := range t.data {
+			f(d)
+		}
+	} else {
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end int) {
+				defer wg.Done()
+				for k := start; k < end; k++ {
+					f(t.data[k])
+				}
+			}(start, end)
+		}
+		wg.Wait()
 	}
 }
 
 func (t *genericSeries) Where(f func(df.Value) bool) df.Series {
-	data := make([]df.Value, 0, len(t.data))
-	for _, d := range t.data {
-		if f(d) {
-			data = append(data, d)
+	if t.partitions < 2 {
+		data := make([]df.Value, 0, len(t.data))
+		for i := int64(0); i < t.Len(); i++ {
+			if f(t.data[i]) {
+				data = append(data, t.data[i])
+			}
 		}
+		return NewSeries(data, t.schema.Format)
+	} else {
+		data := make([]df.Value, 0, len(t.data))
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		mutex := sync.Mutex{}
+
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end, part int) {
+				defer wg.Done()
+				data2 := []df.Value{}
+				for k := start; k < end; k++ {
+					if f(t.data[k]) {
+						data2 = append(data2, t.data[k])
+					}
+				}
+				mutex.Lock()
+				data = append(data, data2...)
+				mutex.Unlock()
+			}(start, end, part)
+		}
+		wg.Wait()
+		return NewSeries(data, t.schema.Format)
 	}
-	return NewSeries(data, t.schema.Format)
 }
 
-func (t *genericSeries) Select(b df.Series) df.Series {
-	if b.Schema().Format != df.BoolFormat {
-		panic("Only bool series supported")
-	}
-	data := make([]df.Value, 0, len(t.data))
-	seriesLength := b.Len()
-	for i, d := range t.data {
-		if int64(i) < seriesLength && b.Get(int64(i)).GetAsBool() {
-			data = append(data, d)
+func (t *genericSeries) Select(e df.Expr) (s df.Series) {
+	log.Debug("select called", e.OpType(), e.Name())
+
+	var expressionData df.Series
+	if e.Parent() != nil {
+		expressionData = t.Select(e.Parent())
+	} else {
+		if e.Const() != nil {
+			return NewConstSeries(e.Const(), int(t.Len()))
+		} else if e.Col() != "" {
+			panic("only const is supported in series expression")
 		}
 	}
-	return NewSeries(data, t.schema.Format)
+
+	if e.OpType() == df.ExprTypeFilter {
+		log.Debug("filter called")
+		args := []df.Value{}
+		if len(e.FilterOp().Args()) > 0 {
+			args = lo.Map(e.FilterOp().Args(), func(v df.Expr, i int) df.Value {
+				return v.Const()
+			})
+		}
+		return expressionData.Where(func(v df.Value) bool {
+			return e.FilterOp().ApplyFilter(v, args...)
+		})
+	} else if e.OpType() == df.ExprTypeMap {
+		args := []df.Value{}
+		if len(e.MapOp().Args()) > 0 {
+			args = lo.Map(e.MapOp().Args(), func(v df.Expr, i int) df.Value {
+				return v.Const()
+			})
+		}
+		return expressionData.Map(e.MapOp().ReturnFormat(), func(v df.Value) df.Value {
+			return e.MapOp().ApplyMap(v, args...)
+		})
+	} else if e.OpType() == "" {
+		return t
+	} else {
+		panic(fmt.Sprintf("unsupported opType %s, opName %s ", e.OpType(), e.Name()))
+	}
 }
 
 func (t *genericSeries) Map(s df.Format, f func(df.Value) df.Value) df.Series {
-	data := make([]df.Value, 0, len(t.data))
-	for _, d := range t.data {
-		data = append(data, f(d))
+	if t.partitions < 2 {
+		data := make([]df.Value, len(t.data))
+		for i := 0; i < int(t.Len()); i++ {
+			data[i] = f(t.data[i])
+		}
+		return NewSeries(data, s)
+	} else {
+		data := make([]df.Value, len(t.data))
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end int) {
+				defer wg.Done()
+				for k := start; k < end; k++ {
+					data[k] = f(t.data[k])
+				}
+			}(start, end)
+		}
+		wg.Wait()
+		return NewSeries(data, s)
 	}
-	return NewSeries(data, s)
 }
 
 func (t *genericSeries) FlatMap(s df.Format, f func(df.Value) []df.Value) df.Series {
-	data := make([]df.Value, 0, len(t.data))
-	for _, d := range t.data {
-		data = append(data, f(d)...)
+	if t.partitions < 2 {
+		data := make([]df.Value, 0, len(t.data))
+		for _, d := range t.data {
+			data = append(data, f(d)...)
+		}
+		return NewSeries(data, s)
+	} else {
+		data := make([]df.Value, 0, len(t.data))
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		mutex := sync.Mutex{}
+
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end, part int) {
+				defer wg.Done()
+				data2 := []df.Value{}
+				for k := start; k < end; k++ {
+					data2 = append(data2, f(data[k])...)
+				}
+				mutex.Lock()
+				data = append(data, data2...)
+				mutex.Unlock()
+			}(start, end, part)
+		}
+		wg.Wait()
+		return NewSeries(data, t.schema.Format)
 	}
-	return NewSeries(data, s)
 }
 
 func (t *genericSeries) Reduce(f func(df.Value, df.Value) df.Value, startValue df.Value) df.Value {
@@ -92,6 +225,52 @@ func (t *genericSeries) Distinct() df.Series {
 		}
 	}
 	return NewSeries(data, t.schema.Format)
+}
+
+func (t *genericSeries) WhenNil(v1 df.Value) df.Series {
+	return t.Map(t.schema.Format, func(v df.Value) df.Value {
+		if v.IsNil() {
+			return v1
+		}
+		return v
+	})
+}
+
+func (t *genericSeries) When(data map[any]df.Value) df.Series {
+	return t.Map(t.schema.Format, func(v df.Value) df.Value {
+		v1, ok := data[v.Get()]
+		if ok {
+			return v1
+		}
+		return v
+	})
+}
+
+func (t *genericSeries) AsFormat(f df.Format) df.Series {
+	return t.Map(f, func(v df.Value) df.Value {
+		v1, err := f.Convert(v.Get())
+		if err != nil {
+			panic(fmt.Sprintf("unable to convert - %v", v.Get()))
+		}
+		return NewValue(f, v1)
+	})
+}
+
+func (t *genericSeries) Expr() df.Expr {
+	switch t.schema.Format {
+	case df.BoolFormat:
+		return NewBoolExpr()
+	case df.IntegerFormat:
+		return NewIntExpr()
+	case df.DoubleFormat:
+		return NewDoubleExpr()
+	case df.StringFormat:
+		return NewStringExpr()
+	case df.DateTimeFormat:
+		return NewDatetimeExpr()
+	default:
+		panic("unsupported format")
+	}
 }
 
 func (t *genericSeries) Copy() df.Series {
@@ -206,6 +385,35 @@ func (t *genericSeries) Append(s df.Series) df.Series {
 	return NewSeries(dv, t.schema.Format)
 }
 
+func (t *genericSeries) Intersection(s df.Series) df.Series {
+	if s.Schema().Format != s.Schema().Format {
+		panic("formats should match")
+	}
+	return t.Join(df.StringFormat, s, df.JoinCross, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
+		if dfsv1.Get() == dfsv2.Get() {
+			return append(r, NewValue(s.Schema().Format, dfsv1.Get()))
+		}
+		return r
+	}).Distinct()
+
+}
+
+func (t *genericSeries) Substract(s df.Series) df.Series {
+	if s.Schema().Format != s.Schema().Format {
+		panic("formats should match")
+	}
+	return t.Join(df.StringFormat, s, df.JoinLeft, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
+		if dfsv2 == nil {
+			return []df.Value{dfsv1}
+		}
+		return r
+	}).Distinct()
+}
+
+func (t *genericSeries) Union(s df.Series) df.Series {
+	return t.Append(s)
+}
+
 func (t *genericSeries) Group() df.GroupedSeries {
 	return NewGroupedSeries(t)
 }
@@ -222,4 +430,13 @@ func NewSeriesWihNameAndCopy(data []df.Value, colFormat df.Format, colName strin
 		copy(data2, data)
 	}
 	return &genericSeries{schema: df.SeriesSchema{Name: colName, Format: colFormat}, data: data2}
+}
+
+func NewConstSeries(data df.Value, n int) df.Series {
+	s := make([]df.Value, n)
+	for i := 0; i < n; i++ {
+		s[i] = data
+	}
+
+	return &genericSeries{schema: df.SeriesSchema{Name: "", Format: data.Schema()}, data: s}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/blue4209211/pq/df"
 	"golang.org/x/exp/maps"
@@ -11,9 +12,10 @@ import (
 )
 
 type inmemoryDataFrame struct {
-	name   string
-	schema df.DataFrameSchema
-	data   []df.Row
+	name       string
+	schema     df.DataFrameSchema
+	data       []df.Row
+	partitions int
 }
 
 func (t *inmemoryDataFrame) Schema() df.DataFrameSchema {
@@ -51,6 +53,28 @@ func (t *inmemoryDataFrame) GetSeriesByName(s string) df.Series {
 		panic("col not found - " + s)
 	}
 	return t.GetSeries(index)
+}
+
+func (t *inmemoryDataFrame) GetSeriesExprByName(s string) df.Expr {
+	index := t.schema.GetIndexByName(s)
+	if index < 0 {
+		panic("col not found - " + s)
+	}
+	ss := t.schema.Get(index)
+	switch ss.Format {
+	case df.BoolFormat:
+		return NewBoolColExpr(ss.Name)
+	case df.IntegerFormat:
+		return NewIntColExpr(ss.Name)
+	case df.DoubleFormat:
+		return NewDoubleColExpr(ss.Name)
+	case df.StringFormat:
+		return NewStringColExpr(ss.Name)
+	case df.DateTimeFormat:
+		return NewDatetimeColExpr(ss.Name)
+	default:
+		panic("unsupported format")
+	}
 }
 
 func (t *inmemoryDataFrame) GetRow(r int64) df.Row {
@@ -177,7 +201,11 @@ func (t *inmemoryDataFrame) RenameSeriesByName(col string, name string, inplace 
 	return t.RenameSeries(index, name, inplace)
 }
 
-func (t *inmemoryDataFrame) SelectSeries(index ...int) (d df.DataFrame) {
+func (t *inmemoryDataFrame) Select(index ...df.Expr) (d df.DataFrame) {
+	return d
+}
+
+func (t *inmemoryDataFrame) SelectBySeriesIndex(index ...int) (d df.DataFrame) {
 	if len(index) == 0 {
 		return d
 	}
@@ -194,7 +222,7 @@ func (t *inmemoryDataFrame) SelectSeries(index ...int) (d df.DataFrame) {
 	return NewDataframeFromRow(df.NewSchema(cols), &data)
 }
 
-func (t *inmemoryDataFrame) SelectSeriesByName(col ...string) (d df.DataFrame) {
+func (t *inmemoryDataFrame) SelectBySeriesName(col ...string) (d df.DataFrame) {
 	if len(col) == 0 {
 		return d
 	}
@@ -209,7 +237,7 @@ func (t *inmemoryDataFrame) SelectSeriesByName(col ...string) (d df.DataFrame) {
 		idexes[i] = index
 	}
 
-	return t.SelectSeries(idexes...)
+	return t.SelectBySeriesIndex(idexes...)
 }
 
 func (t *inmemoryDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
@@ -280,44 +308,109 @@ func (t *inmemoryDataFrame) SortByName(order ...df.SortByName) df.DataFrame {
 
 func (t *inmemoryDataFrame) MapRow(cols df.DataFrameSchema, f func(df.Row) df.Row) df.DataFrame {
 
-	data := make([]df.Row, t.Len())
-	for i, r := range t.data {
-		data[i] = f(r)
+	if t.partitions < 2 {
+		data := make([]df.Row, t.Len())
+		for i, r := range t.data {
+			data[i] = f(r)
+		}
+		return NewDataframeFromRow(cols, &data)
+	} else {
+		data := make([]df.Row, len(t.data))
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end int) {
+				defer wg.Done()
+				for k := start; k < end; k++ {
+					data[k] = f(t.data[k])
+				}
+			}(start, end)
+		}
+		wg.Wait()
+		return NewDataframeFromRow(cols, &data)
 	}
-
-	return NewDataframeFromRow(cols, &data)
 }
 
 func (t *inmemoryDataFrame) FlatMapRow(cols df.DataFrameSchema, f func(df.Row) []df.Row) df.DataFrame {
-	data := make([]df.Row, 0, t.Len())
-	for _, r := range t.data {
-		data = append(data, f(r)...)
+	if t.partitions < 2 {
+		data := make([]df.Row, 0, t.Len())
+		for _, r := range t.data {
+			data = append(data, f(r)...)
+		}
+		return NewDataframeFromRow(cols, &data)
+	} else {
+		data := make([]df.Row, 0, t.Len())
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		mutex := sync.Mutex{}
+
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end, part int) {
+				defer wg.Done()
+				data2 := []df.Row{}
+				for k := start; k < end; k++ {
+					data2 = append(data2, f(t.data[k])...)
+				}
+				mutex.Lock()
+				data = append(data, data2...)
+				mutex.Unlock()
+			}(start, end, part)
+		}
+		wg.Wait()
+		return NewDataframeFromRow(t.schema, &data)
 	}
-	return NewDataframeFromRow(cols, &data)
 }
 
 func (t *inmemoryDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
-	data := make([]df.Row, 0, t.Len())
-	for _, r := range t.data {
-		if f(r) {
-			data = append(data, r)
+	if t.partitions < 2 {
+		data := make([]df.Row, 0, t.Len())
+		for _, r := range t.data {
+			if f(r) {
+				data = append(data, r)
+			}
 		}
-	}
-	return NewDataframeFromRow(t.schema, &data)
-}
+		return NewDataframeFromRow(t.schema, &data)
+	} else {
+		data := make([]df.Row, 0, len(t.data))
+		var wg sync.WaitGroup
+		wg.Add(t.partitions)
+		length := len(t.data) / t.partitions
+		mutex := sync.Mutex{}
 
-func (t *inmemoryDataFrame) SelectRow(b df.Series) df.DataFrame {
-	if b.Schema().Format != df.BoolFormat {
-		panic("only bool series supported")
-	}
-	data := make([]df.Row, 0, len(t.data))
-	seriesLength := b.Len()
-	for i, d := range t.data {
-		if int64(i) < seriesLength && b.Get(int64(i)).GetAsBool() {
-			data = append(data, d)
+		for part := 0; part < t.partitions; part++ {
+			start := part * length
+			end := start + length
+			if end > length {
+				end = length
+			}
+			go func(start, end, part int) {
+				defer wg.Done()
+				data2 := []df.Row{}
+				for k := start; k < end; k++ {
+					if f(t.data[k]) {
+						data2 = append(data2, t.data[k])
+					}
+				}
+				mutex.Lock()
+				data = append(data, data2...)
+				mutex.Unlock()
+			}(start, end, part)
 		}
+		wg.Wait()
+		return NewDataframeFromRow(t.schema, &data)
 	}
-	return NewDataframeFromRow(t.schema, &data)
 }
 
 func (t *inmemoryDataFrame) Limit(offset int, size int) df.DataFrame {
@@ -350,8 +443,11 @@ func (t *inmemoryDataFrame) Group(others ...string) df.GroupedDataFrame {
 	return NewGroupedDf(t, others...)
 }
 
-func (t *inmemoryDataFrame) Distinct() df.DataFrame {
-	gdf := NewGroupedDf(t, t.schema.Names()...)
+func (t *inmemoryDataFrame) Distinct(cols ...string) df.DataFrame {
+	if len(cols) == 0 {
+		cols = t.schema.Names()
+	}
+	gdf := NewGroupedDf(t, cols...)
 	rows := []df.Row{}
 	gdf.ForEach(func(r df.Row, df df.DataFrame) {
 		if df.Len() > 0 {
@@ -449,6 +545,113 @@ func (t *inmemoryDataFrame) Join(schema df.DataFrameSchema, data df.DataFrame, j
 
 		return NewDataframeFromRow(schema, &val)
 	}
+}
+
+func (t *inmemoryDataFrame) WhenNil(d map[string]df.Value) df.DataFrame {
+	return t.MapRow(t.schema, func(r df.Row) df.Row {
+		vals := make([]df.Value, r.Len())
+		for i := 0; i < r.Len(); i++ {
+			if r.Get(i).IsNil() {
+				val, ok := d[r.Schema().Get(i).Name]
+				if ok {
+					vals[i] = val
+				} else {
+					vals[i] = r.Get(i)
+				}
+			} else {
+				vals[i] = r.Get(i)
+			}
+		}
+		return NewRow(t.schema, &vals)
+	})
+}
+
+func (t *inmemoryDataFrame) When(d map[string]map[any]df.Value) df.DataFrame {
+	return t.MapRow(t.schema, func(r df.Row) df.Row {
+		vals := make([]df.Value, r.Len())
+		for i := 0; i < r.Len(); i++ {
+			seriesVals, ok := d[r.Schema().Get(i).Name]
+			if ok {
+				val, ok := seriesVals[r.Get(i).Get()]
+				if ok {
+					vals[i] = val
+				} else {
+					vals[i] = r.Get(i)
+				}
+			} else {
+				vals[i] = r.Get(i)
+			}
+		}
+		return NewRow(t.schema, &vals)
+	})
+}
+
+func (t *inmemoryDataFrame) AsFormat(d map[string]df.Format) df.DataFrame {
+	newSchemaCols := make([]df.SeriesSchema, t.schema.Len())
+	indexes := []int{}
+	for i, s := range t.schema.Series() {
+		f, ok := d[s.Name]
+		if ok {
+			newSchemaCols[i] = df.SeriesSchema{Name: s.Name, Format: f}
+			indexes = append(indexes, i)
+		} else {
+			newSchemaCols[i] = s
+		}
+	}
+	newSchema := df.NewSchema(newSchemaCols)
+
+	return t.MapRow(newSchema, func(r df.Row) df.Row {
+		vals := make([]df.Value, r.Len())
+		for i := 0; i < r.Len(); i++ {
+			if slices.Contains(indexes, i) {
+				convertedVal, err := newSchemaCols[i].Format.Convert(r.Get(i).Get())
+				if err != nil {
+					panic(fmt.Sprintf("unable to convert data format (%v), value(%v)", newSchemaCols[i], r.Get(i).Get()))
+				}
+				vals[i] = NewValue(newSchemaCols[i].Format, convertedVal)
+			} else {
+				vals[i] = r.Get(i)
+			}
+		}
+		return NewRow(newSchema, &vals)
+	})
+}
+
+func (t *inmemoryDataFrame) Union(d df.DataFrame) df.DataFrame {
+	return t.Append(d)
+}
+
+func (t *inmemoryDataFrame) Intersection(d df.DataFrame, col ...string) df.DataFrame {
+	if !t.Schema().Equals(d.Schema()) {
+		panic("schema is not same")
+	}
+
+	cols := map[string]string{}
+	for _, s := range d.Schema().Names() {
+		cols[s] = s
+	}
+
+	return t.Join(t.Schema(), d, df.JoinEqui, cols, func(r1, r2 df.Row) []df.Row {
+		return []df.Row{r1}
+	}).Distinct()
+}
+
+func (t *inmemoryDataFrame) Substract(d df.DataFrame, col ...string) df.DataFrame {
+	if !t.Schema().Equals(d.Schema()) {
+		panic("schema is not same")
+	}
+
+	cols := map[string]string{}
+	for _, s := range d.Schema().Names() {
+		cols[s] = s
+	}
+
+	return t.Join(t.Schema(), d, df.JoinLeft, cols, func(r1, r2 df.Row) []df.Row {
+		if r2 == nil {
+			return []df.Row{r1}
+		}
+		return []df.Row{}
+	}).Distinct()
 }
 
 var dfCounter = 0

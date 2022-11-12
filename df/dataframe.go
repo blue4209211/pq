@@ -59,15 +59,20 @@ type DataFrame interface {
 	Sort(order ...SortByIndex) DataFrame
 	SortByName(order ...SortByName) DataFrame
 
-	SelectSeries(index ...int) DataFrame
-	SelectSeriesByName(col ...string) DataFrame
+	Select(e ...Expr) DataFrame
+	SelectBySeriesIndex(index ...int) DataFrame
+	SelectBySeriesName(col ...string) DataFrame
 	MapRow(schema DataFrameSchema, f func(Row) Row) DataFrame
 	FlatMapRow(schema DataFrameSchema, f func(Row) []Row) DataFrame
 	WhereRow(f func(Row) bool) DataFrame
-	SelectRow(b Series) DataFrame
+
+	WhenNil(t map[string]Value) DataFrame
+	When(t map[string]map[any]Value) DataFrame
+	AsFormat(t map[string]Format) DataFrame
 
 	GetSeries(index int) Series
 	GetSeriesByName(s string) Series
+	GetSeriesExprByName(s string) Expr
 
 	AddSeries(name string, series Series) DataFrame
 	UpdateSeries(index int, series Series) DataFrame
@@ -82,8 +87,11 @@ type DataFrame interface {
 
 	Group(others ...string) GroupedDataFrame
 	Append(df DataFrame) DataFrame
-	Distinct() DataFrame
+	Distinct(cols ...string) DataFrame
 	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
+	Union(df DataFrame) DataFrame
+	Intersection(df DataFrame, col ...string) DataFrame
+	Substract(df DataFrame, col ...string) DataFrame
 
 	GetValue(rowIndx, colIndx int) Value
 }
@@ -110,13 +118,23 @@ type Series interface {
 	FlatMap(schema Format, f func(Value) []Value) Series
 	Reduce(f func(Value, Value) Value, startValue Value) Value
 	Where(f func(Value) bool) Series
-	Select(b Series) Series
 	Limit(offset int, size int) Series
 	Distinct() Series
 	Copy() Series
 	Group() GroupedSeries
 
+	// Expr
+	Select(e Expr) Series
+
+	WhenNil(t Value) Series
+	When(t map[any]Value) Series
+	AsFormat(t Format) Series
+	Expr() Expr
+
 	Append(series Series) Series
+	Intersection(series Series) Series
+	Substract(series Series) Series
+	Union(series Series) Series
 	Join(schema Format, series Series, jointype JoinType, f func(Value, Value) []Value) Series
 }
 

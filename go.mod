@@ -12,6 +12,7 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/samber/lo v1.33.0
 	github.com/stretchr/testify v1.8.1
 	github.com/xo/dburl v0.12.4
 	golang.org/x/exp v0.0.0-20221031165847-c99f073a8326
