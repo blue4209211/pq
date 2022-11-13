@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,18 @@ type queryEngine interface {
 	Query(query string) (df.DataFrame, error)
 	RegisterDataFrame(df.DataFrame) error
 	Close()
+}
+
+func modifyQuery(query string) string {
+	if query == "" {
+		return query
+	}
+
+	query2 := strings.ToLower(query)
+	if !(strings.HasPrefix(query2, "select") || strings.HasPrefix(query2, "with")) {
+		query = "select " + query
+	}
+	return query
 }
 
 // QueryDataFrames on given files or directories
@@ -70,7 +83,7 @@ func QueryDataFrames(query string, dfs []df.DataFrame, config map[string]string)
 	// 	}
 	// }
 
-	return engine.Query(query)
+	return engine.Query(modifyQuery(query))
 }
 
 func registerDfAsync(qe *queryEngine, jobs <-chan df.DataFrame, results chan<- error, wg *sync.WaitGroup, config *map[string]string) {

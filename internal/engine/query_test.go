@@ -20,6 +20,19 @@ func queryFiles(query string, fileOrDrs []string, config map[string]string) (dat
 	return QueryDataFrames(query, dfs, config)
 }
 
+func TestQueryExpressionWithoutTables(t *testing.T) {
+	dataframe, err := queryFiles("select 1+1", []string{}, map[string]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dataframe.Len())
+	assert.Equal(t, "1+1", dataframe.Schema().Names()[0])
+
+	dataframe, err = queryFiles("1+1", []string{}, map[string]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), dataframe.Len())
+	assert.Equal(t, "1+1", dataframe.Schema().Names()[0])
+
+}
+
 func TestQuerySingleCSVFile(t *testing.T) {
 	dataframe, err := queryFiles("select * from csv1", []string{"../../testdata/csv1.csv"}, map[string]string{
 		ConfigEngineStorage: "memory",
