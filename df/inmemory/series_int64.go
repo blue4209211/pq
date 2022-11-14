@@ -36,7 +36,8 @@ func NewIntRangeSeries(end int64, args ...int64) df.Series {
 	}
 	d := make([]df.Value, (end-start)/step)
 	for i := start; i < end; i = i + step {
-		d[i] = NewIntValue(&i)
+		i2 := i
+		d[i] = NewIntValue(&i2)
 	}
 	return NewSeries(d, df.IntegerFormat)
 }

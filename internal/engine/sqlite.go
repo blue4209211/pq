@@ -168,7 +168,7 @@ func queryInternal(db *sql.DB, query string) (result df.DataFrame, err error) {
 			dataRow[i] = inmemory.NewValue(cols[i].Format, v)
 		}
 
-		dataRows = append(dataRows, inmemory.NewRow(schema, &dataRow))
+		dataRows = append(dataRows, inmemory.NewRow(&schema, &dataRow))
 	}
 
 	err = rows.Err()

@@ -12,14 +12,15 @@ func TestRow(t *testing.T) {
 
 	data := []df.Value{NewIntValueConst(1), NewDoubleValueConst(2.0), NewStringValueConst("abc"), NewBoolValueConst(false), NewDatetimeValueConst(time.Now()), NewStringValue(nil)}
 
-	r := NewRow(df.NewSchema([]df.SeriesSchema{
+	schema := df.NewSchema([]df.SeriesSchema{
 		{Name: "c1", Format: df.IntegerFormat},
 		{Name: "c2", Format: df.DoubleFormat},
 		{Name: "c3", Format: df.StringFormat},
 		{Name: "c4", Format: df.BoolFormat},
 		{Name: "c5", Format: df.DateTimeFormat},
 		{Name: "c6", Format: df.StringFormat},
-	}), &data)
+	})
+	r := NewRow(&schema, &data)
 
 	//assert.Equal(t, data, r.Data())
 	assert.Equal(t, len(data), r.Len())

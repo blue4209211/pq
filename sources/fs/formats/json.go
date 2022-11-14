@@ -393,7 +393,7 @@ func (t *jsonDataSourceReader) init(reader io.Reader) (err error) {
 				row[j] = nil
 			}
 		}
-		records[i] = inmemory.NewRow(t.schema, &row)
+		records[i] = inmemory.NewRow(&t.schema, &row)
 	}
 
 	t.records = &records

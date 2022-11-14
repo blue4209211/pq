@@ -68,30 +68,36 @@ func (t *genericSeries) Where(f func(df.Value) bool) df.Series {
 		var wg sync.WaitGroup
 		wg.Add(t.partitions)
 		length := len(t.data) / t.partitions
-		mutex := sync.Mutex{}
+		syncMap := sync.Map{}
 
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
-			go func(start, end, part int) {
-				defer wg.Done()
-				data2 := []df.Value{}
-				for k := start; k < end; k++ {
-					if f(t.data[k]) {
-						data2 = append(data2, t.data[k])
-					}
-				}
-				mutex.Lock()
-				data = append(data, data2...)
-				mutex.Unlock()
-			}(start, end, part)
+			go t.whereGoRoutine(start, end, part, &wg, &syncMap, f)
 		}
 		wg.Wait()
+		for part := 0; part < t.partitions; part++ {
+			val, ok := syncMap.Load(part)
+			if ok {
+				data = append(data, val.([]df.Value)...)
+			}
+		}
 		return NewSeries(data, t.schema.Format)
 	}
+}
+
+func (t *genericSeries) whereGoRoutine(start, end, part int, wg *sync.WaitGroup, syncMap *sync.Map, f func(df.Value) bool) {
+	defer wg.Done()
+	data2 := make([]df.Value, 0, end-start)
+	for k := start; k < end; k++ {
+		if f(t.data[k]) {
+			data2 = append(data2, t.data[k])
+		}
+	}
+	syncMap.Store(part, data2)
 }
 
 func (t *genericSeries) Select(e df.Expr) (s df.Series) {
@@ -151,18 +157,20 @@ func (t *genericSeries) Map(s df.Format, f func(df.Value) df.Value) df.Series {
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
-			go func(start, end int) {
-				defer wg.Done()
-				for k := start; k < end; k++ {
-					data[k] = f(t.data[k])
-				}
-			}(start, end)
+			go t.mapGoRoutine(start, end, &wg, &data, f)
 		}
 		wg.Wait()
 		return NewSeries(data, s)
+	}
+}
+
+func (t *genericSeries) mapGoRoutine(start int, end int, wg *sync.WaitGroup, data *[]df.Value, f func(df.Value) df.Value) {
+	defer wg.Done()
+	for k := start; k < end; k++ {
+		(*data)[k] = f(t.data[k])
 	}
 }
 
@@ -183,8 +191,8 @@ func (t *genericSeries) FlatMap(s df.Format, f func(df.Value) []df.Value) df.Ser
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
 			go func(start, end, part int) {
 				defer wg.Done()
@@ -211,20 +219,20 @@ func (t *genericSeries) Reduce(f func(df.Value, df.Value) df.Value, startValue d
 }
 
 func (t *genericSeries) Distinct() df.Series {
-	data := make([]df.Value, 0, len(t.data))
+	data := make(map[any]df.Value)
+
 	for _, d := range t.data {
-		found := false
-		for _, v := range data {
-			if v.Get() == (d).Get() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			data = append(data, d)
+		_, ok := data[d.Get()]
+		if !ok {
+			data[d.Get()] = d
 		}
 	}
-	return NewSeries(data, t.schema.Format)
+
+	data2 := make([]df.Value, 0, len(data))
+	for _, v := range data {
+		data2 = append(data2, v)
+	}
+	return NewSeries(data2, t.schema.Format)
 }
 
 func (t *genericSeries) WhenNil(v1 df.Value) df.Series {
@@ -389,8 +397,8 @@ func (t *genericSeries) Intersection(s df.Series) df.Series {
 	if s.Schema().Format != s.Schema().Format {
 		panic("formats should match")
 	}
-	return t.Join(df.StringFormat, s, df.JoinCross, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
-		if dfsv1.Get() == dfsv2.Get() {
+	return t.Join(df.StringFormat, s, df.JoinEqui, func(dfsv1, dfsv2 df.Value) (r []df.Value) {
+		if dfsv1.Equals(dfsv2) {
 			return append(r, NewValue(s.Schema().Format, dfsv1.Get()))
 		}
 		return r
@@ -398,7 +406,7 @@ func (t *genericSeries) Intersection(s df.Series) df.Series {
 
 }
 
-func (t *genericSeries) Substract(s df.Series) df.Series {
+func (t *genericSeries) Except(s df.Series) df.Series {
 	if s.Schema().Format != s.Schema().Format {
 		panic("formats should match")
 	}

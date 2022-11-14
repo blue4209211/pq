@@ -7,12 +7,12 @@ import (
 )
 
 type inmemoryRow struct {
-	schema df.DataFrameSchema
+	schema *df.DataFrameSchema
 	data   []df.Value
 }
 
 func (t *inmemoryRow) Schema() df.DataFrameSchema {
-	return t.schema
+	return *t.schema
 }
 
 func (t *inmemoryRow) GetRaw(i int) any {
@@ -20,7 +20,7 @@ func (t *inmemoryRow) GetRaw(i int) any {
 }
 
 func (t *inmemoryRow) Len() int {
-	return t.schema.Len()
+	return (*t.schema).Len()
 }
 
 func (t *inmemoryRow) Copy() (r df.Row) {
@@ -35,10 +35,10 @@ func (t *inmemoryRow) Append(name string, v df.Value) (r df.Row) {
 	copy(r1, t.data)
 	r1[t.Len()] = v
 	s1 := make([]df.SeriesSchema, t.Len()+1)
-	copy(s1, t.schema.Series())
+	copy(s1, (*t.schema).Series())
 	s1[t.Len()] = df.SeriesSchema{Name: name, Format: v.Schema()}
-	t.schema.Series()
-	r = NewRow(df.NewSchema(s1), &r1)
+	schema := df.NewSchema(s1)
+	r = NewRow(&schema, &r1)
 	return r
 }
 
@@ -47,7 +47,7 @@ func (t *inmemoryRow) Get(i int) df.Value {
 }
 
 func (t *inmemoryRow) GetByName(s string) df.Value {
-	index := t.schema.GetIndexByName(s)
+	index := (*t.schema).GetIndexByName(s)
 	if index < 0 {
 		panic("col not found - " + s)
 	}
@@ -77,7 +77,7 @@ func (t *inmemoryRow) GetAsDatetime(i int) (r time.Time) {
 func (t *inmemoryRow) GetMap() (r map[string]df.Value) {
 	r = map[string]df.Value{}
 	for i, v := range t.data {
-		r[t.schema.Get(i).Name] = v
+		r[(*t.schema).Get(i).Name] = v
 	}
 	return r
 }
@@ -102,7 +102,8 @@ func (t *inmemoryRow) Select(index ...int) df.Row {
 	for _, c := range index {
 		r = append(r, t.data[c])
 	}
-	return NewRow(df.NewSchema(cols), &r)
+	schema := df.NewSchema(cols)
+	return NewRow(&schema, &r)
 }
 
 func (t *inmemoryRow) IsNil(i int) (r bool) {
@@ -110,12 +111,12 @@ func (t *inmemoryRow) IsNil(i int) (r bool) {
 }
 
 // NewRow returns new Row based on schema and data
-func NewRow(schema df.DataFrameSchema, data *[]df.Value) df.Row {
+func NewRow(schema *df.DataFrameSchema, data *[]df.Value) df.Row {
 	return NewRowWithCopy(schema, data, false)
 }
 
 // NewRow returns new Row based on schema and data
-func NewRowWithCopy(schema df.DataFrameSchema, data *[]df.Value, copyData bool) df.Row {
+func NewRowWithCopy(schema *df.DataFrameSchema, data *[]df.Value, copyData bool) df.Row {
 	data2 := *data
 	if copyData {
 		data2 = make([]df.Value, len(*data))
@@ -125,10 +126,10 @@ func NewRowWithCopy(schema df.DataFrameSchema, data *[]df.Value, copyData bool) 
 }
 
 // NewRow returns new Row based on schema and data
-func NewRowFromAny(schema df.DataFrameSchema, data *[]any) df.Row {
+func NewRowFromAny(schema *df.DataFrameSchema, data *[]any) df.Row {
 	data2 := make([]df.Value, len(*data))
 	for i, v := range *data {
-		data2[i] = NewValue(schema.Get(i).Format, v)
+		data2[i] = NewValue((*schema).Get(i).Format, v)
 	}
 	return &inmemoryRow{schema: schema, data: data2}
 }
@@ -141,5 +142,6 @@ func NewRowFromMap(data *map[string]df.Value) df.Row {
 		data2 = append(data2, v)
 		cols = append(cols, df.SeriesSchema{Name: i, Format: v.Schema()})
 	}
-	return &inmemoryRow{schema: df.NewSchema(cols), data: data2}
+	schema := df.NewSchema(cols)
+	return &inmemoryRow{schema: &schema, data: data2}
 }

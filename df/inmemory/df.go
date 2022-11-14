@@ -125,7 +125,7 @@ func (t *inmemoryDataFrame) UpdateSeries(index int, series df.Series) (d df.Data
 			e2[i] = e.Get(i)
 		}
 		e2[index] = series.Get(int64(i))
-		data[i] = NewRow(schema, &e2)
+		data[i] = NewRow(&schema, &e2)
 	}
 	return NewDataframeFromRow(schema, &data)
 }
@@ -157,7 +157,7 @@ func (t *inmemoryDataFrame) RemoveSeries(index int) df.DataFrame {
 				row[j-1] = e.Get(j)
 			}
 		}
-		data[i] = NewRow(schema, &row)
+		data[i] = NewRow(&schema, &row)
 	}
 	return NewDataframeFromRow(schema, &data)
 }
@@ -188,7 +188,7 @@ func (t *inmemoryDataFrame) RenameSeries(index int, name string, inplace bool) (
 		for i = 0; i < e.Len(); i++ {
 			r[i] = e.Get(i)
 		}
-		data[i] = NewRow(schema, &r)
+		data[i] = NewRow(&schema, &r)
 	}
 	return NewDataframeFromRow(schema, &data)
 }
@@ -322,18 +322,20 @@ func (t *inmemoryDataFrame) MapRow(cols df.DataFrameSchema, f func(df.Row) df.Ro
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
-			go func(start, end int) {
-				defer wg.Done()
-				for k := start; k < end; k++ {
-					data[k] = f(t.data[k])
-				}
-			}(start, end)
+			go t.mapGoRoutine(start, end, &wg, &data, f)
 		}
 		wg.Wait()
 		return NewDataframeFromRow(cols, &data)
+	}
+}
+
+func (t *inmemoryDataFrame) mapGoRoutine(start, end int, wg *sync.WaitGroup, data *[]df.Row, f func(df.Row) df.Row) {
+	defer wg.Done()
+	for k := start; k < end; k++ {
+		(*data)[k] = f(t.data[k])
 	}
 }
 
@@ -354,19 +356,19 @@ func (t *inmemoryDataFrame) FlatMapRow(cols df.DataFrameSchema, f func(df.Row) [
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
-			go func(start, end, part int) {
+			go func(start, end, part int, wg *sync.WaitGroup, mutex *sync.Mutex) {
 				defer wg.Done()
-				data2 := []df.Row{}
+				data2 := make([]df.Row, 0, end-start)
 				for k := start; k < end; k++ {
 					data2 = append(data2, f(t.data[k])...)
 				}
 				mutex.Lock()
 				data = append(data, data2...)
 				mutex.Unlock()
-			}(start, end, part)
+			}(start, end, part, &wg, &mutex)
 		}
 		wg.Wait()
 		return NewDataframeFromRow(t.schema, &data)
@@ -392,12 +394,12 @@ func (t *inmemoryDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 		for part := 0; part < t.partitions; part++ {
 			start := part * length
 			end := start + length
-			if end > length {
-				end = length
+			if end > len(t.data) {
+				end = len(t.data)
 			}
-			go func(start, end, part int) {
+			go func(start, end, part int, wg *sync.WaitGroup, mutex *sync.Mutex) {
 				defer wg.Done()
-				data2 := []df.Row{}
+				data2 := make([]df.Row, 0, end-start)
 				for k := start; k < end; k++ {
 					if f(t.data[k]) {
 						data2 = append(data2, t.data[k])
@@ -406,7 +408,7 @@ func (t *inmemoryDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 				mutex.Lock()
 				data = append(data, data2...)
 				mutex.Unlock()
-			}(start, end, part)
+			}(start, end, part, &wg, &mutex)
 		}
 		wg.Wait()
 		return NewDataframeFromRow(t.schema, &data)
@@ -562,7 +564,7 @@ func (t *inmemoryDataFrame) WhenNil(d map[string]df.Value) df.DataFrame {
 				vals[i] = r.Get(i)
 			}
 		}
-		return NewRow(t.schema, &vals)
+		return NewRow(&t.schema, &vals)
 	})
 }
 
@@ -582,7 +584,7 @@ func (t *inmemoryDataFrame) When(d map[string]map[any]df.Value) df.DataFrame {
 				vals[i] = r.Get(i)
 			}
 		}
-		return NewRow(t.schema, &vals)
+		return NewRow(&t.schema, &vals)
 	})
 }
 
@@ -613,7 +615,7 @@ func (t *inmemoryDataFrame) AsFormat(d map[string]df.Format) df.DataFrame {
 				vals[i] = r.Get(i)
 			}
 		}
-		return NewRow(newSchema, &vals)
+		return NewRow(&newSchema, &vals)
 	})
 }
 
@@ -636,7 +638,7 @@ func (t *inmemoryDataFrame) Intersection(d df.DataFrame, col ...string) df.DataF
 	}).Distinct()
 }
 
-func (t *inmemoryDataFrame) Substract(d df.DataFrame, col ...string) df.DataFrame {
+func (t *inmemoryDataFrame) Except(d df.DataFrame, col ...string) df.DataFrame {
 	if !t.Schema().Equals(d.Schema()) {
 		panic("schema is not same")
 	}
@@ -693,7 +695,7 @@ func NewDataframeWithNameFromSeries(name string, colNames []string, data *[]df.S
 		for j := 0; j < len(colNames); j++ {
 			r[j] = (*data)[j].Get(i)
 		}
-		dfData = append(dfData, NewRow(schema, &r))
+		dfData = append(dfData, NewRow(&schema, &r))
 	}
 
 	return &inmemoryDataFrame{name: name, schema: df.NewSchema(cols), data: dfData}

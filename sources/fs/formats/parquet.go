@@ -218,7 +218,7 @@ func parquetReadToArray(parquetText string) (schema df.DataFrameSchema, data []d
 	schema = df.NewSchema(dfSchema)
 	rows := make([]df.Row, len(dataArr))
 	for i, r := range dataArr {
-		rows[i] = inmemory.NewRowFromAny(schema, &r)
+		rows[i] = inmemory.NewRowFromAny(&schema, &r)
 	}
 	return schema, rows, err
 }

@@ -119,55 +119,55 @@ func TestInMemoryDf(t *testing.T) {
 	assert.Equal(t, int64(32), crossJoined.Len())
 }
 
-func BenchmarkDfMap(t *testing.B) {
-	s1 := NewIntRangeSeries(10000000)
-	s2 := NewIntRangeSeries(10000000)
-
-	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
-
-	for i := 0; i < t.N; i++ {
-		d.MapRow(d.Schema(), func(r df.Row) df.Row {
-			return NewRow(d.Schema(), &[]df.Value{NewIntValueConst(r.Get(0).GetAsInt() * 2), NewIntValueConst(r.Get(0).GetAsInt() + 2)})
-		})
-	}
-}
-
-func BenchmarkDfMapPar(t *testing.B) {
-	s1 := NewIntRangeSeries(10000000)
-	s2 := NewIntRangeSeries(10000000)
+func TestDfMapPar(t *testing.T) {
+	s1 := NewIntRangeSeries(100000)
+	s2 := NewIntRangeSeries(100000)
 
 	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
 	d.(*inmemoryDataFrame).partitions = 10
-	for i := 0; i < t.N; i++ {
-		d.MapRow(d.Schema(), func(r df.Row) df.Row {
-			return NewRow(d.Schema(), &[]df.Value{NewIntValueConst(r.Get(0).GetAsInt() * 2), NewIntValueConst(r.Get(0).GetAsInt() + 2)})
-		})
-	}
+	d = d.MapRow(d.Schema(), func(r df.Row) df.Row {
+		schema := d.Schema()
+		return NewRow(&schema, &[]df.Value{NewIntValueConst(r.Get(0).GetAsInt() * 2), NewIntValueConst(r.Get(0).GetAsInt() + 2)})
+	})
+
+	assert.Equal(t, int64(100000), d.Len())
 }
 
-func BenchmarkDfWhere(t *testing.B) {
-	s1 := NewIntRangeSeries(10000000)
-	s2 := NewIntRangeSeries(10000000)
-
-	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
-
-	for i := 0; i < t.N; i++ {
-		d.WhereRow(func(r df.Row) bool {
-			return r.Get(0).GetAsInt()/2 == 0
-		})
-	}
-}
-
-func BenchmarkDfWherePar(t *testing.B) {
-	s1 := NewIntRangeSeries(10000000)
-	s2 := NewIntRangeSeries(10000000)
+func TestDfWherePar(t *testing.T) {
+	s1 := NewIntRangeSeries(100000)
+	s2 := NewIntRangeSeries(100000)
 
 	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
 	d.(*inmemoryDataFrame).partitions = 10
 
-	for i := 0; i < t.N; i++ {
-		d.WhereRow(func(r df.Row) bool {
-			return r.Get(0).GetAsInt()/2 == 0
-		})
-	}
+	d = d.WhereRow(func(r df.Row) bool {
+		return r.Get(0).GetAsInt()%2 == 0
+	})
+	assert.Equal(t, int64(50000), d.Len())
+}
+
+func TestDfIntersection(t *testing.T) {
+	s1 := NewIntRangeSeries(100000)
+	s2 := NewIntRangeSeries(100000)
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+
+	s3 := NewIntRangeSeries(100)
+	s4 := NewIntRangeSeries(100)
+	d2 := NewDataframeWithNameFromSeries("df2", []string{"s1", "s2"}, &[]df.Series{s3, s4})
+
+	d = d.Intersection(d2)
+	assert.Equal(t, int64(100), d.Len())
+}
+
+func TestDfExcept(t *testing.T) {
+	s1 := NewIntRangeSeries(100000)
+	s2 := NewIntRangeSeries(100000)
+	d := NewDataframeWithNameFromSeries("df1", []string{"s1", "s2"}, &[]df.Series{s1, s2})
+
+	s3 := NewIntRangeSeries(100)
+	s4 := NewIntRangeSeries(100)
+	d2 := NewDataframeWithNameFromSeries("df2", []string{"s1", "s2"}, &[]df.Series{s3, s4})
+
+	d = d.Except(d2)
+	assert.Equal(t, int64(100000-100), d.Len())
 }

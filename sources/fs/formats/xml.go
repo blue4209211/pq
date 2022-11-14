@@ -311,7 +311,7 @@ func (t *xmlDataSourceReader) init(reader io.Reader) (err error) {
 			}
 		}
 
-		t.records[i] = inmemory.NewRow(t.schema, &row)
+		t.records[i] = inmemory.NewRow(&t.schema, &row)
 
 	}
 

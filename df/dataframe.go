@@ -91,7 +91,7 @@ type DataFrame interface {
 	Join(schema DataFrameSchema, df DataFrame, jointype JoinType, cols map[string]string, f func(Row, Row) []Row) DataFrame
 	Union(df DataFrame) DataFrame
 	Intersection(df DataFrame, col ...string) DataFrame
-	Substract(df DataFrame, col ...string) DataFrame
+	Except(df DataFrame, col ...string) DataFrame
 
 	GetValue(rowIndx, colIndx int) Value
 }
@@ -133,7 +133,7 @@ type Series interface {
 
 	Append(series Series) Series
 	Intersection(series Series) Series
-	Substract(series Series) Series
+	Except(series Series) Series
 	Union(series Series) Series
 	Join(schema Format, series Series, jointype JoinType, f func(Value, Value) []Value) Series
 }

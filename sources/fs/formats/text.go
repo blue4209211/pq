@@ -43,7 +43,7 @@ var textSchema df.DataFrameSchema = df.NewSchema([]df.SeriesSchema{
 	{Name: "rowNumber_", Format: df.IntegerFormat},
 })
 
-func (t *textDataSourceReader) Schema() (columns df.DataFrameSchema) {
+func (t *textDataSourceReader) Schema() df.DataFrameSchema {
 	return textSchema
 }
 
@@ -54,6 +54,7 @@ func (t *textDataSourceReader) Data() *[]df.Row {
 func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 	bufferedReader := bufio.NewReader(reader)
 	t.records = make([]df.Row, 0, 1000)
+	schema := t.Schema()
 
 	// in somecases line size gets bigger than default scanner settings
 	// so using reader to handle those scenarios
@@ -70,13 +71,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 				rowData := []df.Value{
 					inmemory.NewStringValueConst(string(textData) + string(textArr)), inmemory.NewIntValueConst(cnt),
 				}
-				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
+				t.records = append(t.records, inmemory.NewRow(&schema, &rowData))
 				textData = textData[:0]
 			} else if len(textArr) > 0 {
 				rowData := []df.Value{
 					inmemory.NewStringValueConst(string(textArr)), inmemory.NewIntValueConst(cnt),
 				}
-				t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
+				t.records = append(t.records, inmemory.NewRow(&schema, &rowData))
 			}
 			break
 		}
@@ -85,13 +86,13 @@ func (t *textDataSourceReader) init(reader io.Reader) (err error) {
 			rowData := []df.Value{
 				inmemory.NewStringValueConst(string(textData) + string(textArr)), inmemory.NewIntValueConst(cnt),
 			}
-			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
+			t.records = append(t.records, inmemory.NewRow(&schema, &rowData))
 			textData = textData[:0]
 		} else {
 			rowData := []df.Value{
 				inmemory.NewStringValueConst(string(textArr)), inmemory.NewIntValueConst(cnt),
 			}
-			t.records = append(t.records, inmemory.NewRow(t.Schema(), &rowData))
+			t.records = append(t.records, inmemory.NewRow(&schema, &rowData))
 		}
 		cnt = cnt + 1
 	}
