@@ -12,7 +12,7 @@ func QuerySources(query string, config map[string]string, srcs ...string) (data 
 	if err != nil {
 		return data, err
 	}
-	return engine.QueryDataFrames(query, dfs, config)
+	return QueryDataFrames(query, config, dfs...)
 }
 
 // QueryDataFrames Create Dataframe based on given sources

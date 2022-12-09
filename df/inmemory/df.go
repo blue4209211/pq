@@ -242,9 +242,7 @@ func (t *inmemoryDataFrame) SelectBySeriesName(col ...string) (d df.DataFrame) {
 
 func (t *inmemoryDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
 	data := make([]df.Row, t.Len())
-	for i, r := range t.data {
-		data[i] = r.Copy()
-	}
+	copy(data, t.data)
 
 	isLessFunc := func(f df.SeriesSchema, order df.SortOrder, c1 df.Value, c2 df.Value) bool {
 		if f.Format == df.IntegerFormat {
@@ -277,8 +275,8 @@ func (t *inmemoryDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
 	}
 
 	sort.Slice(data, func(i, j int) bool {
-		r1 := t.data[i]
-		r2 := t.data[j]
+		r1 := data[i]
+		r2 := data[j]
 
 		isLess := true
 
