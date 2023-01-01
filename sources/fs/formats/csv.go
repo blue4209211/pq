@@ -5,10 +5,12 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/blue4209211/pq/df"
 	"github.com/blue4209211/pq/df/inmemory"
+	"github.com/blue4209211/pq/internal/log"
 )
 
 // ConfigCsvHeader Is First valid line header
@@ -86,66 +88,70 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 
 type csvDataSourceReader struct {
 	args     map[string]string
-	records  [][]string
 	isHeader bool
 	schema   df.DataFrameSchema
+	data     []df.Row
 }
 
 func (t *csvDataSourceReader) Schema() df.DataFrameSchema {
-	if t.schema != nil {
-		return t.schema
-	}
-	columns := make([]df.SeriesSchema, len(t.records[0]))
-	f, _ := df.GetFormat("string")
-	for i, col := range t.records[0] {
-		if t.isHeader {
-			columns[i] = df.SeriesSchema{Name: col, Format: f}
-		} else {
-			columns[i] = df.SeriesSchema{Name: "c" + strconv.Itoa(i), Format: f}
-		}
-	}
-	t.schema = df.NewSchema(columns)
 	return t.schema
 }
 
 func (t *csvDataSourceReader) Data() *[]df.Row {
-	index := 0
-	if t.isHeader {
-		index = 1
-	}
-
-	data := make([]df.Row, len(t.records)-index)
-	schema := t.Schema()
-
-	for i, record := range t.records[index:] {
-		row := make([]df.Value, len(record))
-		for j, cell := range record {
-			row[j] = inmemory.NewStringValueConst(cell)
-		}
-		data[i] = inmemory.NewRow(&schema, &row)
-	}
-	return &data
+	return &t.data
 }
 
 func (t *csvDataSourceReader) init(reader io.Reader) (err error) {
+	startTime := time.Now()
+
 	csvReader := csv.NewReader(reader)
 	seprator, err := csvGetColSeprator(t.args)
 	if err != nil {
 		return
 	}
 	csvReader.Comma = seprator
-	records, err := csvReader.ReadAll()
-	if err != nil {
-		return
-	}
-	t.records = records
-
 	isHeader, err := csvIsHeaderEnabled(t.args)
 	if err != nil {
 		return
 	}
 	t.isHeader = isHeader
+	t.data = []df.Row{}
 
+	count := 0
+	for {
+		record, err := csvReader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			break
+		}
+		if count == 0 {
+			columns := make([]df.SeriesSchema, len(record))
+			f, _ := df.GetFormat("string")
+			for i, col := range record {
+				if t.isHeader {
+					columns[i] = df.SeriesSchema{Name: col, Format: f}
+				} else {
+					columns[i] = df.SeriesSchema{Name: "c" + strconv.Itoa(i), Format: f}
+				}
+			}
+			t.schema = df.NewSchema(columns)
+			if isHeader {
+				count = count + 1
+				continue
+			}
+		}
+
+		row := make([]df.Value, len(record))
+		for j, cell := range record {
+			row[j] = inmemory.NewStringValueConst(cell)
+		}
+		t.data = append(t.data, inmemory.NewRow(&t.schema, &row))
+		count = count + 1
+	}
+
+	log.Debug("time to read csv data ", time.Since(startTime).String()+" records ", len(t.data))
 	return
 }
 

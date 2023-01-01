@@ -164,6 +164,9 @@ func (t *DataSource) Write(context context.Context, data df.DataFrame, path stri
 }
 
 func getDataframeFromSource(name string, ext string, reader io.Reader, config *map[string]string) (data df.DataFrame, err error) {
+	startTime := time.Now()
+
+	log.Debug()
 	streamSource, err := formats.GetFormatHandler(ext)
 	if err != nil {
 		return data, err
@@ -172,7 +175,12 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 	if err != nil {
 		return data, err
 	}
-	datsourceDf := inmemory.NewDataframeFromRowAndName(name, dataframeReader.Schema(), dataframeReader.Data())
+	schema := dataframeReader.Schema()
+	rows := dataframeReader.Data()
+	log.Debug("time to read data from source ", name, " ", time.Since(startTime).String())
+	startTime = time.Now()
+	datsourceDf := inmemory.NewDataframeFromRowAndName(name, schema, rows)
+	log.Debug("time to create dataframe from source ", name, " ", time.Since(startTime).String())
 	return datsourceDf, nil
 }
 
@@ -351,7 +359,7 @@ func readSourcesToDataframeAsync(filesystem vfs.VFS, aliasName string, sources [
 	results := make(chan asyncReaderResult, len(sources))
 	wg := new(sync.WaitGroup)
 
-	for w := 0; w < 5; w++ {
+	for w := 0; w < len(sources); w++ {
 		wg.Add(1)
 		go readSourceToDataframeAsyncWorker(jobs, results, wg, config, filesystem)
 	}
