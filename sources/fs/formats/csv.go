@@ -78,7 +78,10 @@ func (t *csvDataSourceWriter) Write(writer io.Writer) (err error) {
 		rowInterface := t.data.GetRow(i)
 		row := make([]string, rowInterface.Len())
 		for j := 0; j < rowInterface.Len(); j++ {
-			str := rowInterface.GetAsString(j)
+			str := ""
+			if !rowInterface.IsNil(j) {
+				str = rowInterface.GetAsString(j)
+			}
 			row[j] = str
 		}
 		csvWriter.Write(row)
