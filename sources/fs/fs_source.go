@@ -22,6 +22,8 @@ import (
 	"github.com/blue4209211/pq/sources/fs/formats"
 	"github.com/blue4209211/pq/sources/fs/vfs"
 	"github.com/golang/snappy"
+
+	"github.com/dimchansky/utfbom"
 )
 
 // DataSource files datasource handler
@@ -127,6 +129,7 @@ func (t *DataSource) Read(context context.Context, sourceURL string, config map[
 		mergedDf, err = readSourcesToDataframeAsync(filesystem, fileOrDirName, files, &config)
 	}
 	log.Debugf("Completed data read from FS (%s) in (%s) ", fileOrDirName, time.Since(startTime).String())
+	log.Debugf("Columns from FS (%s), (%v)", fileOrDirName, mergedDf.Schema().Names())
 	if err != nil {
 		return data, err
 	}
@@ -171,7 +174,9 @@ func getDataframeFromSource(name string, ext string, reader io.Reader, config *m
 	if err != nil {
 		return data, err
 	}
-	dataframeReader, err := streamSource.Reader(reader, *config)
+
+	skippedBomReader := utfbom.SkipOnly(reader)
+	dataframeReader, err := streamSource.Reader(skippedBomReader, *config)
 	if err != nil {
 		return data, err
 	}

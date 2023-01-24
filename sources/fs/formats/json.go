@@ -189,7 +189,11 @@ func jsonReadToArray(byteArr *[]byte, isArray bool, jsonRootNode string) (objMap
 
 		objMap := make(map[string]any)
 		for k, v := range objMapCustom {
-			objMap[k] = v.data
+			if v == nil{					
+				objMap[k] = nil
+			}else{
+				objMap[k] = v.data
+			}
 		}
 
 		objMapList[0] = objMap
