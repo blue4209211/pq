@@ -126,8 +126,9 @@ func (t *csvDataSourceReader) init(reader io.Reader) (err error) {
 		if err != nil {
 			if err == io.EOF {
 				break
+			} else {
+				return err
 			}
-			break
 		}
 		if count == 0 {
 			columns := make([]df.SeriesSchema, len(record))

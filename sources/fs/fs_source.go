@@ -128,10 +128,14 @@ func (t *DataSource) Read(context context.Context, sourceURL string, config map[
 	} else {
 		mergedDf, err = readSourcesToDataframeAsync(filesystem, fileOrDirName, files, &config)
 	}
-	log.Debugf("Completed data read from FS (%s) in (%s) ", fileOrDirName, time.Since(startTime).String())
-	log.Debugf("Columns from FS (%s), (%v)", fileOrDirName, mergedDf.Schema().Names())
 	if err != nil {
 		return data, err
+	}
+	log.Debugf("Completed data read from FS (%s) in (%s) ", fileOrDirName, time.Since(startTime).String())
+	log.Debugf("Columns from FS (%s), (%v)", fileOrDirName, mergedDf.Schema())
+
+	if mergedDf.Schema() == nil {
+		return data, errors.New("schema is nil")
 	}
 
 	return mergedDf, nil
