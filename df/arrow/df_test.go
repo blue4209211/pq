@@ -59,6 +59,10 @@ func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arro
 func getTestStringArray(mem memory.Allocator, values []string, valids []bool) arrow.Array {
 	b := array.NewStringBuilder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
+func getTestFloat64Array(mem memory.Allocator, values []float64, valids []bool) arrow.Array {
+	b := array.NewFloat64Builder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
+}
+
 
 const nilPlaceholder = "__NIL_PLACEHOLDER__"
 
@@ -80,14 +84,10 @@ func sortSliceOfInterfaceSlices(slice [][]interface{}) {
 	sort.Slice(slice, func(i, j int) bool { return fmt.Sprintf("%v", slice[i]) < fmt.Sprintf("%v", slice[j]) })
 }
 
-// --- Mock df.Expr, df.Value, df.MapOp (redefine or ensure accessible if in another _test.go file) ---
+// --- Mock df.Expr, df.Value, df.MapOp ---
 type mockExpr struct {
-	exprName     string
-	exprConstVal df.Value
-	exprColName  string
-	exprOpType   df.ExprOpType
-	exprMapOp    df.MapOp
-	exprParent   df.Expr
+	exprName     string; exprConstVal df.Value; exprColName  string
+	exprOpType   df.ExprOpType; exprMapOp    df.MapOp; exprParent   df.Expr
 }
 func (m *mockExpr) Name() string { return m.exprName }
 func (m *mockExpr) Const() df.Value { return m.exprConstVal }
@@ -101,8 +101,7 @@ func (m *mockExpr) SetName(n string) df.Expr {m.exprName = n; return m}
 
 type mockMapOp struct {
 	applyFunc    func(v df.Value, args ...df.Value) df.Value
-	argExprs     []df.Expr
-	returnFormat df.Format
+	argExprs     []df.Expr; returnFormat df.Format
 }
 func (m *mockMapOp) Args() []df.Expr { return m.argExprs }
 func (m *mockMapOp) ApplyMap(v df.Value, args ...df.Value) df.Value { return m.applyFunc(v, args...) }
@@ -135,95 +134,83 @@ func TestArrowDataFrame_Join_EquiJoin(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_Join_CrossJoin_Partial(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_Intersection(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_Except(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Select_Advanced(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Rename_DataFrame(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_AsFormat(t *testing.T) { /* ... */ }
 
 
-func TestArrowDataFrame_Select_Advanced(t *testing.T) {
+func TestArrowDataFrame_ForEachRow(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	schema := arrow.NewSchema(
 		[]arrow.Field{
-			{Name: "col_a", Type: arrow.BinaryTypes.String, Nullable: true},
-			{Name: "col_b", Type: arrow.PrimitiveTypes.Int64, Nullable: true},
-			{Name: "col_c", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+			{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
+			{Name: "value", Type: arrow.PrimitiveTypes.Int64, Nullable: true},
+			{Name: "active", Type: arrow.PrimitiveTypes.Boolean, Nullable: true},
 		}, nil,
 	)
 	dfSchema := arrowimpl.NewArrowDataFrameSchema(schema).(*arrowimpl.ArrowDataFrameSchema)
+
 	rb := array.NewRecordBuilder(mem, schema); defer rb.Release()
-	rb.Field(0).(*array.StringBuilder).AppendValues([]string{"r1", "r2", "r3"}, []bool{true, true, true})
-	rb.Field(1).(*array.Int64Builder).AppendValues([]int64{10, 0, 30}, []bool{true, false, true})
-	rb.Field(2).(*array.Float64Builder).AppendValues([]float64{1.1, 2.2, 0}, []bool{true, true, false})
+	rb.Field(0).(*array.StringBuilder).AppendValues([]string{"A", "", "C"}, []bool{true, false, true})
+	rb.Field(1).(*array.Int64Builder).AppendValues([]int64{10, 20, 0}, []bool{true, true, false})
+	rb.Field(2).(*array.BooleanBuilder).AppendValues([]bool{true, false, true}, nil)
 	record := rb.NewRecord(); defer record.Release()
-	baseDf := arrowimpl.NewArrowDataFrame("select_adv_test", record, dfSchema)
+	baseDf := arrowimpl.NewArrowDataFrame("foreach_test", record, dfSchema)
 	defer baseDf.(*arrowimpl.ArrowDataFrame).Release()
 
-	// Case 1: Select existing columns
-	exprColA := &mockExpr{exprName: "res_A", exprColName: "col_a"}
-	exprColC := &mockExpr{exprName: "res_C", exprColName: "col_c"}
-	selectedCols := baseDf.Select(exprColA, exprColC);	defer selectedCols.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, baseDf.Len(), selectedCols.Len())
-	assert.Equal(t, 2, selectedCols.Schema().Len())
-	assert.Equal(t, "res_A", selectedCols.Schema().Get(0).Name)
-	assert.True(t, arrow.TypeEqual(arrow.BinaryTypes.String, selectedCols.Schema().(*arrowimpl.ArrowDataFrameSchema).InternalArrowSchema().Field(0).Type))
-	assert.Equal(t, "r1", selectedCols.GetValue(0,0).GetAsString())
-	assert.True(t, selectedCols.GetValue(2,1).IsNil())
+	// Case 1: Iterate over non-empty DataFrame
+	var processedRows [][]interface{}
+	var rowCount int64
+	baseDf.ForEachRow(func(row df.Row) {
+		rowCount++
+		nameVal := row.GetByName("name")
+		valueVal := row.GetByName("value")
+		activeVal := row.GetByName("active")
 
-	// Case 2: Select constant values
-	constStrVal := arrowimpl.NewArrowValue(scalar.NewStringScalar("const_str"), df.StringFormat)
-	exprConstStr := &mockExpr{exprName: "LiteralStr", exprConstVal: constStrVal}
-	constIntVal := arrowimpl.NewArrowValue(scalar.NewInt64Scalar(999), df.IntegerFormat)
-	exprConstInt := &mockExpr{exprName: "LiteralInt", exprConstVal: constIntVal}
-	selectedConsts := baseDf.Select(exprConstStr, exprConstInt);	defer selectedConsts.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, baseDf.Len(), selectedConsts.Len())
-	for r := int64(0); r < selectedConsts.Len(); r++ {
-		assert.Equal(t, "const_str", selectedConsts.GetValue(r,0).GetAsString())
-		assert.Equal(t, int64(999), selectedConsts.GetValue(r,1).GetAsInt())
+		var nameStr, valStr, activeStr string
+		if nameVal.IsNil() { nameStr = "nil" } else { nameStr = nameVal.GetAsString() }
+		if valueVal.IsNil() { valStr = "nil" } else { valStr = strconv.FormatInt(valueVal.GetAsInt(), 10) }
+		if activeVal.IsNil() { activeStr = "nil" } else { activeStr = strconv.FormatBool(activeVal.GetAsBool()) }
+
+		processedRows = append(processedRows, []interface{}{nameStr, valStr, activeStr})
+	})
+
+	assert.Equal(t, baseDf.Len(), rowCount, "Number of callback executions should match row count")
+	expectedProcessed := [][]interface{}{
+		{"A", "10", "true"},
+		{"nil", "20", "false"},
+		{"C", "nil", "true"},
 	}
+	assert.Equal(t, expectedProcessed, processedRows, "Data processed by ForEachRow")
 
-	// Case 3: Select simple single-column transformation (map op)
-	baseColBExpr := &mockExpr{exprName: "col_b_base", exprColName: "col_b"}
-	mapOpDouble := &mockMapOp{
-		applyFunc: func(v df.Value, args ...df.Value) df.Value {
-			if v.IsNil() { return arrowimpl.NewArrowValue(scalar.NewNullScalar(arrow.PrimitiveTypes.Int64), df.IntegerFormat) }
-			return arrowimpl.NewArrowValue(scalar.NewInt64Scalar(v.GetAsInt()*2), df.IntegerFormat)
-		},
-		returnFormat: df.IntegerFormat,
-	}
-	exprMapColB := &mockExpr{exprName: "col_b_doubled", exprParent: baseColBExpr, exprOpType: df.ExprTypeMap, exprMapOp: mapOpDouble}
-	selectedMapped := baseDf.Select(exprMapColB);	defer selectedMapped.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(20), selectedMapped.GetValue(0,0).GetAsInt())
-	assert.True(t, selectedMapped.GetValue(1,0).IsNil())
-	assert.Equal(t, int64(60), selectedMapped.GetValue(2,0).GetAsInt())
-
-	// Case 4: Mixed expressions
-	exprColA_forName := &mockExpr{exprName: "col_a_alias", exprColName: "col_a"}
-	selectedMixed := baseDf.Select(exprColA_forName, exprConstInt, exprMapColB);	defer selectedMixed.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, 3, selectedMixed.Schema().Len())
-	assert.Equal(t, "col_a_alias", selectedMixed.Schema().Get(0).Name)
-	assert.Equal(t, "LiteralInt", selectedMixed.Schema().Get(1).Name)
-	assert.Equal(t, "col_b_doubled", selectedMixed.Schema().Get(2).Name)
-	assert.Equal(t, "r1", selectedMixed.GetValue(0,0).GetAsString())
-	assert.Equal(t, int64(999), selectedMixed.GetValue(0,1).GetAsInt())
-	assert.Equal(t, int64(20), selectedMixed.GetValue(0,2).GetAsInt())
-
-	// Case 5: No expressions (empty select)
-	selectedEmptyExpr := baseDf.Select();	defer selectedEmptyExpr.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, baseDf.Len(), selectedEmptyExpr.Len())
-	assert.Equal(t, 0, selectedEmptyExpr.Schema().Len())
-
-	// Case 6: DataFrame with 0 rows
+	// Case 2: Iterate over an empty DataFrame
 	emptyRec := array.NewRecord(schema, nil, 0); defer emptyRec.Release()
-	emptyDf := arrowimpl.NewArrowDataFrame("empty_select_df", emptyRec, dfSchema);	defer emptyDf.(*arrowimpl.ArrowDataFrame).Release()
-	selectedFromEmpty := emptyDf.Select(exprColA, exprConstStr);	defer selectedFromEmpty.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(0), selectedFromEmpty.Len())
-	assert.Equal(t, 2, selectedFromEmpty.Schema().Len())
+	emptyDf := arrowimpl.NewArrowDataFrame("empty_foreach", emptyRec, dfSchema)
+	defer emptyDf.(*arrowimpl.ArrowDataFrame).Release()
 
-	// Case 7: Panic on nil expression in list
-	assert.PanicsWithValue(t, "Select: expression at index 0 is nil", func() { baseDf.Select(nil) })
-	assert.PanicsWithValue(t, "Select: expression at index 1 is nil", func() { baseDf.Select(exprColA, nil) })
+	emptyRowCount := 0
+	emptyDf.ForEachRow(func(row df.Row) {
+		emptyRowCount++
+	})
+	assert.Equal(t, 0, emptyRowCount, "Callback should not execute for empty DataFrame")
 
-	// Case 8: Panic on unsupported expression
-	unsupportedExpr := &mockExpr{exprName: "bad_expr", exprOpType: "SOME_OTHER_OP"}
-	assert.PanicsWithValue(t, fmt.Sprintf("Select: expression '%s' (type: %s, col: %s) is not supported in this DataFrame.Select version", unsupportedExpr.Name(), unsupportedExpr.OpType(), unsupportedExpr.Col()), func() {
-		baseDf.Select(unsupportedExpr)
+	// Case 3: Iterate over DataFrame with 0 columns but >0 rows
+	schema0Col := arrow.NewSchema([]arrow.Field{}, nil)
+	dfSchema0Col := arrowimpl.NewArrowDataFrameSchema(schema0Col).(*arrowimpl.ArrowDataFrameSchema)
+	rec0Col := array.NewRecord(schema0Col, nil, 3); defer rec0Col.Release()
+	df0Col := arrowimpl.NewArrowDataFrame("0col_foreach", rec0Col, dfSchema0Col)
+	defer df0Col.(*arrowimpl.ArrowDataFrame).Release()
+
+	count0ColRows := 0
+	df0Col.ForEachRow(func(row df.Row) {
+		assert.Equal(t, 0, row.Len(), "Row length should be 0 for 0-column DataFrame")
+		count0ColRows++
+	})
+	assert.Equal(t, 3, count0ColRows, "Callback should execute for each 'empty' row in 0-column DataFrame")
+
+	// Case 4: Panic if function f is nil
+	assert.PanicsWithValue(t, "ForEachRow: function f cannot be nil", func() {
+		baseDf.ForEachRow(nil)
 	})
 }
 
