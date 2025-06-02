@@ -1,4 +1,5 @@
 //go:build arrow
+
 package arrow
 
 import (
@@ -16,82 +17,89 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
-// arrowDataFrame struct and existing constructors/methods (Schema, Name, Len, etc.) are assumed here.
-// For brevity, only new/modified methods are shown.
-// --- Re-include necessary parts of arrowDataFrame and its constructors ---
 type arrowDataFrame struct {
 	name   string
 	schema *arrowDataFrameSchema
 	record arrow.Record
 	mem    memory.Allocator
 }
+
 func NewArrowDataFrame(name string, record arrow.Record, dfSchema *arrowDataFrameSchema) df.DataFrame {
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, memory.DefaultAllocator)
 }
+
 func NewArrowDataFrameWithAllocator(name string, record arrow.Record, dfSchema *arrowDataFrameSchema, mem memory.Allocator) df.DataFrame {
 	if record == nil { panic("arrow.Record cannot be nil") }
 	if dfSchema == nil { panic("df.DataFrameSchema cannot be nil") }
 	if mem == nil { panic("memory.Allocator cannot be nil") }
-	if !dfSchema.schema.Equal(record.Schema()) {
-		panic(fmt.Sprintf("provided df.DataFrameSchema's internal arrow.Schema does not match record schema.\nProvided: %s\nRecord: %s", dfSchema.schema, record.Schema()))
+
+	isDfSchemaTrulyEmpty := (dfSchema.schema == nil || dfSchema.schema.NumFields() == 0)
+	isRecordSchemaTrulyEmpty := (record.Schema() == nil || record.Schema().NumFields() == 0)
+
+	if isDfSchemaTrulyEmpty && isRecordSchemaTrulyEmpty {
+		if dfSchema.schema == nil && record.Schema() != nil { dfSchema.schema = record.Schema() }
+	} else if dfSchema.schema == nil {
+	    panic("dfSchema.schema is nil for a non-empty record schema")
+	} else if !dfSchema.schema.Equal(record.Schema()) {
+		panic(fmt.Sprintf("schema mismatch. Provided dfSchema.schema: %s, Record's schema: %s", dfSchema.schema, record.Schema()))
 	}
 	record.Retain(); return &arrowDataFrame{name: name, schema: dfSchema, record: record, mem: mem}
 }
+
 func NewArrowDataFrameFromArrays(name string, cols []arrow.Array, schema *arrow.Schema) (df.DataFrame, error) {
 	return NewArrowDataFrameFromArraysWithAllocator(name, cols, schema, memory.DefaultAllocator)
 }
+
 func NewArrowDataFrameFromArraysWithAllocator(name string, cols []arrow.Array, schema *arrow.Schema, mem memory.Allocator) (df.DataFrame, error) {
 	if schema == nil {return nil, fmt.Errorf("arrow.Schema cannot be nil")}
 	if mem == nil {return nil, fmt.Errorf("memory.Allocator cannot be nil")}
 	if len(cols) != schema.NumFields() {return nil, fmt.Errorf("num cols (%d) != num fields (%d)", len(cols), schema.NumFields())}
 	var numRows int64 = -1
 	if len(cols) > 0 {
-		// Retain columns before length/type checks, release if checks fail
-		for i := range cols {
-			cols[i].Retain()
-		}
+		for i := range cols { cols[i].Retain() }
 		numRows = int64(cols[0].Len())
 		for i, col := range cols {
 			if int64(col.Len()) != numRows {
-				for j := 0; j <= i; j++ { cols[j].Release() } // Release already retained columns
-				return nil, fmt.Errorf("col %d len %d != %d", i, col.Len(), numRows)
+				for j := 0; j <= i; j++ { cols[j].Release() }; return nil, fmt.Errorf("col %d len %d != %d", i, col.Len(), numRows)
 			}
 			if !arrow.TypeEqual(col.DataType(), schema.Field(i).Type) {
-				for j := 0; j <= i; j++ { cols[j].Release() } // Release already retained columns
-				return nil, fmt.Errorf("col %d type %s != schema %s", i, col.DataType(), schema.Field(i).Type)
+				for j := 0; j <= i; j++ { cols[j].Release() }; return nil, fmt.Errorf("col %d type %s != schema %s", i, col.DataType(), schema.Field(i).Type)
 			}
 		}
 	} else {numRows = 0}
-	record := array.NewRecord(schema, cols, numRows) // NewRecord retains columns
-	for _, col := range cols { col.Release() } // Release initial retain
-
+	record := array.NewRecord(schema, cols, numRows)
+	for _, col := range cols { col.Release() }
 	dfSchema := NewArrowDataFrameSchema(schema).(*arrowDataFrameSchema)
-	// NewArrowDataFrameWithAllocator will retain the record again.
-	// Defer release for the record created here.
 	defer record.Release()
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, mem), nil
 }
+
 func (adf *arrowDataFrame) Schema() df.DataFrameSchema { return adf.schema }
 func (adf *arrowDataFrame) Name() string { return adf.name }
 func (adf *arrowDataFrame) Len() int64 { if adf.record == nil { return 0 }; return adf.record.NumRows() }
 func (adf *arrowDataFrame) Release() { if adf.record != nil { adf.record.Release(); adf.record = nil } }
+
 func (adf *arrowDataFrame) GetSeries(index int) df.Series {
 	if adf.record == nil || index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("series index %d out of bounds", index)) }
 	return NewArrowSeriesWithAllocator(adf.record.Column(index), adf.schema.Get(index), adf.mem)
 }
+
 func (adf *arrowDataFrame) GetSeriesByName(sName string) df.Series {
 	idx := adf.schema.GetIndexByName(sName); if idx == -1 { panic(fmt.Sprintf("series '%s' not found", sName)) }; return adf.GetSeries(idx)
 }
+
 func (adf *arrowDataFrame) GetRow(i int64) df.Row {
     if adf.record == nil || i < 0 || i >= adf.record.NumRows() { panic(fmt.Sprintf("row index %d out of bounds", i)) }
     r, err := NewArrowRowFromRecord(adf.schema, adf.record, int(i)); if err != nil { panic(err) }; return r
 }
+
 func (adf *arrowDataFrame) GetValue(rowIndx, colIndx int) df.Value {
     if adf.record == nil || rowIndx < 0 || int64(rowIndx) >= adf.record.NumRows() || colIndx < 0 || colIndx >= int(adf.record.NumCols()) {
         panic(fmt.Sprintf("GetValue index (row: %d, col: %d) out of bounds", rowIndx, colIndx))
     }
     return NewArrowValue(scalar.MakeScalar(adf.record.Column(colIndx), rowIndx), adf.schema.Get(colIndx).Format)
 }
+
 func (adf *arrowDataFrame) Limit(offset int, size int) df.DataFrame {
 	if adf.record == nil {
 		emptyRec := array.NewRecord(adf.schema.schema, nil, 0); defer emptyRec.Release()
@@ -110,6 +118,7 @@ func (adf *arrowDataFrame) Limit(offset int, size int) df.DataFrame {
 	slicedRecord := adf.record.NewSlice(int64(offset), int64(offset+size)); defer slicedRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, slicedRecord, adf.schema, adf.mem)
 }
+
 func (adf *arrowDataFrame) SelectBySeriesIndex(indices ...int) df.DataFrame {
 	numRowsToKeep := int64(0); if adf.record != nil { numRowsToKeep = adf.record.NumRows()}
 	if len(indices) == 0 {
@@ -133,6 +142,7 @@ func (adf *arrowDataFrame) SelectBySeriesIndex(indices ...int) df.DataFrame {
 	for _, col := range newCols { col.Release() }; defer selectedRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, selectedRecord, newDfSchema, adf.mem)
 }
+
 func (adf *arrowDataFrame) SelectBySeriesName(colNames ...string) df.DataFrame {
 	if adf.record == nil && len(colNames) > 0 { panic("cannot select by name from a nil or released dataframe") }
 	if len(colNames) == 0 {
@@ -146,6 +156,7 @@ func (adf *arrowDataFrame) SelectBySeriesName(colNames ...string) df.DataFrame {
 	for i, name := range colNames { idx := adf.schema.GetIndexByName(name); if idx == -1 { panic(fmt.Sprintf("column '%s' not found", name)) }; indices[i] = idx }
 	return adf.SelectBySeriesIndex(indices...)
 }
+
 func (adf *arrowDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 	if adf.record == nil {
 		emptyRec := array.NewRecord(adf.schema.schema, nil, 0); defer emptyRec.Release()
@@ -167,6 +178,7 @@ func (adf *arrowDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 	for _, col := range newCols { col.Release() }; defer filteredRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, filteredRecord, adf.schema, adf.mem)
 }
+
 func (adf *arrowDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
 	if adf.record == nil || adf.record.NumRows() == 0 || len(orders) == 0 {
 		var recToHandle arrow.Record
@@ -187,6 +199,7 @@ func (adf *arrowDataFrame) Sort(orders ...df.SortByIndex) df.DataFrame {
 	sortedRecord, ok := sortedRecordDatum.(*arrow.RecordDatum).Value().(arrow.Record); if !ok { panic("Take on record did not return a record datum") }
     return NewArrowDataFrameWithAllocator(adf.name, sortedRecord, adf.schema, adf.mem)
 }
+
 func (adf *arrowDataFrame) SortByName(orders ...df.SortByName) df.DataFrame {
 	if adf.record == nil && len(orders) > 0 { panic("cannot sort by name on a nil or released dataframe") }
 	if len(orders) == 0 {
@@ -198,6 +211,7 @@ func (adf *arrowDataFrame) SortByName(orders ...df.SortByName) df.DataFrame {
 	for i, order := range orders { idx := adf.schema.GetIndexByName(order.Series); if idx == -1 { panic(fmt.Sprintf("column '%s' not found for SortByName", order.Series)) }; sortByIdx[i] = df.SortByIndex{Series: idx, Order: order.Order} }
 	return adf.Sort(sortByIdx...)
 }
+
 func (adf *arrowDataFrame) AddSeries(colName string, series df.Series) df.DataFrame {
 	if adf.record == nil { panic("cannot add series to a nil dataframe") }
 	if adf.schema.HasName(colName) { panic(fmt.Sprintf("dataframe already has a column named '%s'", colName)) }
@@ -216,6 +230,7 @@ func (adf *arrowDataFrame) AddSeries(colName string, series df.Series) df.DataFr
 	for _, col := range newRecordCols { col.Release() }; defer newRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
 }
+
 func (adf *arrowDataFrame) RemoveSeries(index int) df.DataFrame {
 	if adf.record == nil { panic("cannot remove series from a nil dataframe") }
 	if index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("index %d out of bounds for RemoveSeries", index)) }
@@ -231,9 +246,11 @@ func (adf *arrowDataFrame) RemoveSeries(index int) df.DataFrame {
 	for _, col := range newRecordCols { col.Release() }; defer newRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
 }
+
 func (adf *arrowDataFrame) RemoveSeriesByName(s string) df.DataFrame {
 	idx := adf.schema.GetIndexByName(s); if idx == -1 { panic(fmt.Sprintf("column '%s' not found for RemoveSeriesByName", s))}; return adf.RemoveSeries(idx)
 }
+
 func (adf *arrowDataFrame) RenameSeries(index int, newName string, inplace bool) df.DataFrame {
 	if adf.record == nil { panic("cannot rename series in a nil dataframe") }
 	if index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("index %d out of bounds for RenameSeries", index)) }
@@ -253,9 +270,17 @@ func (adf *arrowDataFrame) RenameSeries(index int, newName string, inplace bool)
 	recordCols := adf.record.Columns(); for _, col := range recordCols { col.Retain() }
 	newRecord := array.NewRecord(newArrowSchema, recordCols, adf.record.NumRows())
 	for _, col := range recordCols { col.Release() }
-	if inplace { adf.record.Release(); adf.record = newRecord; adf.schema = newDfSchema; return adf }
-	defer newRecord.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
+
+	if inplace {
+		adf.record.Release();
+		adf.record = newRecord;
+		adf.schema = newDfSchema
+		return adf
+	}
+	defer newRecord.Release();
+	return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
 }
+
 func (adf *arrowDataFrame) RenameSeriesByName(colName string, newName string, inplace bool) df.DataFrame {
 	idx := adf.schema.GetIndexByName(colName); if idx == -1 { panic(fmt.Sprintf("column '%s' not found for RenameSeriesByName", colName)) }; return adf.RenameSeries(idx, newName, inplace)
 }
@@ -274,12 +299,212 @@ func (adf *arrowDataFrame) GetSeriesExprByName(sName string) df.Expr {
 	}
 }
 
+func (adf *arrowDataFrame) MapRow(outputSchemaGiven df.DataFrameSchema, f func(df.Row) df.Row) df.DataFrame {
+	if adf.record == nil { panic("MapRow called on nil dataframe record") }
+	outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema)
+	if !ok { panic(fmt.Sprintf("MapRow: outputSchema must be *arrowDataFrameSchema, got %T", outputSchemaGiven)) }
+	outputInternalArrowSchema := outputArrowDFSchema.schema
+	if outputInternalArrowSchema == nil { panic("MapRow: outputSchema's internal arrow.Schema is nil") }
+
+	numOutputCols := outputInternalArrowSchema.NumFields()
+	colBuilders := make([]array.Builder, numOutputCols)
+	for i := 0; i < numOutputCols; i++ { colBuilders[i] = builder.NewBuilder(adf.mem, outputInternalArrowSchema.Field(i).Type) }
+	defer func() { for _, b := range colBuilders { if b != nil { b.Release() } } }()
+
+	for r := int64(0); r < adf.record.NumRows(); r++ {
+		inputRow, err := NewArrowRowFromRecord(adf.schema, adf.record, int(r))
+		if err != nil { panic(fmt.Sprintf("MapRow: error creating input row for row %d: %v", r, err)) }
+		outputRow := f(inputRow)
+		if outputRow == nil { panic(fmt.Sprintf("MapRow: function f returned nil df.Row for input row %d", r)) }
+		if outputRow.Len() != numOutputCols { panic(fmt.Sprintf("MapRow: function f returned df.Row with %d cols, expected %d", outputRow.Len(), numOutputCols)) }
+
+		for c := 0; c < numOutputCols; c++ {
+			val := outputRow.Get(c)
+			if val == nil || val.IsNil() { colBuilders[c].AppendNull(); continue }
+			arrowVal, castOk := val.(*arrowValue)
+			if !castOk { panic(fmt.Sprintf("MapRow: func f returned df.Value at col %d of type %T, expected *arrowValue", c, val)) }
+			if err := appendScalarToBuilder(colBuilders[c], arrowVal.val); err != nil {
+				panic(fmt.Sprintf("MapRow: append error for output col %d (name: %s): %v. Scalar type: %s, Builder type: %s",
+					c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))
+			}
+		}
+	}
+	newCols := make([]arrow.Array, numOutputCols); var newRecordLen int64
+	if len(colBuilders) > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) }
+	for i, b := range colBuilders { newCols[i] = b.NewArray() }
+	mappedRecord := array.NewRecord(outputInternalArrowSchema, newCols, newRecordLen)
+	for _, col := range newCols { col.Release() }; defer mappedRecord.Release()
+	return NewArrowDataFrameWithAllocator(adf.name, mappedRecord, outputArrowDFSchema, adf.mem)
+}
+
+func (adf *arrowDataFrame) FlatMapRow(outputSchemaGiven df.DataFrameSchema, f func(df.Row) []df.Row) df.DataFrame {
+	if adf.record == nil { panic("FlatMapRow called on nil dataframe record") }
+	outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema)
+	if !ok { panic(fmt.Sprintf("FlatMapRow: outputSchema must be *arrowDataFrameSchema, got %T", outputSchemaGiven)) }
+	outputInternalArrowSchema := outputArrowDFSchema.schema
+	if outputInternalArrowSchema == nil { panic("FlatMapRow: outputSchema's internal arrow.Schema is nil") }
+
+	numOutputCols := outputInternalArrowSchema.NumFields()
+	colBuilders := make([]array.Builder, numOutputCols)
+	for i := 0; i < numOutputCols; i++ { colBuilders[i] = builder.NewBuilder(adf.mem, outputInternalArrowSchema.Field(i).Type) }
+	defer func() { for _, b := range colBuilders { if b != nil { b.Release() } } }()
+
+	for r := int64(0); r < adf.record.NumRows(); r++ {
+		inputRow, err := NewArrowRowFromRecord(adf.schema, adf.record, int(r))
+		if err != nil { panic(fmt.Sprintf("FlatMapRow: error creating input row for row %d: %v", r, err)) }
+		outputRows := f(inputRow)
+		if outputRows == nil { continue }
+
+		for i, outputRow := range outputRows {
+			if outputRow == nil { panic(fmt.Sprintf("FlatMapRow: func f returned slice with nil df.Row at index %d for input row %d", i, r)) }
+			if outputRow.Len() != numOutputCols { panic(fmt.Sprintf("FlatMapRow: func f returned df.Row (index %d in slice) with %d cols, expected %d, for input row %d", i, outputRow.Len(), numOutputCols, r)) }
+			for c := 0; c < numOutputCols; c++ {
+				val := outputRow.Get(c)
+				if val == nil || val.IsNil() { colBuilders[c].AppendNull(); continue }
+				arrowVal, castOk := val.(*arrowValue)
+				if !castOk { panic(fmt.Sprintf("FlatMapRow: func f returned df.Value (col %d, row %d in slice) of type %T, expected *arrowValue, for input row %d", c, i, val, r)) }
+				if err := appendScalarToBuilder(colBuilders[c], arrowVal.val); err != nil {
+					panic(fmt.Sprintf("FlatMapRow: append error for output col %d (name: %s): %v. Scalar type: %s, Builder type: %s",
+						c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))
+				}
+			}
+		}
+	}
+	newCols := make([]arrow.Array, numOutputCols); var newRecordLen int64
+	if len(colBuilders) > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) }
+	for i, b := range colBuilders { newCols[i] = b.NewArray() }
+	flatMappedRecord := array.NewRecord(outputInternalArrowSchema, newCols, newRecordLen)
+	for _, col := range newCols { col.Release() }; defer flatMappedRecord.Release()
+	return NewArrowDataFrameWithAllocator(adf.name, flatMappedRecord, outputArrowDFSchema, adf.mem)
+}
+
+func (adf *arrowDataFrame) Distinct(cols ...string) df.DataFrame {
+	if adf.record == nil || adf.record.NumRows() == 0 {
+		schemaToUse := arrow.NewSchema([]arrow.Field{}, nil)
+		if adf.schema != nil && adf.schema.schema != nil { schemaToUse = adf.schema.schema }
+		newRec := array.NewRecord(schemaToUse, nil, 0); defer newRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)
+	}
+	var keyIndices []int
+	if len(cols) == 0 {
+		keyIndices = make([]int, adf.record.NumCols())
+		for i := 0; i < int(adf.record.NumCols()); i++ { keyIndices[i] = i }
+	} else {
+		keyIndices = make([]int, len(cols))
+		for i, name := range cols {
+			idx := adf.schema.GetIndexByName(name)
+			if idx == -1 { panic(fmt.Sprintf("Distinct: column '%s' not found", name)) }
+			keyIndices[i] = idx
+		}
+	}
+    if adf.record.NumCols() == 0 {
+        if adf.record.NumRows() > 0 { newRec := adf.record.NewSlice(0,1); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
+        newRec := adf.record.NewSlice(0,0); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)
+    }
+	sortOrders := make([]df.SortByIndex, len(keyIndices))
+	for i, keyIdx := range keyIndices { sortOrders[i] = df.SortByIndex{Series: keyIdx, Order: df.SortOrderASC} }
+
+	sortedDf := adf.Sort(sortOrders...)
+	sortedArrowDf, ok := sortedDf.(*arrowDataFrame)
+	if !ok { panic("Distinct: Sort did not return *arrowDataFrame") }; defer sortedArrowDf.Release()
+
+	sortedRecord := sortedArrowDf.record
+	if sortedRecord.NumRows() == 0 {
+        newRec := sortedRecord.NewSlice(0, 0); defer newRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)
+    }
+
+	uniqueRowIndices := make([]int64, 0, sortedRecord.NumRows()); uniqueRowIndices = append(uniqueRowIndices, 0)
+	for i := int64(1); i < sortedRecord.NumRows(); i++ {
+		isDifferent := false
+		for _, keyIdx := range keyIndices {
+			prevValScalar := scalar.MakeScalar(sortedRecord.Column(keyIdx), int(i-1))
+			currValScalar := scalar.MakeScalar(sortedRecord.Column(keyIdx), int(i))
+			if !scalar.Equals(prevValScalar, currValScalar) { isDifferent = true; break }
+		}
+		if isDifferent { uniqueRowIndices = append(uniqueRowIndices, i) }
+	}
+
+	indicesBuilder := array.NewInt64Builder(adf.mem); defer indicesBuilder.Release()
+	indicesBuilder.AppendValues(uniqueRowIndices, nil)
+	indicesArr := indicesBuilder.NewArray(); defer indicesArr.Release()
+
+	ctx := compute.WithAllocator(context.Background(), adf.mem)
+	distinctRecordDatum, err := compute.Take(ctx, compute.TakeOptions{}, arrow.NewRecordDatum(sortedRecord), arrow.NewArrayDatum(indicesArr))
+	if err != nil { panic(fmt.Sprintf("Distinct: compute.Take failed: %v", err)) }; defer distinctRecordDatum.Release()
+	distinctRecord, ok := distinctRecordDatum.(*arrow.RecordDatum).Value().(arrow.Record)
+	if !ok { panic("Distinct: compute.Take did not return a RecordDatum") }
+
+	return NewArrowDataFrameWithAllocator(adf.name, distinctRecord, adf.schema, adf.mem)
+}
+
+func (adf *arrowDataFrame) Append(otherRaw df.DataFrame) df.DataFrame {
+	if otherRaw == nil { panic("Append: other dataframe cannot be nil") }
+	otherArrowDf, ok := otherRaw.(*arrowDataFrame)
+	if !ok { panic(fmt.Sprintf("Append: expected *arrowDataFrame, got %T", otherRaw)) }
+
+	currentIsColEmpty := adf.record == nil || adf.record.NumCols() == 0
+	otherIsColEmpty := otherArrowDf.record == nil || otherArrowDf.record.NumCols() == 0
+	currentSchemaForEmpty := adf.schema.schema
+	if currentSchemaForEmpty == nil || currentSchemaForEmpty.NumFields() != 0 { currentSchemaForEmpty = arrow.NewSchema([]arrow.Field{}, nil) }
+
+	if currentIsColEmpty {
+		if otherIsColEmpty {
+			numRows := adf.Len() + otherArrowDf.Len()
+			newRec := array.NewRecord(currentSchemaForEmpty, nil, numRows); defer newRec.Release()
+			return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)
+		}
+		newOtherRec := otherArrowDf.record.NewSlice(0, otherArrowDf.record.NumRows()); defer newOtherRec.Release()
+		return NewArrowDataFrameWithAllocator(otherArrowDf.name, newOtherRec, otherArrowDf.schema, adf.mem)
+	}
+	if otherIsColEmpty {
+		newThisRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newThisRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, newThisRec, adf.schema, adf.mem)
+	}
+
+	if !adf.schema.Equals(otherArrowDf.schema) {
+		panic(fmt.Sprintf("Append: schema mismatch. Current: %s, Other: %s", adf.schema.schema, otherArrowDf.schema.schema))
+	}
+
+	if adf.record.NumRows() == 0 {
+		newOtherRec := otherArrowDf.record.NewSlice(0, otherArrowDf.record.NumRows()); defer newOtherRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, newOtherRec, otherArrowDf.schema, adf.mem)
+	}
+	if otherArrowDf.record.NumRows() == 0 {
+		newThisRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newThisRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, newThisRec, adf.schema, adf.mem)
+	}
+
+	numCols := int(adf.record.NumCols())
+	concatenatedCols := make([]arrow.Array, numCols); var err error
+	for i := 0; i < numCols; i++ {
+		col1 := adf.record.Column(i); col2 := otherArrowDf.record.Column(i)
+		concatenatedCols[i], err = array.Concatenate([]arrow.Array{col1, col2}, adf.mem)
+		if err != nil {
+			for j := 0; j < i; j++ { if concatenatedCols[j] != nil { concatenatedCols[j].Release() } }
+			panic(fmt.Sprintf("Append: failed to concatenate column %d ('%s'): %v", i, adf.schema.Get(i).Name, err))
+		}
+	}
+
+	newNumRows := adf.record.NumRows() + otherArrowDf.record.NumRows()
+	appendedRecord := array.NewRecord(adf.schema.schema, concatenatedCols, newNumRows)
+	for _, col := range concatenatedCols { if col != nil { col.Release() } }
+	return NewArrowDataFrameWithAllocator(adf.name, appendedRecord, adf.schema, adf.mem)
+}
+
+func (adf *arrowDataFrame) Union(otherRaw df.DataFrame) df.DataFrame {
+	if otherRaw == nil { panic("Union: other dataframe cannot be nil") }
+	appendedDf := adf.Append(otherRaw)
+	unionDf := appendedDf.Distinct()
+	if appendedArrowDf, ok := appendedDf.(*arrowDataFrame); ok {
+		appendedArrowDf.Release()
+	}
+	return unionDf
+}
+
 // --- Stubs for remaining methods ---
 func (adf *arrowDataFrame) Select(e ...df.Expr) df.DataFrame { panic("not implemented") }
-func (adf *arrowDataFrame) MapRow(schema df.DataFrameSchema, f func(df.Row) df.Row) df.DataFrame { panic("not implemented") }
-func (adf *arrowDataFrame) Distinct(cols ...string) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame { panic("not implemented") }
-func (adf *arrowDataFrame) FlatMapRow(schema df.DataFrameSchema, f func(df.Row) []df.Row) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) WhenNil(t map[string]df.Value) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) When(t map[string]map[any]df.Value) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) AsFormat(t map[string]df.Format) df.DataFrame { panic("not implemented") }
@@ -287,8 +512,6 @@ func (adf *arrowDataFrame) UpdateSeries(index int, series df.Series) df.DataFram
 func (adf *arrowDataFrame) UpdateSeriesByName(name string, series df.Series) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) ForEachRow(f func(df.Row)) { panic("not implemented") }
 func (adf *arrowDataFrame) Group(others ...string) df.GroupedDataFrame { panic("not implemented") }
-func (adf *arrowDataFrame) Append(d df.DataFrame) df.DataFrame { panic("not implemented") }
-func (adf *arrowDataFrame) Union(d df.DataFrame) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) Intersection(d df.DataFrame, col ...string) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) Except(d df.DataFrame, col ...string) df.DataFrame { panic("not implemented") }
 func (adf *arrowDataFrame) Join(schema df.DataFrameSchema, d df.DataFrame, jointype df.JoinType, cols map[string]string, f func(df.Row, df.Row) []df.Row) df.DataFrame { panic("not implemented") }
