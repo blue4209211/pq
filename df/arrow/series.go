@@ -111,15 +111,19 @@ func (as *arrowSeries) Map(outputSchema df.Format, f func(df.Value) df.Value) df
 		av, ok := mappedVal.(*arrowValue); if !ok { panic(fmt.Sprintf("Map function returned a df.Value of type %T, expected *arrowValue. Consider wrapping result in NewArrowValue.", mappedVal)) }
 		if av.val == nil || !av.val.IsValid() { b.AppendNull(); continue }
 
+		var scalarToAppend scalar.Scalar = av.val
+		var castedScalarNeedsRelease bool
 		if !arrow.TypeEqual(av.val.DataType(), outputArrowType) {
-			castedScalar, err := scalar.Cast(compute.DefaultCastOptions(false), av.val, outputArrowType)
+			casted, err := scalar.Cast(compute.DefaultCastOptions(false), av.val, outputArrowType)
 			if err != nil { panic(fmt.Sprintf("Map: cast scalar from %s to %s failed: %v", av.val.DataType().Name(), outputArrowType.Name(), err)) }
-			err = appendScalarToBuilder(b, castedScalar)
-			castedScalar.Release() // Release explicitly after use
-			if err != nil { panic(fmt.Sprintf("Map append casted scalar error: %v", err)) }
-		} else {
-			if err := appendScalarToBuilder(b, av.val); err != nil { panic(fmt.Sprintf("Map append error: %v", err)) }
+			scalarToAppend = casted
+			castedScalarNeedsRelease = true
 		}
+		if err := appendScalarToBuilder(b, scalarToAppend); err != nil {
+			if castedScalarNeedsRelease { scalarToAppend.(interface{ Release() }).Release() }
+			panic(fmt.Sprintf("Map append error: %v", err))
+		}
+		if castedScalarNeedsRelease { scalarToAppend.(interface{ Release() }).Release() }
 	}
 	newArr := b.NewArray()
 	return NewArrowSeriesWithAllocator(newArr, df.SeriesSchema{Name: as.schema.Name, Format: outputSchema}, as.mem)
@@ -134,15 +138,19 @@ func (as *arrowSeries) FlatMap(outputSchema df.Format, f func(df.Value) []df.Val
 			av, ok := mappedVal.(*arrowValue); if !ok { panic(fmt.Sprintf("FlatMap function returned a df.Value of type %T, expected *arrowValue. Consider wrapping result in NewArrowValue.", mappedVal)) }
 			if av.val == nil || !av.val.IsValid() { b.AppendNull(); continue }
 
+			var scalarToAppend scalar.Scalar = av.val
+			var castedScalarNeedsRelease bool
 			if !arrow.TypeEqual(av.val.DataType(), outputArrowType) {
-				castedScalar, err := scalar.Cast(compute.DefaultCastOptions(false), av.val, outputArrowType)
+				casted, err := scalar.Cast(compute.DefaultCastOptions(false), av.val, outputArrowType)
 				if err != nil {panic(fmt.Sprintf("FlatMap: cast scalar from %s to %s failed: %v", av.val.DataType().Name(), outputArrowType.Name(), err))}
-				err = appendScalarToBuilder(b, castedScalar)
-				castedScalar.Release() // Release explicitly after use
-				if err != nil {panic(fmt.Sprintf("FlatMap append casted scalar error: %v", err))}
-			} else {
-				if err := appendScalarToBuilder(b, av.val); err != nil { panic(fmt.Sprintf("FlatMap append error: %v", err)) }
+				scalarToAppend = casted
+				castedScalarNeedsRelease = true
 			}
+			if err := appendScalarToBuilder(b, scalarToAppend); err != nil {
+				if castedScalarNeedsRelease { scalarToAppend.(interface{ Release() }).Release() }
+				panic(fmt.Sprintf("FlatMap append error: %v", err))
+			}
+			if castedScalarNeedsRelease { scalarToAppend.(interface{ Release() }).Release() }
 		}
 	}
 	newArr := b.NewArray()
@@ -193,19 +201,14 @@ func (as *arrowSeries) Append(otherSeriesRaw df.Series) df.Series {
 
 func (as *arrowSeries) Union(otherSeries df.Series) df.Series {
 	appended := as.Append(otherSeries)
-	// The appended series is temporary, so its resources should be managed.
-	// Distinct creates a new series.
 	distinctSeries := appended.Distinct()
-	if appSer, ok := appended.(*arrowSeries); ok {
-		appSer.Release()
-	}
+	if appSer, ok := appended.(*arrowSeries); ok { appSer.Release() }
 	return distinctSeries
 }
 
 func (as *arrowSeries) Intersection(otherSeriesRaw df.Series) df.Series {
 	if as.arr == nil || otherSeriesRaw == nil || otherSeriesRaw.Len() == 0 || as.Len() == 0 {
-		dt := dfFormatToArrowType(as.schema.Format)
-        bld := builder.NewBuilder(as.mem, dt); defer bld.Release()
+		dt := dfFormatToArrowType(as.schema.Format); bld := builder.NewBuilder(as.mem, dt); defer bld.Release()
         emptyArr := bld.NewArray(); return NewArrowSeriesWithAllocator(emptyArr, as.schema, as.mem)
 	}
 	otherSeries, ok := otherSeriesRaw.(*arrowSeries); if !ok { panic(fmt.Sprintf("Intersection: expected *arrowSeries, got %T", otherSeriesRaw)) }
@@ -221,8 +224,7 @@ func (as *arrowSeries) Intersection(otherSeriesRaw df.Series) df.Series {
 
 func (as *arrowSeries) Except(otherSeriesRaw df.Series) df.Series {
 	if as.arr == nil || as.Len() == 0 {
-		dt := dfFormatToArrowType(as.schema.Format)
-        bld := builder.NewBuilder(as.mem, dt); defer bld.Release()
+		dt := dfFormatToArrowType(as.schema.Format); bld := builder.NewBuilder(as.mem, dt); defer bld.Release()
         emptyArr := bld.NewArray(); return NewArrowSeriesWithAllocator(emptyArr, as.schema, as.mem)
 	}
 	if otherSeriesRaw == nil || otherSeriesRaw.Len() == 0 { return as.Copy() }
@@ -237,98 +239,114 @@ func (as *arrowSeries) Except(otherSeriesRaw df.Series) df.Series {
     return NewArrowSeriesWithAllocator(resultArr, as.schema, as.mem)
 }
 
-func (as *arrowSeries) Join(outputFormat df.Format, otherSeriesRaw df.Series, jointype df.JoinType, f func(v1 df.Value, v2 df.Value) []df.Value) df.Series {
-	if outputFormat == nil { panic("Join: outputFormat cannot be nil") }
-	if f == nil { panic("Join: function f cannot be nil") }
+func (as *arrowSeries) AsFormat(targetFormat df.Format) df.Series {
+	if as.arr == nil { panic("AsFormat called on nil series array") }
+	if targetFormat == nil { panic("AsFormat: targetFormat cannot be nil") }
 
-	var otherSeries *arrowSeries
-	var ok bool
-	isOtherSeriesValid := false
-	if otherSeriesRaw != nil {
-		otherSeries, ok = otherSeriesRaw.(*arrowSeries)
-		if !ok { panic(fmt.Sprintf("Join: expected otherSeries to be *arrowSeries, got %T", otherSeriesRaw)) }
-		if otherSeries.arr != nil { isOtherSeriesValid = true }
+	targetArrowType := dfFormatToArrowType(targetFormat)
+	if arrow.TypeEqual(as.arr.DataType(), targetArrowType) {
+		if as.schema.Format.Equals(targetFormat) { return as.Copy() }
+		newSchema := df.SeriesSchema{Name: as.schema.Name, Format: targetFormat}
+		return NewArrowSeriesWithAllocator(as.arr, newSchema, as.mem)
 	}
 
-	outputArrowType := dfFormatToArrowType(outputFormat)
-	b := builder.NewBuilder(as.mem, outputArrowType); defer b.Release()
+	b := builder.NewBuilder(as.mem, targetArrowType); defer b.Release()
+	ctx := compute.WithAllocator(context.Background(), as.mem)
 
-	createNilDfValue := func(seriesFormat df.Format) df.Value {
-		if seriesFormat == nil { panic("cannot create nil df.Value from nil series format for join padding") }
-		return NewArrowValue(scalar.NewNullScalar(dfFormatToArrowType(seriesFormat)), seriesFormat)
+	for i := 0; i < as.arr.Len(); i++ {
+		if as.arr.IsNull(i) { b.AppendNull(); continue }
+
+		sourceScalar := scalar.MakeScalar(as.arr, i)
+		var castedScalar scalar.Scalar
+		var err error
+
+		castedScalar, err = scalar.Cast(ctx, sourceScalar, targetArrowType)
+		if srcReleasable, okSrc := sourceScalar.(interface{ Release() }); okSrc { srcReleasable.Release() }
+
+		if err != nil {
+			panic(fmt.Sprintf("AsFormat: failed to cast value '%v' (type %s) to type %s: %v",
+				sourceScalar, sourceScalar.DataType(), targetArrowType, err))
+		}
+
+		err = appendScalarToBuilder(b, castedScalar)
+		if csReleasable, okCs := castedScalar.(interface{ Release() }); okCs { csReleasable.Release() }
+
+		if err != nil {
+			panic(fmt.Sprintf("AsFormat: failed to append casted value to builder: %v", err))
+		}
 	}
+	newArr := b.NewArray()
+	newSchema := df.SeriesSchema{Name: as.schema.Name, Format: targetFormat}
+	return NewArrowSeriesWithAllocator(newArr, newSchema, as.mem)
+}
 
-	var nilVal1, nilVal2 df.Value // Typed nil placeholders
-	if as.arr != nil { nilVal1 = createNilDfValue(as.schema.Format) }
-	if isOtherSeriesValid { nilVal2 = createNilDfValue(otherSeries.schema.Format) }
+func (as *arrowSeries) WhenNil(fillValue df.Value) df.Series {
+	if as.arr == nil { panic("WhenNil called on nil series array") }
+	if fillValue == nil { panic("WhenNil: fillValue cannot be nil (can be a nil df.Value though)")}
 
-	processOutput := func(outputVals []df.Value) {
-		for _, outVal := range outputVals {
-			if outVal == nil || outVal.IsNil() { b.AppendNull(); continue }
-			av, castOk := outVal.(*arrowValue)
-			if !castOk { panic(fmt.Sprintf("Join: func f returned non-*arrowValue: %T", outVal)) }
 
-			if !arrow.TypeEqual(av.val.DataType(), outputArrowType) {
-				castedScalar, err := scalar.Cast(compute.DefaultCastOptions(false), av.val, outputArrowType)
-				if err != nil { panic(fmt.Sprintf("Join: cast scalar from %s to %s failed: %v", av.val.DataType(), outputArrowType, err)) }
-				err = appendScalarToBuilder(b, castedScalar)
-				castedScalar.Release() // Release explicitly after use
-				if err != nil { panic(fmt.Sprintf("Join: append casted scalar error: %v", err)) }
-			} else {
-				if err := appendScalarToBuilder(b, av.val); err != nil { panic(fmt.Sprintf("Join: append scalar error: %v", err)) }
+	ctx := compute.WithAllocator(context.Background(), as.mem)
+	targetArrowType := as.arr.DataType()
+
+	fillScalar, err := dfValueToArrowScalar(fillValue, targetArrowType, as.mem)
+	if err != nil { panic(fmt.Sprintf("WhenNil: error converting fill value to Arrow scalar: %v", err)) }
+	if fsr, ok := fillScalar.(interface{ Release() }); ok { defer fsr.Release() } // For casted scalars
+
+	fillScalarDatum := arrow.NewScalarDatum(fillScalar)
+	seriesDatum := arrow.NewArrayDatum(as.arr) // Does not retain as.arr
+
+	resultDatum, err := compute.FillNull(ctx, seriesDatum, fillScalarDatum)
+	if err != nil { panic(fmt.Sprintf("WhenNil: FillNull compute failed: %v", err)) }
+	defer resultDatum.Release()
+
+	newArr := resultDatum.(*arrow.ArrayDatum).MakeArray()
+	return NewArrowSeriesWithAllocator(newArr, as.schema, as.mem)
+}
+
+func (as *arrowSeries) When(replacementMap map[any]df.Value) df.Series {
+	if as.arr == nil { panic("When called on nil series array") }
+	if len(replacementMap) == 0 { return as.Copy() }
+
+	colType := as.arr.DataType()
+	b := builder.NewBuilder(as.mem, colType); defer b.Release()
+	ctx := compute.WithAllocator(context.Background(), as.mem)
+
+
+	for r := 0; r < as.arr.Len(); r++ {
+		currentDfVal := as.Get(r) // This is *arrowValue
+		var goKeyForLookup any
+		if currentDfVal.IsNil() {
+			goKeyForLookup = nil
+		} else {
+			goKeyForLookup = currentDfVal.Get() // Get Go value for map key
+		}
+
+		replacementDfVal, shouldReplace := replacementMap[goKeyForLookup]
+
+		if shouldReplace {
+			replacementScalar, err := dfValueToArrowScalar(replacementDfVal, colType, as.mem)
+			if err != nil { panic(fmt.Sprintf("When: error converting replacement df.Value for key %v: %v", goKeyForLookup, err)) }
+
+			errAppend := appendScalarToBuilder(b, replacementScalar)
+			if rsr, ok_rsr := replacementScalar.(interface{ Release() }); ok_rsr { rsr.Release() } // Release if casted by dfValueToArrowScalar
+
+			if errAppend != nil { panic(fmt.Sprintf("When: error appending replacement scalar for key %v: %v", goKeyForLookup, errAppend)) }
+		} else {
+			// No replacement, append original value.
+			originalScalarToAppend := currentDfVal.(*arrowValue).val
+			if err := appendScalarToBuilder(b, originalScalarToAppend); err != nil {
+				panic(fmt.Sprintf("When: error appending original scalar: %v", err))
 			}
 		}
 	}
-
-	len1 := as.Len(); var len2 int64; if isOtherSeriesValid { len2 = otherSeries.Len() }
-
-	switch jointype {
-	case df.JoinEqui:
-		limit := len1; if len2 < limit { limit = len2 }
-		for i := int64(0); i < limit; i++ { processOutput(f(as.Get(i), otherSeries.Get(i))) }
-	case df.JoinLeft:
-		if as.arr == nil { break }
-		for i := int64(0); i < len1; i++ {
-			v1 := as.Get(i)
-			var v2 df.Value = nilVal2
-			if isOtherSeriesValid && i < len2 { v2 = otherSeries.Get(i) } else if !isOtherSeriesValid { v2 = nil /* raw nil if otherSeries was completely nil */ }
-			processOutput(f(v1, v2))
-		}
-	case df.JoinRight:
-		if !isOtherSeriesValid { break }
-		for i := int64(0); i < len2; i++ {
-			v2 := otherSeries.Get(i)
-			var v1 df.Value = nilVal1
-			if as.arr != nil && i < len1 { v1 = as.Get(i) } else if as.arr == nil { v1 = nil /* raw nil if as.arr was completely nil */ }
-			processOutput(f(v1, v2))
-		}
-	case df.JoinOuter:
-		maxLen := len1; if len2 > maxLen { maxLen = len2 }
-		if as.arr == nil && !isOtherSeriesValid { break } // Both effectively nil/empty
-		for i := int64(0); i < maxLen; i++ {
-			var v1, v2 df.Value
-			if as.arr != nil && i < len1 { v1 = as.Get(i) } else if as.arr != nil { v1 = nilVal1 } else { v1 = nil }
-			if isOtherSeriesValid && i < len2 { v2 = otherSeries.Get(i) } else if isOtherSeriesValid { v2 = nilVal2 } else { v2 = nil }
-			processOutput(f(v1, v2))
-		}
-	case df.JoinCross:
-		if as.arr == nil || !isOtherSeriesValid || len1 == 0 || len2 == 0 { break }
-		for i := int64(0); i < len1; i++ {
-			for j := int64(0); j < len2; j++ { processOutput(f(as.Get(i), otherSeries.Get(j))) }
-		}
-	default: panic(fmt.Sprintf("Join: unsupported join type: %s", jointype))
-	}
 	newArr := b.NewArray()
-	return NewArrowSeriesWithAllocator(newArr, df.SeriesSchema{Name: as.schema.Name, Format: outputFormat}, as.mem)
+	return NewArrowSeriesWithAllocator(newArr, as.schema, as.mem)
 }
 
-
-// Stubs for remaining methods
-func (as *arrowSeries) Expr() df.Expr { /* ... */ } // Assumed implemented from previous step
-func (as *arrowSeries) Select(e df.Expr) df.Series { /* ... */ } // Assumed implemented
+// --- Stubs for remaining methods ---
+func (as *arrowSeries) Expr() df.Expr { /* ... */ }
+func (as *arrowSeries) Select(e df.Expr) df.Series { /* ... */ }
 func (as *arrowSeries) Group() df.GroupedSeries { panic("not implemented") }
-func (as *arrowSeries) WhenNil(t df.Value) df.Series { panic("not implemented") }
-func (as *arrowSeries) When(t map[any]df.Value) df.Series { panic("not implemented") }
-func (as *arrowSeries) AsFormat(t df.Format) df.Series { panic("not implemented") }
+func (as *arrowSeries) Join(schema df.Format, series df.Series, jointype df.JoinType, f func(df.Value, df.Value) []df.Value) df.Series { /* ... */ }
 
 var _ df.Series = (*arrowSeries)(nil)

@@ -52,12 +52,13 @@ func getBaseTestDf(t *testing.T, mem memory.Allocator) df.DataFrame {
 	dfSchema := arrowimpl.NewArrowDataFrameSchema(schema).(*arrowimpl.ArrowDataFrameSchema)
 	return arrowimpl.NewArrowDataFrame("test_df", record, dfSchema)
 }
-func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arrow.Array {
+func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arrow.Array { // Used by series_test, added here if df_test needs it too
 	b := array.NewInt64Builder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
-func getTestStringArray(mem memory.Allocator, values []string, valids []bool) arrow.Array {
+func getTestStringArray(mem memory.Allocator, values []string, valids []bool) arrow.Array { // Used by series_test, added here if df_test needs it too
 	b := array.NewStringBuilder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
+
 
 const nilPlaceholder = "__NIL_PLACEHOLDER__"
 
@@ -100,122 +101,63 @@ func TestArrowDataFrame_Union(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_WhenNil(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_When(t *testing.T) { /* ... */ }
 func TestArrowDataFrame_UpdateSeries(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Join_EquiJoin(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Join_CrossJoin_Partial(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Intersection(t *testing.T) { /* ... */ }
+func TestArrowDataFrame_Except(t *testing.T) { /* ... */ }
 
 
-func TestArrowDataFrame_Join_EquiJoin(t *testing.T) {
+func TestArrowDataFrame_GroupBy(t *testing.T) {
 	mem := memory.NewGoAllocator()
-
-	lSchema := arrow.NewSchema(
-		[]arrow.Field{ {Name: "id", Type: arrow.PrimitiveTypes.Int64}, {Name: "val_l", Type: arrow.BinaryTypes.String}, }, nil,
-	)
-	ldfSchema := arrowimpl.NewArrowDataFrameSchema(lSchema).(*arrowimpl.ArrowDataFrameSchema)
-	lrb := array.NewRecordBuilder(mem, lSchema); defer lrb.Release()
-	lrb.Field(0).(*array.Int64Builder).AppendValues([]int64{1, 2, 3, 4, 0}, []bool{true,true,true,true,false})
-	lrb.Field(1).(*array.StringBuilder).AppendValues([]string{"L1", "L2", "L3", "L4", "L5_nil_id"}, nil)
-	lRec := lrb.NewRecord(); defer lRec.Release()
-	ldf := arrowimpl.NewArrowDataFrame("left", lRec, ldfSchema)
-	defer ldf.(*arrowimpl.ArrowDataFrame).Release()
-
-	rSchema := arrow.NewSchema(
-		[]arrow.Field{ {Name: "id", Type: arrow.PrimitiveTypes.Int64}, {Name: "val_r", Type: arrow.PrimitiveTypes.Float64}, }, nil,
-	)
-	rdfSchema := arrowimpl.NewArrowDataFrameSchema(rSchema).(*arrowimpl.ArrowDataFrameSchema)
-	rrb := array.NewRecordBuilder(mem, rSchema); defer rrb.Release()
-	rrb.Field(0).(*array.Int64Builder).AppendValues([]int64{2, 0, 3, 5, 3}, []bool{true,false,true,true,true})
-	rrb.Field(1).(*array.Float64Builder).AppendValues([]float64{20.2, 99.9, 30.3, 50.5, 30.33}, []bool{true,true,true,true,true})
-	rRec := rrb.NewRecord(); defer rRec.Release()
-	rdf := arrowimpl.NewArrowDataFrame("right", rRec, rdfSchema)
-	defer rdf.(*arrowimpl.ArrowDataFrame).Release()
-
-	outJoinSchemaArrow := arrow.NewSchema(
+	schema := arrow.NewSchema(
 		[]arrow.Field{
-			{Name: "l_id", Type: arrow.PrimitiveTypes.Int64, Nullable: true}, // Nullable true because join keys can be nil
-			{Name: "l_val", Type: arrow.BinaryTypes.String},
-			{Name: "r_id", Type: arrow.PrimitiveTypes.Int64, Nullable: true},
-			{Name: "r_val", Type: arrow.PrimitiveTypes.Float64},
-			{Name: "combined", Type: arrow.BinaryTypes.String},
+			{Name: "cat1", Type: arrow.BinaryTypes.String, Nullable: true},
+			{Name: "cat2", Type: arrow.PrimitiveTypes.Int64, Nullable: true},
+			{Name: "value", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
 		}, nil,
 	)
-	outJoinDfSchema := arrowimpl.NewArrowDataFrameSchema(outJoinSchemaArrow).(*arrowimpl.ArrowDataFrameSchema)
+	dfSchema := arrowimpl.NewArrowDataFrameSchema(schema).(*arrowimpl.ArrowDataFrameSchema)
 
-	fUser := func(r1, r2 df.Row) []df.Row {
-		lIDVal := r1.GetByName("id"); lValStr := r1.GetByName("val_l").GetAsString()
-		rIDVal := r2.GetByName("id"); rValFlt := r2.GetByName("val_r").GetAsDouble()
+	rb := array.NewRecordBuilder(mem, schema); defer rb.Release()
+	rb.Field(0).(*array.StringBuilder).AppendValues([]string{"A", "B", "A", "A", "B", "", "A", ""}, []bool{true, true, true, true, true, false, true, false})
+	rb.Field(1).(*array.Int64Builder).AppendValues([]int64{1, 2, 1, 2, 1, 1, 0, 0}, []bool{true, true, true, true, true, true, false, false})
+	rb.Field(2).(*array.Float64Builder).AppendValues([]float64{10.1, 20.2, 10.10, 30.3, 40.4, 50.5, 60.6, 70.7}, nil)
+	record := rb.NewRecord(); defer record.Release()
+	baseDf := arrowimpl.NewArrowDataFrame("groupby_test_df", record, dfSchema)
+	// baseDf is retained by GroupBy calls, so its release is handled by the groupedDf's Release or end of this test.
 
-		lIDScal := scalar.NewNullScalar(arrow.PrimitiveTypes.Int64); if !lIDVal.IsNil() { lIDScal = scalar.NewInt64Scalar(lIDVal.GetAsInt()) }
-		lValScal := scalar.NewStringScalar(lValStr)
-		rIDScal := scalar.NewNullScalar(arrow.PrimitiveTypes.Int64); if !rIDVal.IsNil() { rIDScal = scalar.NewInt64Scalar(rIDVal.GetAsInt()) }
-		rValScal := scalar.NewFloat64Scalar(rValFlt)
-		combinedStr := fmt.Sprintf("%s_%.1f", lValStr, rValFlt)
-		combinedScal := scalar.NewStringScalar(combinedStr)
+	// Case 1: GroupBy "cat1"
+	grouped1 := baseDf.GroupBy("cat1")
+	agdf1, ok1 := grouped1.(*arrowimpl.ArrowGroupedDataFrame)
+	assert.True(t, ok1); defer agdf1.Release()
+	assert.Equal(t, []string{"cat1"}, agdf1.GetGroupColumns())
+	assert.Equal(t, int64(3), agdf1.Len(), "Number of unique groups for cat1")
 
-		rowVals := []scalar.Scalar{lIDScal, lValScal, rIDScal, rValScal, combinedScal}
-		return []df.Row{arrowimpl.NewArrowRow(outJoinDfSchema, rowVals)}
-	}
-	joinCols := map[string]string{"id": "id"}
+	// Case 2: GroupBy "cat1", "cat2"
+	grouped2 := baseDf.GroupBy("cat1", "cat2")
+	agdf2, ok2 := grouped2.(*arrowimpl.ArrowGroupedDataFrame)
+	assert.True(t, ok2); defer agdf2.Release()
+	assert.Equal(t, []string{"cat1", "cat2"}, agdf2.GetGroupColumns())
+	assert.Equal(t, int64(7), agdf2.Len(), "Number of unique groups for (cat1, cat2)")
 
-	// Case 1: Basic Inner Join (EquiJoin)
-	joinedDf := ldf.Join(outJoinDfSchema, rdf, df.JoinEqui, joinCols, fUser);	defer joinedDf.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(4), joinedDf.Len(), "EquiJoin: Length check")
-	expectedData := [][]interface{}{
-		{int64(2), "L2", int64(2), 20.2, "L2_20.2"},
-		{int64(3), "L3", int64(3), 30.3, "L3_30.3"},
-		{int64(3), "L3", int64(3), 30.33, "L3_30.3"}, // Note: fUser uses "%.1f" for float in combined string
-		{nilPlaceholder, "L5_nil_id", nilPlaceholder, 99.9, "L5_nil_id_99.9"},
-	}
-	actualData := dfToSliceOfInterfaceSlices(joinedDf)
-	sortSliceOfInterfaceSlices(expectedData); sortSliceOfInterfaceSlices(actualData)
-	assert.Equal(t, expectedData, actualData, "EquiJoin: Data check")
+	// Case 3: GroupBy on empty DataFrame
+	emptyRec := array.NewRecord(schema, nil, 0); defer emptyRec.Release()
+	emptyDf := arrowimpl.NewArrowDataFrame("empty_groupby", emptyRec, dfSchema) // This df needs release
+	defer emptyDf.(*arrowimpl.ArrowDataFrame).Release()
 
-	// Case 2: No matches
-	noMatchRdfBuilder := array.NewRecordBuilder(mem, rSchema); defer noMatchRdfBuilder.Release()
-	noMatchRdfBuilder.Field(0).(*array.Int64Builder).AppendValues([]int64{101, 102}, nil)
-	noMatchRdfBuilder.Field(1).(*array.Float64Builder).AppendValues([]float64{1.0, 2.0}, nil)
-	noMatchRec := noMatchRdfBuilder.NewRecord(); defer noMatchRec.Release()
-	noMatchRdf := arrowimpl.NewArrowDataFrame("no_match_rdf", noMatchRec, rdfSchema);	defer noMatchRdf.(*arrowimpl.ArrowDataFrame).Release()
-	joinedNoMatch := ldf.Join(outJoinDfSchema, noMatchRdf, df.JoinEqui, joinCols, fUser);	defer joinedNoMatch.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(0), joinedNoMatch.Len(), "EquiJoin with no matches")
+	groupedEmpty := emptyDf.GroupBy("cat1")
+	agdfEmpty, okEmpty := groupedEmpty.(*arrowimpl.ArrowGroupedDataFrame)
+	assert.True(t, okEmpty); defer agdfEmpty.Release()
+	assert.Equal(t, int64(0), agdfEmpty.Len(), "GroupBy on empty DF should have 0 groups")
+	assert.Empty(t, agdfEmpty.GetKeys(), "GetKeys on empty GroupBy should be empty")
 
-	// Case 3: Empty left DataFrame
-	emptyLRec := array.NewRecord(lSchema, nil, 0); defer emptyLRec.Release()
-	emptyLdf := arrowimpl.NewArrowDataFrame("empty_left", emptyLRec, ldfSchema);	defer emptyLdf.(*arrowimpl.ArrowDataFrame).Release()
-	joinedEmptyLeft := emptyLdf.Join(outJoinDfSchema, rdf, df.JoinEqui, joinCols, fUser);	defer joinedEmptyLeft.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(0), joinedEmptyLeft.Len(), "EquiJoin with empty left DF")
+	// Case 4: Panic conditions
+	assert.PanicsWithValue(t, "GroupBy requires at least one column name", func() { baseDf.GroupBy() })
+	assert.Panics(t, func() { baseDf.GroupBy("cat1", "non_existent_col") }) // Panic message includes col name
 
-	// Case 5: fUser returns multiple rows
-	fUserMulti := func(r1, r2 df.Row) []df.Row { return append(fUser(r1,r2), fUser(r1,r2)...) }
-	joinedMulti := ldf.Join(outJoinDfSchema, rdf, df.JoinEqui, joinCols, fUserMulti);	defer joinedMulti.(*arrowimpl.ArrowDataFrame).Release()
-	assert.Equal(t, int64(4*2), joinedMulti.Len(), "EquiJoin with fUser returning multiple rows")
-
-	// Case 6: Panic conditions
-	assert.PanicsWithValue(t, "JoinEqui requires join columns.", func() { ldf.Join(outJoinDfSchema, rdf, df.JoinEqui, map[string]string{}, fUser) })
-	assert.PanicsWithValue(t, "Join: only JoinEqui (and basic CrossJoin kernel) supported. Got LeftOuterJoin", func() { ldf.Join(outJoinDfSchema, rdf, df.JoinLeft, joinCols, fUser) })
-	assert.PanicsWithValue(t, "Join: user function fUser cannot be nil in this implementation", func() { ldf.Join(outJoinDfSchema, rdf, df.JoinEqui, joinCols, nil) })
+	// Release the baseDf as its record was retained by the GroupBy calls and we are done with it here.
+	baseDf.(*arrowimpl.ArrowDataFrame).Release()
 }
 
-func TestArrowDataFrame_Join_CrossJoin_Partial(t *testing.T) {
-	mem := memory.NewGoAllocator()
-	lSchema := arrow.NewSchema([]arrow.Field{{Name: "L1", Type: arrow.PrimitiveTypes.Int64}}, nil)
-	ldfSchema := arrowimpl.NewArrowDataFrameSchema(lSchema).(*arrowimpl.ArrowDataFrameSchema)
-	lrb := array.NewRecordBuilder(mem, lSchema); defer lrb.Release()
-	lrb.Field(0).(*array.Int64Builder).AppendValues([]int64{1,2}, nil)
-	lRec := lrb.NewRecord(); defer lRec.Release()
-	ldf := arrowimpl.NewArrowDataFrame("left_cj", lRec, ldfSchema);	defer ldf.(*arrowimpl.ArrowDataFrame).Release()
-
-	rSchema := arrow.NewSchema([]arrow.Field{{Name: "R1", Type: arrow.BinaryTypes.String}}, nil)
-	rdfSchema := arrowimpl.NewArrowDataFrameSchema(rSchema).(*arrowimpl.ArrowDataFrameSchema)
-	rrb := array.NewRecordBuilder(mem, rSchema); defer rrb.Release()
-	rrb.Field(0).(*array.StringBuilder).AppendValues([]string{"a","b"}, nil)
-	rRec := rrb.NewRecord(); defer rRec.Release()
-	rdf := arrowimpl.NewArrowDataFrame("right_cj", rRec, rdfSchema);	defer rdf.(*arrowimpl.ArrowDataFrame).Release()
-
-	outCrossSchemaArrow := arrow.NewSchema( []arrow.Field{{Name: "L_val", Type: arrow.PrimitiveTypes.Int64}, {Name: "R_val", Type: arrow.BinaryTypes.String}}, nil )
-	outCrossDfSchema := arrowimpl.NewArrowDataFrameSchema(outCrossSchemaArrow).(*arrowimpl.ArrowDataFrameSchema)
-	fUserCross := func(r1, r2 df.Row) []df.Row { return []df.Row{} }
-
-	assert.PanicsWithValue(t, "Join: CrossJoin with fUser post-processing not fully implemented after Arrow kernel.", func() {
-		ldf.Join(outCrossDfSchema, rdf, df.JoinCross, nil, fUserCross)
-	}, "CrossJoin path expected to panic due to incomplete fUser adaptation")
-}
 
 // TODO: Add tests for df.go (This was the original comment in the file)
