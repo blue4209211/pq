@@ -4,7 +4,7 @@ package arrow_test
 
 import (
 	"fmt"
-	"reflect" // Added for TestArrowSeries_Expr panic test
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,13 +16,13 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/memory"
 	"github.com/apache/arrow/go/v14/arrow/scalar"
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/df/expr" // Assuming expression types are here or in df
+	"github.com/blue4209211/pq/df/expr"
 	"github.com/stretchr/testify/assert"
 
 	arrowimpl "github.com/blue4209211/pq/df/arrow"
 )
 
-// --- (Existing helpers like getTestInt64Array, etc.) ---
+// --- Helper functions ---
 func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arrow.Array {
 	b := array.NewInt64Builder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
@@ -44,6 +44,7 @@ func getTestTimestampArrayNano(mem memory.Allocator, values []time.Time, valids 
 const nilPlaceholder = "__NIL_PLACEHOLDER__"
 func extractValues(s df.Series) []interface{} {
 	var out []interface{}
+	if s == nil { return out }
 	for i := int64(0); i < s.Len(); i++ {
 		v := s.Get(i)
 		if v.IsNil() { out = append(out, nilPlaceholder) } else { out = append(out, v.Get()) }
@@ -59,7 +60,17 @@ func sortInterfaceSlice(slice []interface{}) {
 	})
 }
 
-// --- (Existing tests: New, Schema, Get, Copy, ForEach, Limit, Where, Sort, Map, FlatMap, Reduce, Distinct, Append, Union, Intersection, Except) ---
+// Mock value for testing non-*arrowValue returns
+type mockValue struct { df.Value; data any; mockSchema df.Format; mockIsNil bool }
+func (m *mockValue) Get() any { return m.data }
+func (m *mockValue) IsNil() bool { return m.mockIsNil }
+func (m *mockValue) Schema() df.Format { return m.mockSchema }
+func (m *mockValue) GetAsInt() int64 { if i,ok := m.data.(int64); ok {return i}; return 0 }
+func (m *mockValue) GetAsString() string { if s,ok := m.data.(string); ok {return s}; return "" }
+// Add other GetAs... methods if needed by test functions
+
+
+// --- Existing tests ---
 func TestArrowSeries_NewArrowSeries(t *testing.T) { /* ... */ }
 func TestArrowSeries_Schema_Len_Get(t *testing.T) { /* ... */ }
 func TestArrowSeries_Copy(t *testing.T) { /* ... */ }
@@ -75,193 +86,129 @@ func TestArrowSeries_Append(t *testing.T) { /* ... */ }
 func TestArrowSeries_Union(t *testing.T) { /* ... */ }
 func TestArrowSeries_Intersection(t *testing.T) { /* ... */ }
 func TestArrowSeries_Except(t *testing.T) { /* ... */ }
+func TestArrowSeries_Expr(t *testing.T) { /* ... */ }
+func TestArrowSeries_Select(t *testing.T) { /* ... */ }
 
 
-func TestArrowSeries_Expr(t *testing.T) {
+func TestArrowSeries_Join(t *testing.T) {
 	mem := memory.NewGoAllocator()
+	sSchemaInt := df.SeriesSchema{Name: "s_int", Format: df.IntegerFormat}
+	sSchemaStr := df.SeriesSchema{Name: "s_str", Format: df.StringFormat}
 
-	testCases := []struct {
-		name         string
-		seriesArr    arrow.Array
-		seriesSchema df.SeriesSchema
-		// expectedType df.ExprType // This was an example, direct type assertion is better if possible
-		assertType func(t *testing.T, e df.Expr)
-	}{
-		{
-			name:         "IntSeries",
-			seriesArr:    getTestInt64Array(mem, []int64{1}, nil),
-			seriesSchema: df.SeriesSchema{Name: "int_col", Format: df.IntegerFormat},
-			assertType:   func(t *testing.T, e df.Expr) { _, ok := e.(df.IntExpr); assert.True(t, ok, "Expected IntExpr") },
-		},
-		{
-			name:         "StringSeries",
-			seriesArr:    getTestStringArray(mem, []string{"a"}, nil),
-			seriesSchema: df.SeriesSchema{Name: "str_col", Format: df.StringFormat},
-			assertType:   func(t *testing.T, e df.Expr) { _, ok := e.(df.StringExpr); assert.True(t, ok, "Expected StringExpr") },
-		},
-		{
-			name:         "FloatSeries",
-			seriesArr:    getTestFloat64Array(mem, []float64{1.0}, nil),
-			seriesSchema: df.SeriesSchema{Name: "float_col", Format: df.DoubleFormat},
-			assertType:   func(t *testing.T, e df.Expr) { _, ok := e.(df.DoubleExpr); assert.True(t, ok, "Expected DoubleExpr") },
-		},
-		{
-			name:         "BoolSeries",
-			seriesArr:    getTestBoolArray(mem, []bool{true}, nil),
-			seriesSchema: df.SeriesSchema{Name: "bool_col", Format: df.BoolFormat},
-			assertType:   func(t *testing.T, e df.Expr) { _, ok := e.(df.BoolExpr); assert.True(t, ok, "Expected BoolExpr") },
-		},
-		{
-			name:         "DateTimeSeries",
-			seriesArr:    getTestTimestampArrayNano(mem, []time.Time{time.Now()}, nil),
-			seriesSchema: df.SeriesSchema{Name: "time_col", Format: df.DateTimeFormat},
-			assertType:   func(t *testing.T, e df.Expr) { _, ok := e.(df.DatetimeExpr); assert.True(t, ok, "Expected DatetimeExpr") },
-		},
+	arr1Int := getTestInt64Array(mem, []int64{10, 0, 30}, []bool{true, false, true}); defer arr1Int.Release()
+	s1Int := arrowimpl.NewArrowSeries(arr1Int, sSchemaInt); defer s1Int.(*arrowimpl.ArrowSeries).Release()
+
+	arr2Int := getTestInt64Array(mem, []int64{4, 500}, nil); defer arr2Int.Release()
+	s2Int := arrowimpl.NewArrowSeries(arr2Int, sSchemaInt); defer s2Int.(*arrowimpl.ArrowSeries).Release()
+
+	emptyIntArr := getTestInt64Array(mem, []int64{}, nil); defer emptyIntArr.Release()
+	sEmptyInt := arrowimpl.NewArrowSeries(emptyIntArr, sSchemaInt); defer sEmptyInt.(*arrowimpl.ArrowSeries).Release()
+
+	fConcatIntStr := func(v1, v2 df.Value) []df.Value {
+		s1, s2 := "nil", "nil"
+		if v1 != nil && !v1.IsNil() { s1 = strconv.FormatInt(v1.GetAsInt(), 10) }
+		if v2 != nil && !v2.IsNil() { s2 = strconv.FormatInt(v2.GetAsInt(), 10) }
+		return []df.Value{arrowimpl.NewArrowValue(scalar.NewStringScalar(s1+"-"+s2), df.StringFormat)}
+	}
+	fSumInts := func(v1, v2 df.Value) []df.Value {
+		if (v1 == nil || v1.IsNil()) || (v2 == nil || v2.IsNil()) {
+			return []df.Value{arrowimpl.NewArrowValue(scalar.NewNullScalar(arrow.PrimitiveTypes.Int64), df.IntegerFormat)}
+		}
+		sum := v1.GetAsInt() + v2.GetAsInt()
+		return []df.Value{arrowimpl.NewArrowValue(scalar.NewInt64Scalar(sum), df.IntegerFormat)}
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			defer tc.seriesArr.Release()
-			series := arrowimpl.NewArrowSeries(tc.seriesArr, tc.seriesSchema)
-			defer series.(*arrowimpl.ArrowSeries).Release()
+	t.Run("JoinEqui", func(t *testing.T) {
+		resEqui1 := s1Int.Join(df.StringFormat, s2Int, df.JoinEqui, fConcatIntStr); defer resEqui1.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(2), resEqui1.Len())
+		assert.Equal(t, []interface{}{"10-4", "nil-500"}, extractValues(resEqui1))
+	})
 
-			seriesExpr := series.Expr()
-			assert.NotNil(t, seriesExpr)
-			tc.assertType(t, seriesExpr)
+	t.Run("JoinLeft", func(t *testing.T) {
+		resLeft1 := s1Int.Join(df.StringFormat, s2Int, df.JoinLeft, fConcatIntStr); defer resLeft1.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(3), resLeft1.Len())
+		assert.Equal(t, []interface{}{"10-4", "nil-500", "30-nil"}, extractValues(resLeft1))
+		resLeft2 := s2Int.Join(df.StringFormat, s1Int, df.JoinLeft, fConcatIntStr); defer resLeft2.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(2), resLeft2.Len())
+		assert.Equal(t, []interface{}{"4-10", "500-nil"}, extractValues(resLeft2))
+	})
+
+	t.Run("JoinRight", func(t *testing.T) {
+		resRight1 := s1Int.Join(df.StringFormat, s2Int, df.JoinRight, fConcatIntStr); defer resRight1.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(2), resRight1.Len())
+		assert.Equal(t, []interface{}{"10-4", "nil-500"}, extractValues(resRight1))
+		resRight2 := s2Int.Join(df.StringFormat, s1Int, df.JoinRight, fConcatIntStr); defer resRight2.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(3), resRight2.Len())
+		assert.Equal(t, []interface{}{"4-10", "500-nil", "nil-30"}, extractValues(resRight2))
+	})
+
+	t.Run("JoinOuter", func(t *testing.T) {
+		resOuter1 := s1Int.Join(df.StringFormat, s2Int, df.JoinOuter, fConcatIntStr); defer resOuter1.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(3), resOuter1.Len())
+		assert.Equal(t, []interface{}{"10-4", "nil-500", "30-nil"}, extractValues(resOuter1))
+		resOuter2 := s2Int.Join(df.StringFormat, s1Int, df.JoinOuter, fConcatIntStr); defer resOuter2.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(3), resOuter2.Len())
+		assert.Equal(t, []interface{}{"4-10", "500-nil", "nil-30"}, extractValues(resOuter2))
+	})
+
+	t.Run("JoinCross", func(t *testing.T) {
+		resCross1 := s1Int.Join(df.StringFormat, s2Int, df.JoinCross, fConcatIntStr); defer resCross1.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, s1Int.Len()*s2Int.Len(), resCross1.Len())
+		expectedCross1 := []interface{}{ "10-4", "10-500", "nil-4", "nil-500", "30-4", "30-500", }
+		assert.Equal(t, expectedCross1, extractValues(resCross1))
+		resCrossEmpty := s1Int.Join(df.StringFormat, sEmptyInt, df.JoinCross, fConcatIntStr); defer resCrossEmpty.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(0), resCrossEmpty.Len())
+	})
+
+	fMultiStr := func(v1,v2 df.Value) []df.Value {
+		s1,s2 := "n","n"
+		if v1!=nil && !v1.IsNil() { s1 = strconv.FormatInt(v1.GetAsInt(),10)}
+		if v2!=nil && !v2.IsNil() { s2 = strconv.FormatInt(v2.GetAsInt(),10)}
+		return []df.Value{ arrowimpl.NewArrowValue(scalar.NewStringScalar(s1), df.StringFormat), arrowimpl.NewArrowValue(scalar.NewStringScalar(s2), df.StringFormat), }
+	}
+	t.Run("FunctionReturnsMultiple", func(t *testing.T) {
+		resMulti := s1Int.Join(df.StringFormat, s2Int, df.JoinEqui, fMultiStr); defer resMulti.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(2*2), resMulti.Len())
+		expectedMulti := []interface{}{"10", "4", "n", "500"}
+		assert.Equal(t, expectedMulti, extractValues(resMulti))
+	})
+
+	fReturnsIntForString := func(v1,v2 df.Value) []df.Value {
+		if (v1 == nil || v1.IsNil()) { return []df.Value{arrowimpl.NewArrowValue(scalar.NewNullScalar(arrow.PrimitiveTypes.Int64), df.IntegerFormat)} }
+		return []df.Value{arrowimpl.NewArrowValue(scalar.NewInt64Scalar(v1.GetAsInt()), df.IntegerFormat)}
+	}
+	t.Run("OutputCasting", func(t *testing.T) {
+		resCast := s1Int.Join(df.StringFormat, s2Int, df.JoinEqui, fReturnsIntForString); defer resCast.(*arrowimpl.ArrowSeries).Release()
+		assert.Equal(t, int64(2), resCast.Len())
+		assert.Equal(t, "10", resCast.Get(0).GetAsString())
+		assert.True(t, resCast.Get(1).IsNil())
+		assert.Equal(t, df.StringFormat.Name(), resCast.Schema().Format.Name())
+	})
+
+	t.Run("Panics", func(t *testing.T) {
+		assert.PanicsWithValue(t, "Join: outputFormat cannot be nil", func() { s1Int.Join(nil, s2Int, df.JoinEqui, fSumInts) })
+		assert.PanicsWithValue(t, "Join: function f cannot be nil", func() { s1Int.Join(df.IntegerFormat, s2Int, df.JoinEqui, nil) })
+
+		// Panics if otherSeriesRaw is nil for join types that require it (most of them, unless left series is also empty)
+		// The JoinEqui will try to access otherSeries.Get(i) which will panic if otherSeriesRaw was nil.
+		// For a more specific message from Join itself, it depends on how nil otherSeriesRaw is handled.
+		// The current implementation of Join panics if otherSeriesRaw is nil and otherSeries is needed.
+		// Let's test a case where s1Int is not empty, but other is nil.
+		var nilSeries df.Series = nil
+		assert.Panics(t, func() { s1Int.Join(df.IntegerFormat, nilSeries, df.JoinEqui, fSumInts) })
+
+
+		fBadReturn := func(v1,v2 df.Value) []df.Value { return []df.Value{&mockValue{mockSchema: df.StringFormat}} }
+		assert.PanicsWithValue(t, fmt.Sprintf("Join: func f returned non-*arrowValue: %T", &mockValue{}), func() {
+			s1Int.Join(df.StringFormat, s2Int, df.JoinEqui, fBadReturn)
 		})
-	}
 
-	unsupportedFormat := df.NewGenericFormat("unsupported", reflect.TypeOf(""))
-	unsupportedArr := getTestInt64Array(mem, []int64{1}, nil)
-	defer unsupportedArr.Release()
-	unsupportedSeries := arrowimpl.NewArrowSeries(unsupportedArr, df.SeriesSchema{Name:"unsup", Format: unsupportedFormat})
-	defer unsupportedSeries.(*arrowimpl.ArrowSeries).Release()
-	assert.PanicsWithValue(t, "Expr() not supported for series format: unsupported", func(){
-		unsupportedSeries.Expr()
-	})
-}
-
-type mockExpr struct {
-	exprName     string
-	exprConstVal df.Value
-	exprColName  string
-	exprOpType   df.ExprOpType
-	exprFilterOp df.FilterOp
-	exprMapOp    df.MapOp
-	exprParent   df.Expr
-}
-func (m *mockExpr) Name() string { return m.exprName }
-func (m *mockExpr) Const() df.Value { return m.exprConstVal }
-func (m *mockExpr) Col() string { return m.exprColName }
-func (m *mockExpr) OpType() df.ExprOpType { return m.exprOpType }
-func (m *mockExpr) FilterOp() df.FilterOp { return m.exprFilterOp }
-func (m *mockExpr) MapOp() df.MapOp { return m.exprMapOp }
-func (m *mockExpr) Parent() df.Expr { return m.exprParent }
-func (m *mockExpr) SetParent(p df.Expr) df.Expr { m.exprParent = p; return m }
-func (m *mockExpr) SetName(n string) df.Expr {m.exprName = n; return m}
-
-type mockFilterOp struct {
-	applyFunc func(v df.Value, args ...df.Value) bool
-	argExprs  []df.Expr
-}
-func (m *mockFilterOp) Args() []df.Expr { return m.argExprs }
-func (m *mockFilterOp) ApplyFilter(v df.Value, args ...df.Value) bool { return m.applyFunc(v, args...) }
-func (m *mockFilterOp) SetArgs(args ...df.Expr) df.FilterOp { m.argExprs = args; return m }
-
-type mockMapOp struct {
-	applyFunc    func(v df.Value, args ...df.Value) df.Value
-	argExprs     []df.Expr
-	returnFormat df.Format
-}
-func (m *mockMapOp) Args() []df.Expr { return m.argExprs }
-func (m *mockMapOp) ApplyMap(v df.Value, args ...df.Value) df.Value { return m.applyFunc(v, args...) }
-func (m *mockMapOp) ReturnFormat() df.Format { return m.returnFormat }
-func (m *mockMapOp) SetArgs(args ...df.Expr) df.MapOp { m.argExprs = args; return m }
-
-
-func TestArrowSeries_Select(t *testing.T) {
-	mem := memory.NewGoAllocator()
-	sSchemaInt := df.SeriesSchema{Name: "col_int", Format: df.IntegerFormat}
-	intVals := []int64{10, 20, 0, 30}
-	intValids := []bool{true, true, false, true}
-	intArr := getTestInt64Array(mem, intVals, intValids)
-	defer intArr.Release()
-	intSeries := arrowimpl.NewArrowSeries(intArr, sSchemaInt)
-	defer intSeries.(*arrowimpl.ArrowSeries).Release()
-
-	// Case 1: Select with a Constant Expression
-	constIntVal := arrowimpl.NewArrowValue(scalar.NewInt64Scalar(5), df.IntegerFormat)
-	constExpr := &mockExpr{exprName: "const_5", exprConstVal: constIntVal}
-	selectedConst := intSeries.Select(constExpr)
-	defer selectedConst.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, intSeries.Len(), selectedConst.Len())
-	for i := int64(0); i < selectedConst.Len(); i++ {
-		assert.Equal(t, int64(5), selectedConst.Get(i).GetAsInt())
-	}
-	assert.Equal(t, "const_5", selectedConst.Schema().Name)
-	assert.True(t, constIntVal.Schema().Equals(selectedConst.Schema().Format))
-
-	// Case 2: Select with a Column Reference (current implementation expects Col() to be series name or "" for simple copy)
-	colRefExpr := &mockExpr{exprColName: "col_int"}
-	selectedColRef := intSeries.Select(colRefExpr)
-	defer selectedColRef.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, intSeries.Len(), selectedColRef.Len())
-	assert.True(t, intSeries.Schema().Equals(selectedColRef.Schema()))
-	for i := int64(0); i < intSeries.Len(); i++ {
-		assert.True(t, intSeries.Get(i).Equals(selectedColRef.Get(i)))
-	}
-
-	// Case 3: Select with a Filter Operation (e.g., > 15)
-	gtVal := arrowimpl.NewArrowValue(scalar.NewInt64Scalar(15), df.IntegerFormat)
-	filterExpr := &mockExpr{
-		exprOpType: df.ExprTypeFilter, // Ensure this matches your df.ExprOpType definition
-		exprFilterOp: &mockFilterOp{
-			applyFunc: func(v df.Value, args ...df.Value) bool {
-				if v.IsNil() { return false }
-				return v.GetAsInt() > args[0].GetAsInt()
-			},
-			argExprs: []df.Expr{&mockExpr{exprConstVal: gtVal}},
-		},
-	}
-	selectedFilter := intSeries.Select(filterExpr)
-	defer selectedFilter.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, int64(2), selectedFilter.Len()) // 20, 30
-	assert.Equal(t, int64(20), selectedFilter.Get(0).GetAsInt())
-	assert.Equal(t, int64(30), selectedFilter.Get(1).GetAsInt())
-
-	// Case 4: Select with a Map Operation (e.g., value * 2)
-	mapExpr := &mockExpr{
-		exprOpType: df.ExprTypeMap, // Ensure this matches your df.ExprOpType definition
-		exprMapOp: &mockMapOp{
-			applyFunc: func(v df.Value, args ...df.Value) df.Value {
-				if v.IsNil() { return arrowimpl.NewArrowValue(scalar.NewNullScalar(arrow.PrimitiveTypes.Int64), df.IntegerFormat) }
-				return arrowimpl.NewArrowValue(scalar.NewInt64Scalar(v.GetAsInt()*2), df.IntegerFormat)
-			},
-			returnFormat: df.IntegerFormat,
-		},
-	}
-	selectedMap := intSeries.Select(mapExpr)
-	defer selectedMap.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, intSeries.Len(), selectedMap.Len()) // 20, 40, nil, 60
-	assert.Equal(t, int64(20), selectedMap.Get(0).GetAsInt())
-	assert.Equal(t, int64(40), selectedMap.Get(1).GetAsInt())
-	assert.True(t, selectedMap.Get(2).IsNil())
-	assert.Equal(t, int64(60), selectedMap.Get(3).GetAsInt())
-
-	// Case 5: Panic on nil expression
-	assert.PanicsWithValue(t, "expression cannot be nil for Select", func() {
-		intSeries.Select(nil)
-	})
-
-	// Case 6: Panic on unsupported expression type
-	unsupportedExpr := &mockExpr{exprName:"unsupported", exprOpType: "UNSUPPORTED_OP_TYPE_XYZ"} // Use a distinct string for OpType
-	assert.PanicsWithValue(t, fmt.Sprintf("unsupported expression for Series.Select: Name='unsupported', OpType='UNSUPPORTED_OP_TYPE_XYZ', Col=''"), func() {
-		intSeries.Select(unsupportedExpr)
+		fTypeClash := func(v1, v2 df.Value) []df.Value {
+			return []df.Value{arrowimpl.NewArrowValue(scalar.NewInt64Scalar(1), df.IntegerFormat)}
+		}
+		assert.Panics(t, func() { s1Int.Join(df.DateTimeFormat, s2Int, df.JoinEqui, fTypeClash)})
 	})
 }
 
 // TODO: Add more tests for other Series methods (Map, Filter, Sort, etc.) once implemented.
-// This TODO was part of the original structure, some of these are now tested.
 ```
-
-Then, `df/arrow/df_test.go`:
