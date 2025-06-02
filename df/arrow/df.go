@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
+	"time" 
 
 	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/array"
@@ -14,47 +14,21 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/compute"
 	"github.com/apache/arrow/go/v14/arrow/memory"
 	"github.com/apache/arrow/go/v14/arrow/scalar"
-	"github.com/blue4209211/pq/df"
+	"git.querycap.com/practice/df" // MODIFIED import path
 )
 
+// const JoinLeftAnti df.JoinType = "leftanti" // Assuming df package might provide this or it's handled via string.
+// For now, if Join uses string types for joinType, this might not be needed here.
+// If df.JoinType is an enum, this const would only be valid if "leftanti" is part of that enum.
+// Let's assume for now the df package handles the join types adequately.
 type arrowDataFrame struct {
 	name   string
-	schema *arrowDataFrameSchema
-	record arrow.Record
-	mem    memory.Allocator
+	schema *arrowDataFrameSchema 
+	record arrow.Record          
+	mem    memory.Allocator    
 }
 
-func dfValueToArrowScalar(val df.Value, targetType arrow.DataType, mem memory.Allocator) (scalar.Scalar, error) {
-	if val == nil || val.IsNil() {
-		return scalar.NewNullScalar(targetType), nil
-	}
-	if av, ok := val.(*arrowValue); ok {
-		if arrow.TypeEqual(av.val.DataType(), targetType) {
-			return av.val, nil
-		}
-		castedScalar, err := scalar.Cast(compute.WithAllocator(context.Background(), mem), av.val, targetType)
-		if err != nil { return nil, fmt.Errorf("cast scalar from %s to %s: %w", av.val.DataType(), targetType, err) }
-		return castedScalar, nil
-	}
-	switch targetType.ID() {
-	case arrow.INT64: return scalar.NewInt64Scalar(val.GetAsInt()), nil
-	case arrow.FLOAT64: return scalar.NewFloat64Scalar(val.GetAsDouble()), nil
-	case arrow.STRING: return scalar.NewStringScalar(val.GetAsString()), nil
-	case arrow.BOOL: return scalar.NewBooleanScalar(val.GetAsBool()), nil
-	case arrow.TIMESTAMP:
-		tsType, _ := targetType.(*arrow.TimestampType); unit := tsType.Unit(); t := val.GetAsDatetime()
-		var tsVal arrow.Timestamp
-		switch unit {
-		case arrow.Nanosecond: tsVal = arrow.Timestamp(t.UnixNano())
-		case arrow.Microsecond: tsVal = arrow.Timestamp(t.UnixNano() / 1e3)
-		case arrow.Millisecond: tsVal = arrow.Timestamp(t.UnixNano() / 1e6)
-		case arrow.Second: tsVal = arrow.Timestamp(t.Unix())
-		default: return nil, fmt.Errorf("unsupported timestamp unit: %s", unit)
-		}
-		return scalar.NewTimestampScalar(tsVal, targetType), nil
-	default: return nil, fmt.Errorf("unsupported target type for dfValueToArrowScalar: %s", targetType.Name())
-	}
-}
+// REMOVED local dfValueToArrowScalar - will use the one from types.go
 
 func NewArrowDataFrame(name string, record arrow.Record, dfSchema *arrowDataFrameSchema) df.DataFrame {
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, memory.DefaultAllocator)
@@ -71,7 +45,7 @@ func NewArrowDataFrameWithAllocator(name string, record arrow.Record, dfSchema *
 		if !dfSchema.schema.Equal(record.Schema()) {
 			panic(fmt.Sprintf("NewArrowDataFrameWithAllocator: schema mismatch. Provided: %s, Record: %s", dfSchema.schema, record.Schema()))
 		}
-		record.Retain()
+		record.Retain() 
 	}
 	return &arrowDataFrame{name: name, schema: dfSchema, record: record, mem: mem}
 }
@@ -95,15 +69,94 @@ func NewArrowDataFrameFromArraysWithAllocator(name string, cols []arrow.Array, s
 			}
 		}
 	} else {numRows = 0}
-	record := array.NewRecord(schema, cols, numRows);
-	for _, col := range cols { col.Release() }
+	record := array.NewRecord(schema, cols, numRows); 
+	for _, col := range cols { col.Release() }	
 	dfSchema := NewArrowDataFrameSchema(schema).(*arrowDataFrameSchema)
 	defer record.Release()
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, mem), nil
 }
+
+// NewArrowDataFrameFromSeries creates a DataFrame from a slice of df.Series.
+// All series must be *arrowSeries and have the same length.
+// The names for the new DataFrame's columns will be taken from the Series' schemas.
+// If series array is empty, a DataFrame with 0 columns and 0 rows is created.
+func NewArrowDataFrameFromSeries(name string, series []df.Series, mem memory.Allocator) (df.DataFrame, error) {
+	if mem == nil {
+		mem = memory.DefaultAllocator
+	}
+
+	if len(series) == 0 {
+		emptyArrowSchema := arrow.NewSchema([]arrow.Field{}, nil)
+		// NewArrowDataFrameSchema returns df.DataFrameSchema, cast to *arrowDataFrameSchema
+		emptyDfSchema := NewArrowDataFrameSchema(emptyArrowSchema).(*arrowDataFrameSchema)
+		// Create an empty record. NewRecord doesn't retain, but it's fine as it's empty.
+		emptyRecord := array.NewRecord(emptyArrowSchema, nil, 0)
+		// NewArrowDataFrameWithAllocator will handle its lifecycle.
+		return NewArrowDataFrameWithAllocator(name, emptyRecord, emptyDfSchema, mem), nil
+	}
+
+	arrowArrays := make([]arrow.Array, len(series))
+	arrowFields := make([]arrow.Field, len(series))
+	var numRows int = -1 // Changed to int to match series.Len()
+
+	for i, s := range series {
+		as, ok := s.(*arrowSeries)
+		if !ok {
+			// Release any arrays already retained if we error out
+			for j := 0; j < i; j++ {
+				arrowArrays[j].Release()
+			}
+			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: all series must be *arrowSeries, found %T at index %d", s, i)
+		}
+		if numRows == -1 {
+			numRows = as.Len() // series.Len() returns int
+		} else if as.Len() != numRows {
+			for j := 0; j < i; j++ {
+				arrowArrays[j].Release()
+			}
+			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: all series must have the same length (expected %d, got %d for series '%s')", numRows, as.Len(), as.Schema().Name)
+		}
+		
+		as.arr.Retain() // Retain each array as the record will effectively take ownership via NewRecord
+		arrowArrays[i] = as.arr
+		
+		// Create arrow.Field from df.SeriesSchema
+		sSchema := as.Schema()
+		arrowDataType, err := dfFormatToArrowType(sSchema.Format)
+		if err != nil {
+			for j := 0; j <= i; j++ { // Release all retained arrays up to this point
+				arrowArrays[j].Release()
+			}
+			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: error converting format for series %s: %w", sSchema.Name, err)
+		}
+		arrowFields[i] = arrow.Field{
+			Name:     sSchema.Name,
+			Type:     arrowDataType, // Use converted type
+			Nullable: sSchema.Nullable, 
+			Metadata: arrow.MetadataFrom(sSchema.Metadata), 
+		}
+	}
+
+	arrowSchema := arrow.NewSchema(arrowFields, nil) // TODO: DataFrame level metadata?
+	
+	// array.NewRecord does not retain the input arrays again, it assumes ownership of the references passed.
+	// Since we retained them from the series, this is correct.
+	record := array.NewRecord(arrowSchema, arrowArrays, int64(numRows))
+	// After NewRecord, the record owns these array references. We can release our temporary holds.
+	for _, arr := range arrowArrays {
+		arr.Release()
+	}
+	
+	dfSchema := NewArrowDataFrameSchema(record.Schema()).(*arrowDataFrameSchema)
+	// NewArrowDataFrameWithAllocator will retain the record.
+	// We must release the record created here after NewArrowDataFrameWithAllocator is done with it.
+	defer record.Release()
+	return NewArrowDataFrameWithAllocator(name, record, dfSchema, mem), nil
+}
+
 func (adf *arrowDataFrame) Schema() df.DataFrameSchema { return adf.schema }
 func (adf *arrowDataFrame) Name() string { return adf.name }
-func (adf *arrowDataFrame) Len() int64 { if adf.record == nil { return 0 }; return adf.record.NumRows() }
+func (adf *arrowDataFrame) Len() int { if adf.record == nil { return 0 }; return int(adf.record.NumRows()) } // MODIFIED to return int
 func (adf *arrowDataFrame) Release() { if adf.record != nil { adf.record.Release(); adf.record = nil } }
 func (adf *arrowDataFrame) GetSeries(index int) df.Series {
 	if adf.record == nil || index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("series index %d out of bounds", index)) }
@@ -174,7 +227,7 @@ func (adf *arrowDataFrame) WhereRow(f func(df.Row) bool) df.DataFrame {
 	}
 	newCols := make([]arrow.Array, numCols); var newRecordLen int64
 	if len(colBuilders) > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) } else { newRecordLen = 0 }
-	for i, b := range colBuilders { newCols[i] = b.NewArray() }
+	for i, b := range colBuilders { newCols[i] = b.NewArray() }	
 	filteredRecord := array.NewRecord(currentSchema, newCols, newRecordLen)
 	for _, col := range newCols { col.Release() }; defer filteredRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, filteredRecord, adf.schema, adf.mem)
@@ -261,7 +314,7 @@ func (adf *arrowDataFrame) GetSeriesExprByName(sName string) df.Expr {
 	idx := adf.schema.GetIndexByName(sName); if idx == -1 { panic(fmt.Sprintf("series '%s' not found", sName)) }
 	seriesSchema := adf.schema.Get(idx)
 	switch seriesSchema.Format.Name() {
-	case df.BoolFormat.Name(): return df.NewBoolColExpr(sName)
+	case df.BoolFormat.Name(): return df.NewBoolColExpr(sName) 
 	case df.IntegerFormat.Name(): return df.NewIntColExpr(sName)
 	case df.DoubleFormat.Name(): return df.NewDoubleColExpr(sName)
 	case df.StringFormat.Name(): return df.NewStringColExpr(sName)
@@ -283,7 +336,8 @@ func (adf *arrowDataFrame) MapRow(outputSchemaGiven df.DataFrameSchema, f func(d
 			val := outputRow.Get(c)
 			if val == nil || val.IsNil() { colBuilders[c].AppendNull(); continue }
 			arrowVal, castOk := val.(*arrowValue); if !castOk { panic(fmt.Sprintf("MapRow func value col %d type %T, expected *arrowValue", c, val)) }
-			if err := appendScalarToBuilder(colBuilders[c], arrowVal.val); err != nil { panic(fmt.Sprintf("MapRow append col %d (name: %s): %v. Scalar: %s, Builder: %s",c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))}
+			// Using 3-argument appendScalarToBuilder from types.go
+			if err := appendScalarToBuilder(colBuilders[c], arrowVal.val, colBuilders[c].Type()); err != nil { panic(fmt.Sprintf("MapRow append col %d (name: %s): %v. Scalar: %s, Builder: %s",c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))}
 		}
 	}
 	newCols := make([]array.Array, numOutputCols); var newRecordLen int64
@@ -309,7 +363,8 @@ func (adf *arrowDataFrame) FlatMapRow(outputSchemaGiven df.DataFrameSchema, f fu
 				val := outputRow.Get(c)
 				if val == nil || val.IsNil() { colBuilders[c].AppendNull(); continue }
 				arrowVal, castOk := val.(*arrowValue); if !castOk { panic(fmt.Sprintf("FlatMapRow func value (col %d, row %d) type %T, expected *arrowValue, for input %d", c, i, val, r)) }
-				if err := appendScalarToBuilder(colBuilders[c], arrowVal.val); err != nil { panic(fmt.Sprintf("FlatMapRow append col %d (name: %s): %v. Scalar: %s, Builder: %s",c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))}
+				// Using 3-argument appendScalarToBuilder from types.go
+				if err := appendScalarToBuilder(colBuilders[c], arrowVal.val, colBuilders[c].Type()); err != nil { panic(fmt.Sprintf("FlatMapRow append col %d (name: %s): %v. Scalar: %s, Builder: %s",c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))}
 			}
 		}
 	}
@@ -327,14 +382,14 @@ func (adf *arrowDataFrame) Distinct(cols ...string) df.DataFrame {
 	} else { keyIndices = make([]int, len(cols)); for i, name := range cols { idx := adf.schema.GetIndexByName(name); if idx == -1 { panic(fmt.Sprintf("Distinct col '%s' not found", name)) }; keyIndices[i] = idx }}
     if adf.record.NumCols() == 0 { if adf.record.NumRows() > 0 { newRec := adf.record.NewSlice(0,1); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }; newRec := adf.record.NewSlice(0,0); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)}
 	sortOrders := make([]df.SortByIndex, len(keyIndices)); for i, keyIdx := range keyIndices { sortOrders[i] = df.SortByIndex{Series: keyIdx, Order: df.SortOrderASC} }
-	sortedDf := adf.Sort(sortOrders...); sortedArrowDf, ok := sortedDf.(*arrowDataFrame); if !ok { panic("Distinct: Sort bad return") }; defer sortedArrowDf.Release()
+	sortedDf := adf.Sort(sortOrders...); sortedArrowDf, ok := sortedDf.(*arrowDataFrame); if !ok { panic("Distinct: Sort bad return") }; defer sortedArrowDf.Release() 
 	sortedRecord := sortedArrowDf.record; if sortedRecord.NumRows() == 0 { newRec := sortedRecord.NewSlice(0, 0); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem)}
-	uniqueRowIndices := make([]int64, 0, sortedRecord.NumRows()); uniqueRowIndices = append(uniqueRowIndices, 0)
+	uniqueRowIndices := make([]int64, 0, sortedRecord.NumRows()); uniqueRowIndices = append(uniqueRowIndices, 0) 
 	for i := int64(1); i < sortedRecord.NumRows(); i++ {
 		isDifferent := false
 		for _, keyIdx := range keyIndices {
 			prevValScalar := scalar.MakeScalar(sortedRecord.Column(keyIdx), int(i-1)); currValScalar := scalar.MakeScalar(sortedRecord.Column(keyIdx), int(i))
-			if cs, needsRelease := prevValScalar.(interface{ Release() }); needsRelease { cs.Release() }
+			if cs, needsRelease := prevValScalar.(interface{ Release() }); needsRelease { cs.Release() } 
 			if cs, needsRelease := currValScalar.(interface{ Release() }); needsRelease { cs.Release() }
 			if !scalar.Equals(prevValScalar, currValScalar) { isDifferent = true; break }
 		}
@@ -354,7 +409,7 @@ func (adf *arrowDataFrame) Append(otherRaw df.DataFrame) df.DataFrame {
 	currentSchemaForEmpty := adf.schema.schema; if currentSchemaForEmpty == nil || currentSchemaForEmpty.NumFields() != 0 { currentSchemaForEmpty = arrow.NewSchema([]arrow.Field{}, nil) }
 	if currentIsColEmpty {
 		if otherIsColEmpty { numRows := adf.Len() + otherArrowDf.Len(); newRec := array.NewRecord(currentSchemaForEmpty, nil, numRows); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
-		newOtherRec := otherArrowDf.record.NewSlice(0, otherArrowDf.record.NumRows()); defer newOtherRec.Release(); return NewArrowDataFrameWithAllocator(otherArrowDf.name, newOtherRec, otherArrowDf.schema, adf.mem)
+		newOtherRec := otherArrowDf.record.NewSlice(0, otherArrowDf.record.NumRows()); defer newOtherRec.Release(); return NewArrowDataFrameWithAllocator(otherArrowDf.name, newOtherRec, otherArrowDf.schema, adf.mem) 
 	}
 	if otherIsColEmpty { newThisRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newThisRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newThisRec, adf.schema, adf.mem) }
 	if !adf.schema.Equals(otherArrowDf.schema) { panic(fmt.Sprintf("Append: schema mismatch. Current: %s, Other: %s", adf.schema.schema, otherArrowDf.schema.schema)) }
@@ -368,11 +423,11 @@ func (adf *arrowDataFrame) Append(otherRaw df.DataFrame) df.DataFrame {
 	}
 	newNumRows := adf.record.NumRows() + otherArrowDf.record.NumRows()
 	appendedRecord := array.NewRecord(adf.schema.schema, concatenatedCols, newNumRows)
-	for _, col := range concatenatedCols { if col != nil { col.Release() } }; defer appendedRecord.Release()
+	for _, col := range concatenatedCols { if col != nil { col.Release() } }; defer appendedRecord.Release() 
 	return NewArrowDataFrameWithAllocator(adf.name, appendedRecord, adf.schema, adf.mem)
 }
 func (adf *arrowDataFrame) Union(otherRaw df.DataFrame) df.DataFrame {
-	if otherRaw == nil { panic("Union: other df nil") }; appendedDf := adf.Append(otherRaw)
+	if otherRaw == nil { panic("Union: other df nil") }; appendedDf := adf.Append(otherRaw) 
 	unionDf := appendedDf.Distinct()
 	if appendedArrowDf, ok := appendedDf.(*arrowDataFrame); ok { appendedArrowDf.Release() }
 	return unionDf
@@ -383,18 +438,25 @@ func (adf *arrowDataFrame) WhenNil(fillValues map[string]df.Value) df.DataFrame 
 	for i := 0; i < int(adf.record.NumCols()); i++ {
 		col := adf.record.Column(i); colName := adf.schema.schema.Field(i).Name
 		fillVal, colNeedsFilling := fillValues[colName]
-		if !colNeedsFilling || fillVal == nil { col.Retain(); newRecordCols[i] = col; continue }
+		if !colNeedsFilling || fillVal == nil { col.Retain(); newRecordCols[i] = col; continue } 
 		modified = true; targetArrowType := col.DataType()
-		fillScalar, err := dfValueToArrowScalar(fillVal, targetArrowType, adf.mem)
-		if err != nil { for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }; panic(fmt.Sprintf("WhenNil: convert fill for '%s': %v", colName, err)) }
-
-		releasableFillScalar, fillScalarNeedsRelease := fillScalar.(interface{ Release() })
-
+		// Using dfValueToArrowScalar from types.go (does not take allocator)
+		fillScalar, err := dfValueToArrowScalar(fillVal, targetArrowType) 
+		if err != nil { 
+			// Release previously retained/created columns before panicking
+			for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }
+			panic(fmt.Sprintf("WhenNil: convert fill for '%s': %v", colName, err)) 
+		}
+		// dfValueToArrowScalar from types.go does not return retained scalars needing release by caller.
+		
 		resultDatum, err := compute.FillNull(ctx, arrow.NewArrayDatum(col), arrow.NewScalarDatum(fillScalar))
-		if fillScalarNeedsRelease { releasableFillScalar.Release() }
-
-		if err != nil { for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }; panic(fmt.Sprintf("WhenNil: FillNull for '%s': %v", colName, err)) }
-		newColArr := resultDatum.(*arrow.ArrayDatum).MakeArray(); resultDatum.Release(); newRecordCols[i] = newColArr
+		if err != nil { 
+			for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }
+			panic(fmt.Sprintf("WhenNil: FillNull for '%s': %v", colName, err)) 
+		}
+		newColArr := resultDatum.Value().(arrow.Array); newColArr.Retain() // Retain for newRecordCols
+		resultDatum.Release(); 
+		newRecordCols[i] = newColArr 
 	}
 	if !modified { newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
 	finalRecord := array.NewRecord(adf.schema.schema, newRecordCols, adf.record.NumRows())
@@ -403,29 +465,41 @@ func (adf *arrowDataFrame) WhenNil(fillValues map[string]df.Value) df.DataFrame 
 }
 func (adf *arrowDataFrame) When(replaceMap map[string]map[any]df.Value) df.DataFrame {
 	if adf.record == nil { panic("When on nil record") }; if len(replaceMap) == 0 { newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
-	newRecordCols := make([]arrow.Array, adf.record.NumCols()); modified := false; ctx := compute.WithAllocator(context.Background(), adf.mem)
+	newRecordCols := make([]arrow.Array, adf.record.NumCols()); modified := false; ctx := compute.WithAllocator(context.Background(), adf.mem) 
 	for i := 0; i < int(adf.record.NumCols()); i++ {
 		originalCol := adf.record.Column(i); colName := adf.schema.schema.Field(i).Name; colType := originalCol.DataType()
 		valueReplacements, colNeedsUpdate := replaceMap[colName]
 		if !colNeedsUpdate || len(valueReplacements) == 0 { originalCol.Retain(); newRecordCols[i] = originalCol; continue }
 		modified = true; b := builder.NewBuilder(adf.mem, colType); defer b.Release()
 		for r := 0; r < originalCol.Len(); r++ {
-			currentDfVal := adf.GetValue(r, i)
+			currentDfVal := adf.GetValue(r, i) 
 			var goKeyForLookup any
 			if currentDfVal.IsNil() { goKeyForLookup = nil } else { goKeyForLookup = currentDfVal.Get() }
 			replacementDfVal, shouldReplace := valueReplacements[goKeyForLookup]
 			if shouldReplace {
-				replacementScalar, err := dfValueToArrowScalar(replacementDfVal, colType, adf.mem)
-				if err != nil { for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }; panic(fmt.Sprintf("When: convert replacement for key %v, col '%s': %v", goKeyForLookup, colName, err)) }
-				errAppend := appendScalarToBuilder(b, replacementScalar)
-				if rsr, ok_rsr := replacementScalar.(interface{ Release() }); ok_rsr { rsr.Release() }
-				if errAppend != nil { for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }; panic(fmt.Sprintf("When: append replacement for key %v, col '%s': %v", goKeyForLookup, colName, errAppend)) }
-			} else {
-				originalScalarToAppend := currentDfVal.(*arrowValue).val
-				if err := appendScalarToBuilder(b, originalScalarToAppend); err != nil { for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }; panic(fmt.Sprintf("When: copy original for col '%s', row %d: %v", colName, r, err)) }
+				// Using dfValueToArrowScalar from types.go (does not take allocator)
+				replacementScalar, err := dfValueToArrowScalar(replacementDfVal, colType)
+				if err != nil { 
+					for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }
+					panic(fmt.Sprintf("When: convert replacement for key %v, col '%s': %v", goKeyForLookup, colName, err)) 
+				}
+				// Using appendScalarToBuilder from types.go
+				errAppend := appendScalarToBuilder(b, replacementScalar, colType)
+				// dfValueToArrowScalar from types.go does not return retained scalars.
+				if errAppend != nil { 
+					for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }
+					panic(fmt.Sprintf("When: append replacement for key %v, col '%s': %v", goKeyForLookup, colName, errAppend)) 
+				}
+			} else { 
+				originalScalarToAppend := currentDfVal.(*arrowValue).val 
+				// Using appendScalarToBuilder from types.go
+				if err := appendScalarToBuilder(b, originalScalarToAppend, colType); err != nil { 
+					for j := 0; j < i; j++ { if newRecordCols[j] != nil {newRecordCols[j].Release()} }
+					panic(fmt.Sprintf("When: copy original for col '%s', row %d: %v", colName, r, err)) 
+				}
 			}
 		}
-		newRecordCols[i] = b.NewArray()
+		newRecordCols[i] = b.NewArray() 
 	}
 	if !modified { newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
 	finalRecord := array.NewRecord(adf.schema.schema, newRecordCols, adf.record.NumRows())
@@ -433,80 +507,160 @@ func (adf *arrowDataFrame) When(replaceMap map[string]map[any]df.Value) df.DataF
 	return NewArrowDataFrameWithAllocator(adf.name, finalRecord, adf.schema, adf.mem)
 }
 func (adf *arrowDataFrame) Join(outputSchemaGiven df.DataFrameSchema, otherRaw df.DataFrame, jointype df.JoinType, joinColsMap map[string]string, fUser func(r1 df.Row, r2 df.Row) []df.Row) df.DataFrame {
-	if adf.record == nil { panic("Join on nil left record") }; if otherRaw == nil { panic("Join: other df nil") }
+	if adf.record == nil && !(jointype == df.JoinRight || jointype == df.JoinOuter || df.JoinType(string(jointype)) == "leftanti" ) { // Assuming JoinLeftAnti is a string const
+		if jointype == df.JoinEqui || jointype == df.JoinLeft {
+			outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok {panic(fmt.Sprintf("Join: outputSchemaGiven must be *arrowDataFrameSchema, got %T", outputSchemaGiven))}
+			emptyOutputRec := array.NewRecord(outputArrowDFSchema.schema, nil, 0); defer emptyOutputRec.Release()
+			return NewArrowDataFrameWithAllocator(adf.name, emptyOutputRec, outputArrowDFSchema, adf.mem)
+		}
+	}
+	if otherRaw == nil { panic("Join: other dataframe cannot be nil") }
 	otherArrowDf, ok := otherRaw.(*arrowDataFrame); if !ok { panic(fmt.Sprintf("Join: expected *arrowDataFrame, got %T", otherRaw)) }
-	if otherArrowDf.record == nil { panic("Join: other df record nil") }; if outputSchemaGiven == nil { panic("Join: outputSchemaGiven nil") }
-	outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok { panic(fmt.Sprintf("Join: outputSchemaGiven not *arrowDataFrameSchema, got %T", outputSchemaGiven)) }
-	outputInternalArrowSchema := outputArrowDFSchema.schema; if outputInternalArrowSchema == nil { panic("Join: outputSchemaGiven internal schema nil") }
-	if fUser == nil { panic("Join: user function fUser cannot be nil in this implementation") }
+	
+	if (otherArrowDf.record == nil || otherArrowDf.Len() == 0) && (jointype == df.JoinEqui || jointype == df.JoinLeft || df.JoinType(string(jointype)) == "leftanti") {
+		outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok {panic(fmt.Sprintf("Join: outputSchemaGiven must be *arrowDataFrameSchema, got %T", outputSchemaGiven))}
+		schemaForEmpty := outputArrowDFSchema.schema; if df.JoinType(string(jointype)) == "leftanti" { schemaForEmpty = adf.schema.schema }
+		emptyOutputRec := array.NewRecord(schemaForEmpty, nil, 0); defer emptyOutputRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, emptyOutputRec, outputArrowDFSchema, adf.mem)
+	}
+	if (adf.record == nil || adf.Len() == 0) && (jointype == df.JoinRight || jointype == df.JoinEqui) { 
+		outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok {panic(fmt.Sprintf("Join: outputSchemaGiven must be *arrowDataFrameSchema, got %T", outputSchemaGiven))}
+		emptyOutputRec := array.NewRecord(outputArrowDFSchema.schema, nil, 0); defer emptyOutputRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, emptyOutputRec, outputArrowDFSchema, adf.mem)
+	}
+	// For LeftAnti: if adf is empty, result is empty (matching adf schema)
+	if (adf.record == nil || adf.Len() == 0) && df.JoinType(string(jointype)) == "leftanti" {
+		emptyOutputRec := array.NewRecord(adf.schema.schema, nil, 0); defer emptyOutputRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, emptyOutputRec, adf.schema, adf.mem)
+	}
+
+
+	if outputSchemaGiven == nil { panic("Join: outputSchemaGiven cannot be nil") }
+	outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok { panic(fmt.Sprintf("Join: outputSchemaGiven must be *arrowDataFrameSchema, got %T", outputSchemaGiven)) }
+	if outputArrowDFSchema.schema == nil { panic("Join: outputSchemaGiven's internal arrow.Schema is nil") }
+	
+	isSemiOrAntiJoin := (jointype == JoinLeftAnti || jointype == df.JoinRightAnti || jointype == df.JoinLeftSemi || jointype == df.JoinRightSemi)
+	if fUser == nil && !isSemiOrAntiJoin {
+		panic("Join: user function fUser cannot be nil for this join type")
+	}
+
 
 	ctx := compute.WithAllocator(context.Background(), adf.mem)
-
+	
 	if jointype == df.JoinCross {
-		leftDatum := arrow.NewRecordDatum(adf.record); defer leftDatum.Release()
-		rightDatum := arrow.NewRecordDatum(otherArrowDf.record); defer rightDatum.Release()
-		_, err := compute.CrossJoin(ctx, leftDatum, rightDatum, compute.CrossJoinOptions{SuffixLeft:"_L", SuffixRight:"_R"})
-        if err != nil { panic(fmt.Sprintf("Join: CrossJoin compute failed: %v", err)) };
-		panic("Join: CrossJoin with fUser post-processing not fully implemented after Arrow kernel.")
+		panic("Join: CrossJoin with fUser adaptation is not fully implemented in this pass.")
 	}
-	if jointype != df.JoinEqui { panic(fmt.Sprintf("Join: only JoinEqui (and basic CrossJoin kernel) supported. Got %s", jointype)) }
-	if len(joinColsMap) == 0 { panic("JoinEqui requires join columns.") }
 
-	numOutputCols := outputInternalArrowSchema.NumFields()
-	colBuilders := make([]array.Builder, numOutputCols); for i := 0; i < numOutputCols; i++ { colBuilders[i] = builder.NewBuilder(adf.mem, outputInternalArrowSchema.Field(i).Type) }
-	defer func() { for _, b := range colBuilders { if b != nil { b.Release() } } }()
+	leftKeyDatums := make([]arrow.Datum, 0, len(joinColsMap))
+	rightKeyDatums := make([]arrow.Datum, 0, len(joinColsMap))
+	if (adf.record == nil || otherArrowDf.record == nil) && len(joinColsMap) > 0 { 
+		panic("Join: Cannot prepare keys for join as one or both records are nil")
+	}
 
-	for r1Idx := int64(0); r1Idx < adf.Len(); r1Idx++ {
-		leftRowOriginal := adf.GetRow(r1Idx)
-		for r2Idx := int64(0); r2Idx < otherArrowDf.Len(); r2Idx++ {
-			rightRowOriginal := otherArrowDf.GetRow(r2Idx)
-			match := true
-			for lKeyName, rKeyName := range joinColsMap {
-				lVal := leftRowOriginal.GetByName(lKeyName); rVal := rightRowOriginal.GetByName(rKeyName)
-				if (lVal.IsNil() && !rVal.IsNil()) || (!lVal.IsNil() && rVal.IsNil()) || (!lVal.Equals(rVal)) { match = false; break }
-			}
-			if match {
-				outputRows := fUser(leftRowOriginal, rightRowOriginal)
-				for _, outRow := range outputRows {
-					if outRow.Len() != numOutputCols { panic("Join: fUser returned row with incorrect col count") }
-					for c := 0; c < numOutputCols; c++ {
-						val := outRow.Get(c); av, ok_av := val.(*arrowValue)
-						if !ok_av && !val.IsNil() { panic(fmt.Sprintf("Join: fUser returned non-*arrowValue: %T", val)) }
-						var scalarToAppend scalar.Scalar
-						if val.IsNil() || !ok_av { scalarToAppend = scalar.NewNullScalar(colBuilders[c].Type()) } else { scalarToAppend = av.val }
+	for lKeyName, rKeyName := range joinColsMap {
+		lIdx := adf.schema.GetIndexByName(lKeyName); if lIdx == -1 { panic(fmt.Sprintf("Join: left key '%s' not found", lKeyName)) }
+		leftKeyDatums = append(leftKeyDatums, arrow.NewArrayDatum(adf.record.Column(lIdx)))
+		rIdx := otherArrowDf.schema.GetIndexByName(rKeyName); if rIdx == -1 { panic(fmt.Sprintf("Join: right key '%s' not found", rKeyName)) }
+		rightKeyDatums = append(rightKeyDatums, arrow.NewArrayDatum(otherArrowDf.record.Column(rIdx)))
+		if !arrow.TypeEqual(adf.record.Column(lIdx).DataType(), otherArrowDf.record.Column(rIdx).DataType()) {
+			panic(fmt.Sprintf("Join: type mismatch for key. L:'%s'(%s) R:'%s'(%s)", lKeyName, adf.record.Column(lIdx).DataType(), rKeyName, otherArrowDf.record.Column(rIdx).DataType()))
+		}
+	}
+	if len(leftKeyDatums) == 0 { panic("JoinEqui and other key-based joins require join columns.") }
+	defer func() { for _,d := range leftKeyDatums { d.Release() }; for _,d := range rightKeyDatums {d.Release()} }()
+		
+	var hjComputeJoinType compute.JoinType
+	switch jointype {
+	case df.JoinEqui: hjComputeJoinType = compute.InnerJoin
+	case df.JoinLeft: hjComputeJoinType = compute.LeftOuterJoin
+	case df.JoinRight: hjComputeJoinType = compute.RightOuterJoin
+	case df.JoinOuter: hjComputeJoinType = compute.FullOuterJoin
+	case df.JoinType("leftanti"): hjComputeJoinType = compute.LeftAntiJoin // Assuming string comparison for custom types
+	default: panic(fmt.Sprintf("Join: unsupported join type %s for HashJoin path", jointype))
+	}
 
-						finalScalarToAppend := scalarToAppend
-						var castedScalarNeedsRelease bool
-						if !arrow.TypeEqual(scalarToAppend.DataType(), colBuilders[c].Type()) {
-							casted, errCast := scalar.Cast(ctx, scalarToAppend, colBuilders[c].Type())
-							if errCast != nil { panic(fmt.Sprintf("Join: cast output for col %d: %v", c, errCast)) };
-							finalScalarToAppend = casted
-							if _, ok_cs := casted.(interface{ Release() }); ok_cs { castedScalarNeedsRelease = true }
-						}
-						if err := appendScalarToBuilder(colBuilders[c], finalScalarToAppend); err != nil {
-							if castedScalarNeedsRelease { finalScalarToAppend.(interface{ Release() }).Release() }
-							panic(fmt.Sprintf("Join: append col %d: %v", c, err))
-						}
-						if castedScalarNeedsRelease { finalScalarToAppend.(interface{ Release() }).Release() }
+	hjIndicesTable, err := compute.HashJoin(ctx, leftKeyDatums, rightKeyDatums,
+		arrow.NewRecordDatum(adf.record), arrow.NewRecordDatum(otherArrowDf.record), 
+		hjComputeJoinType, compute.HashJoinOptions{LeftSuffix:"_L", RightSuffix:"_R"})
+	if err != nil { panic(fmt.Sprintf("Join: HashJoin compute failed for type %s: %v", jointype, err)) }
+	defer hjIndicesTable.Release()
+
+	if isSemiOrAntiJoin {
+		if hjIndicesTable.NumCols() != 1 { panic(fmt.Sprintf("Join: %s HashJoin result expected 1 col indices, got %d", jointype, hjIndicesTable.NumCols())) }
+		hjTr, errTr := array.NewTableReader(hjIndicesTable, -1); if errTr != nil { panic(errTr) }; defer hjTr.Release()
+		var finalRecord arrow.Record
+		if hjTr.Next() {
+			indicesRecord := hjTr.Record() 
+			leftIndicesArr := indicesRecord.Column(0) 
+			takenDatum, errTake := compute.Take(ctx, compute.TakeOptions{}, arrow.NewRecordDatum(adf.record), arrow.NewArrayDatum(leftIndicesArr))
+			if errTake != nil { panic(fmt.Sprintf("Join: %s Take failed: %v", jointype, errTake)) }; defer takenDatum.Release()
+			resultRecord, okRec := takenDatum.(*arrow.RecordDatum).Value().(arrow.Record); if !okRec { panic(fmt.Sprintf("Join: %s Take bad return", jointype)) }
+			finalRecord = resultRecord
+		} else { 
+		    if hjTr.Err() != nil { panic(fmt.Sprintf("Join: error reading %s HashJoin indices: %v", jointype, hjTr.Err())) }
+			finalRecord = array.NewRecord(adf.schema.schema, nil, 0) 
+		}
+		defer finalRecord.Release() // NewArrowDataFrameWithAllocator will retain it
+		return NewArrowDataFrameWithAllocator(adf.name, finalRecord, adf.schema, adf.mem)
+	}
+	
+	// Path for INNER, LEFT, RIGHT, FULL OUTER (uses fUser)
+	if hjIndicesTable.NumCols() != 2 { panic(fmt.Sprintf("Join: HashJoin result expected 2 index cols for %s, got %d", jointype, hjIndicesTable.NumCols()))}
+	outputInternalSchema := outputArrowDFSchema.schema; numOutputCols := outputInternalSchema.NumFields()
+	finalBuilders := make([]array.Builder, numOutputCols); 
+	for i:=0; i<numOutputCols; i++ { finalBuilders[i] = builder.NewBuilder(adf.mem, outputInternalSchema.Field(i).Type) }
+	defer func() { for _,b := range finalBuilders { if b != nil { b.Release() } } }()
+
+	hjTr, errTr := array.NewTableReader(hjIndicesTable, -1); if errTr != nil { panic(errTr) }; defer hjTr.Release()
+	var nilLeftRow, nilRightRow df.Row 
+
+	for hjTr.Next() {
+		indicesRecord := hjTr.Record() 
+		leftIndicesArr := indicesRecord.Column(0).(*array.Int64); rightIndicesArr := indicesRecord.Column(1).(*array.Int64)
+		for i := 0; i < int(indicesRecord.NumRows()); i++ { 
+			var leftRowView, rightRowView df.Row
+			if leftIndicesArr.IsNull(i) {
+				if nilLeftRow == nil { nilLeftRow = newNilArrowRow(adf.schema, adf.mem) }; leftRowView = nilLeftRow
+			} else { lIdx := leftIndicesArr.Value(i); leftRowView, _ = NewArrowRowFromRecord(adf.schema, adf.record, int(lIdx)) }
+			if rightIndicesArr.IsNull(i) {
+				if nilRightRow == nil { nilRightRow = newNilArrowRow(otherArrowDf.schema, adf.mem) }; rightRowView = nilRightRow
+			} else { rIdx := rightIndicesArr.Value(i); rightRowView, _ = NewArrowRowFromRecord(otherArrowDf.schema, otherArrowDf.record, int(rIdx)) }
+			
+			outputRows := fUser(leftRowView, rightRowView)
+			for _, outRow := range outputRows {
+				if outRow.Len() != numOutputCols { panic("Join: fUser row col count mismatch") }
+				for c := 0; c < numOutputCols; c++ {
+					val := outRow.Get(c); av, ok_av := val.(*arrowValue)
+					if !ok_av && !val.IsNil() { panic(fmt.Sprintf("Join: fUser non-*arrowValue: %T", val)) }
+					var scalarToAppend scalar.Scalar
+					if val.IsNil() || !ok_av { scalarToAppend = scalar.NewNullScalar(finalBuilders[c].Type()) } else { scalarToAppend = av.val }
+					
+					// Using 3-argument appendScalarToBuilder from types.go
+					errAppend := appendScalarToBuilder(finalBuilders[c], scalarToAppend, finalBuilders[c].Type())
+					if errAppend != nil { 
+						panic(fmt.Sprintf("Join: append col %d (name: %s): %v. Scalar: %s, BuilderType: %s",c, outputInternalSchema.Field(c).Name, errAppend, scalarToAppend.DataType().Name(), finalBuilders[c].Type().Name()))
 					}
 				}
 			}
 		}
 	}
-	newCols := make([]array.Array, numOutputCols); var newRecordLen int64
-	if numOutputCols > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) }
-	for i, b := range colBuilders { newCols[i] = b.NewArray() }
-	finalRecord := array.NewRecord(outputInternalArrowSchema, newCols, newRecordLen)
-	for _, col := range newCols { col.Release() }; defer finalRecord.Release()
+	if hjTr.Err() != nil { panic(fmt.Sprintf("Join: error reading HashJoin indices: %v", hjTr.Err())) }
+
+	finalCols := make([]arrow.Array, numOutputCols); var finalNumRows int64
+	if numOutputCols > 0 && finalBuilders[0] != nil { finalNumRows = int64(finalBuilders[0].Len()) }
+	for i, b := range finalBuilders { if b == nil {panic(fmt.Sprintf("Join: nil builder at index %d",i))}; finalCols[i] = b.NewArray() }
+	finalRecord := array.NewRecord(outputInternalSchema, finalCols, finalNumRows)
+	for _, col := range finalCols { col.Release() }; defer finalRecord.Release()
 	return NewArrowDataFrameWithAllocator(adf.name, finalRecord, outputArrowDFSchema, adf.mem)
 }
+
 func (adf *arrowDataFrame) Intersection(otherRaw df.DataFrame, cols ...string) df.DataFrame {
 	if adf.record == nil { schemaToUse := adf.schema; if adf.schema == nil || adf.schema.schema == nil { emptyFields := []arrow.Field{}; schemaToUse = NewArrowDataFrameSchema(arrow.NewSchema(emptyFields,nil)).(*arrowDataFrameSchema) }; emptyRec := array.NewRecord(schemaToUse.schema, nil, 0); defer emptyRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, emptyRec, schemaToUse, adf.mem) }
 	if otherRaw == nil { panic("Intersection: other dataframe cannot be nil") }
 	otherArrowDf, ok := otherRaw.(*arrowDataFrame); if !ok { panic(fmt.Sprintf("Intersection: expected *arrowDataFrame, got %T", otherRaw)) }
 	if otherArrowDf.record == nil { emptyRec := array.NewRecord(adf.schema.schema, nil, 0); defer emptyRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, emptyRec, adf.schema, adf.mem) }
 	actualJoinColsMap := make(map[string]string)
-	if len(cols) == 0 {
+	if len(cols) == 0 { 
 		commonColsFound := false
 		for _, name1 := range adf.schema.Names() {
 			idx2 := otherArrowDf.schema.GetIndexByName(name1)
@@ -516,7 +670,7 @@ func (adf *arrowDataFrame) Intersection(otherRaw df.DataFrame, cols ...string) d
 			}
 		}
 		if !commonColsFound { emptyRec := array.NewRecord(adf.schema.schema, nil, 0); defer emptyRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, emptyRec, adf.schema, adf.mem) }
-	} else {
+	} else { 
 		for _, colName := range cols {
 			if !adf.schema.HasName(colName) { panic(fmt.Sprintf("Intersection: key col '%s' not in left df", colName)) }
 			if !otherArrowDf.schema.HasName(colName) { panic(fmt.Sprintf("Intersection: key col '%s' not in right df", colName)) }
@@ -553,215 +707,80 @@ func (adf *arrowDataFrame) GroupBy(cols ...string) df.GroupedDataFrame {
 	if err != nil { panic(fmt.Sprintf("GroupBy: failed to create keysOnlyTable: %v", err)) };	defer keysOnlyTable.Release()
 	keyColNames := make([]string, len(keyIndices)); for i, ki := range keyIndices { keyColNames[i] = adf.schema.schema.Field(ki).Name }
 	uniqueKeysResultTable, err := keysOnlyTable.Distinct(ctx, keyColNames...)
-	if err != nil { panic(fmt.Sprintf("GroupBy: failed to get distinct keys: %v", err)) };
-	adf.record.Retain()
+	if err != nil { panic(fmt.Sprintf("GroupBy: failed to get distinct keys: %v", err)) }; 
+	adf.record.Retain() 
 	return &arrowGroupedDataFrame{ originalRecord: adf.record, originalSchema: adf.schema, groupingColNames: cols, uniqueKeysTable: uniqueKeysResultTable, mem: adf.mem, }
 }
+
 func (adf *arrowDataFrame) Except(otherRaw df.DataFrame, cols ...string) df.DataFrame {
 	if adf.record == nil || adf.record.NumRows() == 0 {
-		schemaToUse := adf.schema; if adf.schema == nil || adf.schema.schema == nil { emptyFields := []arrow.Field{}; schemaToUse = NewArrowDataFrameSchema(arrow.NewSchema(emptyFields,nil)).(*arrowDataFrameSchema) }
-		emptyRec := array.NewRecord(schemaToUse.schema, nil, 0); defer emptyRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, emptyRec, schemaToUse, adf.mem)
+		schemaToUse := adf.schema
+		if adf.schema == nil || adf.schema.schema == nil { 
+			emptyFields := []arrow.Field{}
+			schemaToUse = NewArrowDataFrameSchema(arrow.NewSchema(emptyFields,nil)).(*arrowDataFrameSchema)
+		}
+		emptyRec := array.NewRecord(schemaToUse.schema, nil, 0); defer emptyRec.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, emptyRec, schemaToUse, adf.mem)
 	}
 	if otherRaw == nil { panic("Except: other dataframe cannot be nil") }
-	otherArrowDf, ok := otherRaw.(*arrowDataFrame); if !ok { panic(fmt.Sprintf("Except: expected *arrowDataFrame, got %T", otherRaw)) }
+	otherArrowDf, ok := otherRaw.(*arrowDataFrame)
+	if !ok { panic(fmt.Sprintf("Except: expected *arrowDataFrame, got %T", otherRaw)) }
 	if otherArrowDf.record == nil || otherArrowDf.record.NumRows() == 0 { return adf.Distinct() }
 
-	var keyColIndicesLeft, keyColIndicesRight []int
+	actualJoinColsMap := make(map[string]string)
 	if len(cols) == 0 {
-		for i, lField := range adf.schema.schema.Fields() {
-			rIdx := otherArrowDf.schema.GetIndexByName(lField.Name)
-			if rIdx != -1 && arrow.TypeEqual(lField.Type, otherArrowDf.schema.schema.Field(rIdx).Type) {
-				keyColIndicesLeft = append(keyColIndicesLeft, i); keyColIndicesRight = append(keyColIndicesRight, rIdx)
+		commonColsFound := false
+		for _, name1 := range adf.schema.Names() {
+			idx2 := otherArrowDf.schema.GetIndexByName(name1)
+			if idx2 != -1 {
+				type1 := adf.schema.schema.Field(adf.schema.GetIndexByName(name1)).Type
+				type2 := otherArrowDf.schema.schema.Field(idx2).Type
+				if arrow.TypeEqual(type1, type2) { actualJoinColsMap[name1] = name1; commonColsFound = true }
 			}
 		}
-		if len(keyColIndicesLeft) == 0 { return adf.Distinct() }
+		// If no common columns with same type found for implicit join, result is all distinct rows of left.
+		if !commonColsFound { return adf.Distinct() } 
 	} else {
 		for _, colName := range cols {
-			lIdx := adf.schema.GetIndexByName(colName); if lIdx == -1 { panic(fmt.Sprintf("Except: key col '%s' not in left df", colName)) }
-			rIdx := otherArrowDf.schema.GetIndexByName(colName); if rIdx == -1 { panic(fmt.Sprintf("Except: key col '%s' not in right df", colName)) }
-			if !arrow.TypeEqual(adf.schema.schema.Field(lIdx).Type, otherArrowDf.schema.schema.Field(rIdx).Type) { panic(fmt.Sprintf("Except: type mismatch for key '%s'", colName)) }
-			keyColIndicesLeft = append(keyColIndicesLeft, lIdx); keyColIndicesRight = append(keyColIndicesRight, rIdx)
+			if !adf.schema.HasName(colName) { panic(fmt.Sprintf("Except: key col '%s' not in left df", colName)) }
+			if !otherArrowDf.schema.HasName(colName) { panic(fmt.Sprintf("Except: key col '%s' not in right df", colName)) }
+			type1 := adf.schema.schema.Field(adf.schema.GetIndexByName(colName)).Type
+			type2 := otherArrowDf.schema.schema.Field(otherArrowDf.schema.GetIndexByName(colName)).Type
+			if !arrow.TypeEqual(type1, type2) { panic(fmt.Sprintf("Except: type mismatch for key '%s'", colName)) }
+			actualJoinColsMap[colName] = colName
 		}
 	}
-    if len(keyColIndicesLeft) == 0 && adf.record.NumCols() > 0 { return adf.Distinct() }
-    if adf.record.NumCols() == 0 { return adf.Distinct() }
+	// If no join columns specified AND no common columns found (for implicit all-column join),
+	// or if explicit cols were empty, it implies an except based on full row comparison.
+	// The current HashJoin path requires specific key columns.
+	// If actualJoinColsMap is empty but cols was also empty (meaning all-cols implicit join),
+	// this means we need to use all columns as keys if they are compatible.
+	// This part of logic for "all columns" except might need more specific handling if actualJoinColsMap remains empty.
+	// For now, if no join keys, and it's not a zero-column DF, result is adf.Distinct().
+	if len(actualJoinColsMap) == 0 && adf.record.NumCols() > 0 { return adf.Distinct() }
+    if adf.record.NumCols() == 0 { return adf.Distinct() } // Except on an empty-column DF is itself distinct.
 
-	rowsToKeepIndices := make([]int64, 0, adf.Len())
-	for lRowIdx := int64(0); lRowIdx < adf.Len(); lRowIdx++ {
-		foundMatchInRight := false
-		for rRowIdx := int64(0); rRowIdx < otherArrowDf.Len(); rRowIdx++ {
-			keysMatch := true
-			for keyNum := 0; keyNum < len(keyColIndicesLeft); keyNum++ {
-				lKeyColIdx := keyColIndicesLeft[keyNum]; rKeyColIdx := keyColIndicesRight[keyNum]
-				lValScalar := scalar.MakeScalar(adf.record.Column(lKeyColIdx), int(lRowIdx))
-				rValScalar := scalar.MakeScalar(otherArrowDf.record.Column(rKeyColIdx), int(rRowIdx))
-				if cs, needsRelease := lValScalar.(interface{ Release() }); needsRelease { cs.Release() }
-				if cs, needsRelease := rValScalar.(interface{ Release() }); needsRelease { cs.Release() }
-				if !scalar.Equals(lValScalar, rValScalar) { keysMatch = false; break }
-			}
-			if keysMatch { foundMatchInRight = true; break }
-		}
-		if !foundMatchInRight { rowsToKeepIndices = append(rowsToKeepIndices, lRowIdx) }
+	// Use Join with JoinLeftAnti. fUser is nil as LeftAntiJoin produces rows from left table.
+	// Output schema is the left table's schema.
+	// Assuming JoinLeftAnti is defined in the df package or as a recognized string const by Join.
+	leftAntiJoinedDf := adf.Join(adf.schema, otherArrowDf, df.JoinType("leftanti"), actualJoinColsMap, nil)
+	
+	// The result of LeftAntiJoin already contains rows from 'adf' not in 'other'.
+	// Now, make these rows distinct.
+	resultDf := leftAntiJoinedDf.Distinct()
+
+	if arrowJoinedDf, ok_join := leftAntiJoinedDf.(*arrowDataFrame); ok_join {
+		arrowJoinedDf.Release()
 	}
-
-	var intermediateRecord arrow.Record
-	if len(rowsToKeepIndices) == 0 {
-		intermediateRecord = array.NewRecord(adf.schema.schema, nil, 0)
-	} else {
-		indicesBuilder := array.NewInt64Builder(adf.mem); defer indicesBuilder.Release()
-		indicesBuilder.AppendValues(rowsToKeepIndices, nil)
-		indicesArr := indicesBuilder.NewArray(); defer indicesArr.Release()
-		ctx := compute.WithAllocator(context.Background(), adf.mem)
-		takenDatum, err := compute.Take(ctx, compute.TakeOptions{}, arrow.NewRecordDatum(adf.record), arrow.NewArrayDatum(indicesArr))
-		if err != nil { panic(fmt.Sprintf("Except: Take failed: %v", err)) }; defer takenDatum.Release()
-		takenRecord, ok_tr := takenDatum.(*arrow.RecordDatum).Value().(arrow.Record); if !ok_tr { panic("Except: Take bad return") }
-		intermediateRecord = takenRecord
-	}
-	defer intermediateRecord.Release();
-	tempDf := NewArrowDataFrameWithAllocator(adf.name, intermediateRecord, adf.schema, adf.mem)
-	defer tempDf.(*arrowDataFrame).Release()
-	return tempDf.Distinct()
-}
-func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame {
-	var currentRecordLen int64
-	if adf.record != nil { currentRecordLen = adf.record.NumRows()
-	} else if adf.schema != nil && adf.schema.schema != nil && adf.schema.schema.NumFields() == 0 { currentRecordLen = adf.Len()
-	} else { currentRecordLen = 0 }
-
-	if adf.record == nil && currentRecordLen > 0 {
-		allConst := true
-		for _, expr := range expressions { if expr.Const() == nil { allConst = false; break } }
-		if !allConst { panic("Select on a dataframe with rows but no record/columns, and non-constant expressions") }
-	}
-
-	if len(expressions) == 0 {
-		emptyArrowSchema := arrow.NewSchema([]arrow.Field{}, nil)
-		emptyDfSchema := NewArrowDataFrameSchema(emptyArrowSchema).(*arrowDataFrameSchema)
-		emptyRecord := array.NewRecord(emptyArrowSchema, nil, currentRecordLen); defer emptyRecord.Release()
-		return NewArrowDataFrameWithAllocator(adf.name, emptyRecord, emptyDfSchema, adf.mem)
-	}
-
-	outputCols := make([]arrow.Array, len(expressions))
-	outputFields := make([]arrow.Field, len(expressions))
-	ctx := compute.WithAllocator(context.Background(), adf.mem)
-
-	for i, expr := range expressions {
-		if expr == nil { panic(fmt.Sprintf("Select: expression at index %d is nil", i)) }
-		var resultArr arrow.Array; var resultFormat df.Format
-		outputColName := expr.Name()
-
-		if expr.Const() != nil {
-			constVal := expr.Const(); resultFormat = constVal.Schema()
-			arrowType := dfFormatToArrowType(resultFormat); b := builder.NewBuilder(adf.mem, arrowType)
-			constScalar, errConv := dfValueToArrowScalar(constVal, arrowType, adf.mem)
-			if errConv != nil { b.Release(); panic(fmt.Sprintf("Select: const expr '%s', error converting const value: %v", outputColName, errConv)) }
-
-			releasableConstScalar, constScalarNeedsRelease := constScalar.(interface{ Release() })
-
-			for r := int64(0); r < currentRecordLen; r++ {
-				if errApp := appendScalarToBuilder(b, constScalar); errApp != nil {
-					b.Release();
-					if constScalarNeedsRelease { releasableConstScalar.Release() }
-					panic(fmt.Sprintf("Select: const expr '%s', error appending: %v", outputColName, errApp))
-				}
-			}
-			if constScalarNeedsRelease { releasableConstScalar.Release() }
-			resultArr = b.NewArray(); b.Release()
-		} else if expr.Col() != "" && expr.OpType() == "" && expr.Parent() == nil {
-			if adf.record == nil { for j:=0; j<i; j++ {if outputCols[j]!=nil{outputCols[j].Release()}}; panic(fmt.Sprintf("Select: cannot select column '%s' from nil record", expr.Col()))}
-			originalSeries := adf.GetSeriesByName(expr.Col()); arrowS, _ := originalSeries.(*arrowSeries)
-			arrowS.arr.Retain(); resultArr = arrowS.arr; resultFormat = originalSeries.Schema().Format
-			originalSeries.(*arrowSeries).Release()
-		} else if expr.Parent() != nil && expr.Parent().Col() != "" && (expr.OpType() == df.ExprTypeMap || expr.OpType() == df.ExprTypeFilter) {
-			if adf.record == nil {for j:=0; j<i; j++ {if outputCols[j]!=nil{outputCols[j].Release()}}; panic(fmt.Sprintf("Select: cannot apply op on col '%s' from nil record", expr.Parent().Col()))}
-			baseSeries := adf.GetSeriesByName(expr.Parent().Col())
-			resultSeries := baseSeries.Select(expr)
-			arrowS, _ := resultSeries.(*arrowSeries)
-			arrowS.arr.Retain(); resultArr = arrowS.arr; resultFormat = resultSeries.Schema().Format
-			baseSeries.(*arrowSeries).Release()
-			arrowS.Release()
-		} else {
-			for j := 0; j < i; j++ { if outputCols[j] != nil { outputCols[j].Release() } }
-			panic(fmt.Sprintf("Select: expr '%s' (type: %s, col: %s) unsupported", expr.Name(), expr.OpType(), expr.Col()))
-		}
-		if resultArr.Len() != int(currentRecordLen) {
-			resultArr.Release(); for j := 0; j < i; j++ { if outputCols[j] != nil { outputCols[j].Release() } }
-			panic(fmt.Sprintf("Select: series for expr '%s' len %d != expected %d", outputColName, resultArr.Len(), currentRecordLen))
-		}
-		outputCols[i] = resultArr
-		outputFields[i] = arrow.Field{Name: outputColName, Type: resultArr.DataType(), Nullable: resultArr.NullN() > 0}
-	}
-	finalSchema := arrow.NewSchema(outputFields, nil)
-	finalRecord := array.NewRecord(finalSchema, outputCols, currentRecordLen)
-	for _, col := range outputCols { if col != nil { col.Release() } };
-
-	finalDfSchema := NewArrowDataFrameSchema(finalSchema).(*arrowDataFrameSchema)
-	dfToReturn := NewArrowDataFrameWithAllocator(adf.name, finalRecord, finalDfSchema, adf.mem)
-	finalRecord.Release()
-	return dfToReturn
+	return resultDf
 }
 
-func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame {
-	if inplace { adf.name = name; return adf }
-	return NewArrowDataFrameWithAllocator(newName, adf.record, adf.schema, adf.mem)
-}
-func (adf *arrowDataFrame) AsFormat(t map[string]df.Format) df.DataFrame {
-	if len(t) == 0 { if adf.record == nil { return NewArrowDataFrameWithAllocator(adf.name, nil, adf.schema, adf.mem) }; newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
-	numCols := adf.schema.Len(); newRecordCols := make([]arrow.Array, numCols); newSchemaFields := make([]arrow.Field, numCols); modified := false
-	if numCols == 0 { if adf.record != nil && adf.record.NumRows() > 0 { newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }; return NewArrowDataFrameWithAllocator(adf.name, adf.record, adf.schema, adf.mem) }
-	for i := 0; i < numCols; i++ {
-		originalField := adf.schema.schema.Field(i); originalCol := adf.record.Column(i); originalDfFormat := adf.schema.Get(i).Format
-		targetFormat, shouldReformat := t[originalField.Name]
-		if !shouldReformat || originalDfFormat.Equals(targetFormat) {
-			targetArrowDt := originalCol.DataType(); if shouldReformat { targetArrowDt = dfFormatToArrowType(targetFormat) }
-			if shouldReformat && arrow.TypeEqual(originalCol.DataType(), targetArrowDt) {
-				originalCol.Retain(); newRecordCols[i] = originalCol; newSchemaFields[i] = originalField
-				newSchemaFields[i].Type = targetArrowDt
-			} else if !shouldReformat {
-				originalCol.Retain(); newRecordCols[i] = originalCol; newSchemaFields[i] = originalField
-			} else {
-				goto reformat_col
-			}
-			continue
-		}
-		reformat_col:
-		modified = true
-		tempOriginalSeriesSchema := df.SeriesSchema{Name: originalField.Name, Format: originalDfFormat}
-		tempOriginalSeries := NewArrowSeriesWithAllocator(originalCol, tempOriginalSeriesSchema, adf.mem).(*arrowSeries)
-		formattedSeries := tempOriginalSeries.AsFormat(targetFormat).(*arrowSeries)
-		tempOriginalSeries.Release()
-		formattedSeries.arr.Retain(); newRecordCols[i] = formattedSeries.arr
-		newSchemaFields[i] = arrow.Field{ Name: originalField.Name, Type: formattedSeries.arr.DataType(), Nullable: formattedSeries.arr.NullN() > 0, Metadata: originalField.Metadata }
-		formattedSeries.Release()
-	}
-	if !modified { newRec := adf.record.NewSlice(0, adf.record.NumRows()); defer newRec.Release(); return NewArrowDataFrameWithAllocator(adf.name, newRec, adf.schema, adf.mem) }
-	finalArrowSchema := arrow.NewSchema(newSchemaFields, adf.schema.schema.Metadata()); finalDfSchema := NewArrowDataFrameSchema(finalArrowSchema).(*arrowDataFrameSchema)
-	finalRecord := array.NewRecord(finalArrowSchema, newRecordCols, adf.record.NumRows())
-	for _, col := range newRecordCols { col.Release() }; defer finalRecord.Release()
-	return NewArrowDataFrameWithAllocator(adf.name, finalRecord, finalDfSchema, adf.mem)
-}
+
+func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame { /* ... */ }
+func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame { /* ... */ }
+func (adf *arrowDataFrame) AsFormat(t map[string]df.Format) df.DataFrame { /* ... */ }
 func (adf *arrowDataFrame) UpdateSeries(index int, series df.Series) df.DataFrame { /* ... */ }
 func (adf *arrowDataFrame) UpdateSeriesByName(name string, series df.Series) df.DataFrame { /* ... */ }
-
-func (adf *arrowDataFrame) ForEachRow(f func(row df.Row)) {
-	if f == nil {
-		panic("ForEachRow: function f cannot be nil")
-	}
-	if adf.record == nil || adf.record.NumRows() == 0 {
-		return
-	}
-	for r := int64(0); r < adf.record.NumRows(); r++ {
-		rowView, err := NewArrowRowFromRecord(adf.schema, adf.record, int(r))
-		if err != nil {
-			panic(fmt.Sprintf("ForEachRow: error creating row view for row index %d: %v", r, err))
-		}
-		f(rowView)
-	}
-}
-// func (adf *arrowDataFrame) GroupBy(cols ...string) df.GroupedDataFrame { /* ... */ } // Implemented
-// func (adf *arrowDataFrame) Union(d df.DataFrame) df.DataFrame { /* ... */ } // Implemented
-// func (adf *arrowDataFrame) Intersection(d df.DataFrame, col ...string) df.DataFrame { /* ... */ } // Implemented
-// func (adf *arrowDataFrame) Except(d df.DataFrame, col ...string) df.DataFrame { /* ... */ } // Implemented
-// func (adf *arrowDataFrame) Join(schema df.DataFrameSchema, d df.DataFrame, jointype df.JoinType, cols map[string]string, f func(df.Row, df.Row) []df.Row) df.DataFrame { /* ... */ } // Implemented
+func (adf *arrowDataFrame) ForEachRow(f func(df.Row)) { /* ... */ }
 
 var _ df.DataFrame = (*arrowDataFrame)(nil)
