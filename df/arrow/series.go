@@ -691,7 +691,234 @@ func (as *arrowSeries) Select(e df.Expr) df.Series {
 	// it would add 5 to each element of `as`.
 	// Many common operations are already covered by Map, AsFormat, or direct compute.
 	// For now, as per subtask, this will remain partially implemented.
-	panic(fmt.Sprintf("Select on arrowSeries is partially implemented. Full expression (%s) evaluation TBD.", e.Name()))
+	// panic(fmt.Sprintf("Select on arrowSeries is partially implemented. Full expression (%s) evaluation TBD.", e.Name()))
+
+	ctx := compute.WithAllocator(context.Background(), as.mem)
+	var currentArr arrow.Array
+	var currentSeriesSchema df.SeriesSchema
+	var seriesToRelease df.Series // To release intermediate series from parent expressions
+
+	if e.Parent() != nil {
+		// Recursively evaluate the parent expression first
+		parentSeries := as.Select(e.Parent()) // This series is the input to the current operation
+		arrowParentSeries, ok := parentSeries.(*arrowSeries)
+		if !ok {
+			if parentSeries != nil { parentSeries.Release() }
+			panic(fmt.Sprintf("Select: parent expression did not return *arrowSeries, got %T", parentSeries))
+		}
+		currentArr = arrowParentSeries.arr // Do not retain here, it's owned by arrowParentSeries
+		currentSeriesSchema = arrowParentSeries.schema
+		seriesToRelease = arrowParentSeries // Mark for release after use
+	} else {
+		// This expression operates directly on the current series 'as'
+		currentArr = as.arr
+		currentSeriesSchema = as.schema
+	}
+
+	if currentArr == nil {
+		if seriesToRelease != nil { seriesToRelease.Release() }
+		panic(fmt.Sprintf("Select: input array for expression '%s' is nil", e.Name()))
+	}
+
+	// Retain currentArr for operations, as it might be from `as.arr` or a temporary parent result.
+	// The final result array will be new or a slice, so this specific retain is for this scope.
+	currentArr.Retain(); defer currentArr.Release()
+
+
+	var resultArray arrow.Array
+	var resultSchema df.SeriesSchema
+
+	switch e.OpType() {
+	case df.ExprTypeMap:
+		mapOp := e.MapOp()
+		if mapOp == nil {
+			if seriesToRelease != nil { seriesToRelease.Release() }
+			panic(fmt.Sprintf("Select: MapOp is nil for ExprTypeMap expression '%s'", e.Name()))
+		}
+
+		// Assumptions about MapOp structure:
+		// - mapOp.Name() might give "OpConst_Add", "WhenNilConst" etc.
+		// - mapOp.Args() gives arguments, where literal is often Args()[0]
+		// This is a simplification; a real impl might need type assertions on mapOp
+		// or more detailed methods on the MapOp interface.
+
+		opName := "" // This needs to be derived from how MapOp is structured in your df.Expr
+		// For example, if MapOp has a Name() method or if e.Name() directly gives the map op:
+		if exprWithName, ok := mapOp.(interface{ Name() string }); ok { // Hypothetical
+			opName = exprWithName.Name()
+		} else if exprWithName, ok := e.(interface{ Name() string }); ok { // Fallback to expr name itself
+			opName = exprWithName.Name()
+		} else {
+			// Try to infer from common types if not directly named
+			// This part is highly speculative based on common patterns in your expr package.
+			// It's better if mapOp itself has a clear way to identify the operation.
+			// Example: if type is *expr.SeriesWhenNilConstMapOp -> "WhenNilConst"
+			// For now, let's assume it's part of e.Name() or mapOp.Name()
+			// This logic will likely need refinement based on actual df.Expr structure.
+			opName = e.Name() // Fallback, might need adjustment.
+		}
+
+
+		if strings.HasPrefix(opName, "OpConst_") { // Assuming names like "OpConst_Add", "OpConst_Subtract"
+			if len(mapOp.Args()) == 0 || mapOp.Args()[0].Const() == nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: MapOp '%s' for expression '%s' requires a literal argument", opName, e.Name()))
+			}
+			literalValue := mapOp.Args()[0].Const()
+
+			// For arithmetic, scalar type should ideally match array type or be promotable.
+			// Using currentArr.DataType() as the target for the scalar conversion.
+			rightScalarVal, err := dfValueToArrowScalar(literalValue, currentArr.DataType())
+			if err != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: error converting literal for MapOp '%s' expr '%s': %v", opName, e.Name(), err))
+			}
+			// No release for rightScalarVal from dfValueToArrowScalar
+
+			inputDatum := arrow.NewArrayDatum(currentArr)
+			rightScalarDatum := arrow.NewScalarDatum(rightScalarVal)
+			defer inputDatum.Release(); defer rightScalarDatum.Release() // Release datums
+
+			var computeErr error
+			var outputDatum arrow.Datum
+
+			switch opName {
+			case "OpConst_Add": // This name needs to match what your df.Expr generates
+				outputDatum, computeErr = compute.Add(ctx, inputDatum, rightScalarDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+			case "OpConst_Subtract":
+				outputDatum, computeErr = compute.Subtract(ctx, inputDatum, rightScalarDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+			case "OpConst_Multiply":
+				outputDatum, computeErr = compute.Multiply(ctx, inputDatum, rightScalarDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+			case "OpConst_Divide":
+				outputDatum, computeErr = compute.Divide(ctx, inputDatum, rightScalarDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+			default:
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: unsupported MapOp arithmetic operation '%s' for expression '%s'", opName, e.Name()))
+			}
+
+			if computeErr != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: compute error for MapOp '%s' expr '%s': %v", opName, e.Name(), computeErr))
+			}
+			defer outputDatum.Release()
+			resultArray = outputDatum.MakeArray() // Makes a new array, caller owns.
+			resultSchema = currentSeriesSchema    // Arithmetic ops usually preserve type & name. Name might change via expr.Name().
+			if e.Name() != "" { resultSchema.Name = e.Name() }
+
+
+		} else if opName == "WhenNilConst" { // Assuming this is the name for WhenNil operation
+			if len(mapOp.Args()) == 0 || mapOp.Args()[0].Const() == nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: MapOp WhenNilConst for expression '%s' requires a literal fill value", e.Name()))
+			}
+			fillValue := mapOp.Args()[0].Const()
+			fillScalarVal, err := dfValueToArrowScalar(fillValue, currentArr.DataType())
+			if err != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: error converting fillValue for WhenNilConst expr '%s': %v", e.Name(), err))
+			}
+
+			inputDatum := arrow.NewArrayDatum(currentArr)
+			fillScalarDatum := arrow.NewScalarDatum(fillScalarVal)
+			defer inputDatum.Release(); defer fillScalarDatum.Release()
+
+			outputDatum, fillErr := compute.FillNull(ctx, inputDatum, fillScalarDatum)
+			if fillErr != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: FillNull compute error for expr '%s': %v", e.Name(), fillErr))
+			}
+			defer outputDatum.Release()
+			resultArray = outputDatum.MakeArray()
+			resultSchema = currentSeriesSchema
+			resultSchema.Nullable = resultArray.NullN() > 0 // Update nullability
+			if e.Name() != "" { resultSchema.Name = e.Name() }
+
+		} else {
+			if seriesToRelease != nil { seriesToRelease.Release() }
+			panic(fmt.Sprintf("Select: unsupported MapOp operation '%s' for expression '%s'", opName, e.Name()))
+		}
+
+	case df.ExprTypeFilter:
+		filterOp := e.FilterOp()
+		if filterOp == nil {
+			if seriesToRelease != nil { seriesToRelease.Release() }
+			panic(fmt.Sprintf("Select: FilterOp is nil for ExprTypeFilter expression '%s'", e.Name()))
+		}
+
+		opName := "" // Similar to MapOp, need a way to get operation name like "OpFilter_EqConst"
+		if exprWithName, ok := filterOp.(interface{ Name() string }); ok { // Hypothetical
+			opName = exprWithName.Name()
+		} else if exprWithName, ok := e.(interface{ Name() string }); ok {
+			opName = exprWithName.Name()
+		} else {
+			opName = e.Name() // Fallback
+		}
+
+
+		if strings.HasPrefix(opName, "OpFilter_") { // e.g. "OpFilter_EqConst"
+			if len(filterOp.Args()) == 0 || filterOp.Args()[0].Const() == nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: FilterOp '%s' for expression '%s' requires a literal argument", opName, e.Name()))
+			}
+			literalValue := filterOp.Args()[0].Const()
+			rightScalarVal, err := dfValueToArrowScalar(literalValue, currentArr.DataType())
+			if err != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: error converting literal for FilterOp '%s' expr '%s': %v", opName, e.Name(), err))
+			}
+
+			inputDatum := arrow.NewArrayDatum(currentArr)
+			rightScalarDatum := arrow.NewScalarDatum(rightScalarVal)
+			defer inputDatum.Release(); defer rightScalarDatum.Release()
+
+			var compareOpt compute.CompareOptions
+			switch opName {
+			case "OpFilter_EqConst": compareOpt = compute.CompareOptions{Operator: compute.EQUAL}
+			case "OpFilter_NeConst": compareOpt = compute.CompareOptions{Operator: compute.NOT_EQUAL}
+			case "OpFilter_GtConst": compareOpt = compute.CompareOptions{Operator: compute.GREATER}
+			case "OpFilter_LtConst": compareOpt = compute.CompareOptions{Operator: compute.LESS}
+			case "OpFilter_GeConst": compareOpt = compute.CompareOptions{Operator: compute.GREATER_EQUAL}
+			case "OpFilter_LeConst": compareOpt = compute.CompareOptions{Operator: compute.LESS_EQUAL}
+			default:
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: unsupported FilterOp comparison '%s' for expression '%s'", opName, e.Name()))
+			}
+
+			outputDatum, computeErr := compute.Compare(ctx, inputDatum, rightScalarDatum, compareOpt)
+			if computeErr != nil {
+				if seriesToRelease != nil { seriesToRelease.Release() }
+				panic(fmt.Sprintf("Select: compute error for FilterOp '%s' expr '%s': %v", opName, e.Name(), computeErr))
+			}
+			defer outputDatum.Release()
+			resultArray = outputDatum.MakeArray()
+			resultSchema = df.SeriesSchema{
+				Name:     e.Name(), // Filter result usually takes alias of expression
+				Format:   df.BoolFormat,
+				Nullable: resultArray.NullN() > 0, // Comparisons with null can yield null
+			}
+			if resultSchema.Name == "" { resultSchema.Name = currentSeriesSchema.Name + "_filter" }
+
+
+		} else {
+			if seriesToRelease != nil { seriesToRelease.Release() }
+			panic(fmt.Sprintf("Select: unsupported FilterOp operation '%s' for expression '%s'", opName, e.Name()))
+		}
+
+	default:
+		if seriesToRelease != nil { seriesToRelease.Release() }
+		panic(fmt.Sprintf("Select: unsupported expression type %v for expression '%s'", e.OpType(), e.Name()))
+	}
+
+	if seriesToRelease != nil {
+		seriesToRelease.Release()
+	}
+
+	if resultArray == nil { // Should have been set by one of the cases
+		panic(fmt.Sprintf("Select: internal error - resultArray not set for expression '%s'", e.Name()))
+	}
+
+	// NewArrowSeriesWithAllocator will retain resultArray.
+	return NewArrowSeriesWithAllocator(resultArray, resultSchema, as.mem)
 }
 
 // Group and Join are more complex and often belong to DataFrame or a specific GroupedSeries type.

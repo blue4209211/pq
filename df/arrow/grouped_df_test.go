@@ -578,16 +578,223 @@ func TestArrowGroupedDataFrame_Map(t *testing.T) {
 
 	// As Map is not fully implemented and prints a warning, this test just checks it doesn't panic
 	// and returns the original grouped dataframe.
-	t.Run("BasicMapCallNoPanic", func(t *testing.T) {
-		mappedGdf := groupedDf.Map(func(key df.Row, groupDf df.DataFrame) df.DataFrame {
-			// This function might not even be called if Map returns early.
-			// If it were called, it should return a df.DataFrame.
-			// For this test, returning the original groupDf is fine.
-			groupDf.(df.Releaser).Retain() // If we were to return it.
-			return groupDf
+	// t.Run("BasicMapCallNoPanic", func(t *testing.T) {
+	// 	fmtPrintlnOutput := captureStdOutput(t, func() {
+	// 		mappedGdf := groupedDf.Map(func(key df.Row, groupDf df.DataFrame) df.DataFrame {
+	// 			groupDf.(df.Releaser).Retain()
+	// 			return groupDf
+	// 		})
+	// 		assert.Same(t, groupedDf, mappedGdf, "Map should return the original GDF for now")
+	// 	})
+	// 	assert.Contains(t, fmtPrintlnOutput, "Warning: arrowGroupedDataFrame.Map is not fully implemented")
+	// })
+
+	// New tests for the implemented Map function
+
+	// Scenario 1: Transformation within groups (add a constant to 'value')
+	t.Run("TransformWithinGroups", func(t *testing.T) {
+		mappedGdf := groupedDf.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+			if groupContent.Len() == 0 { return groupContent } // Return empty if group is empty
+
+			valueSeries := groupContent.GetSeriesByName("value")
+			defer valueSeries.Release()
+
+			// Create a new series by adding 10 to each value
+			// This requires a Map operation on the series itself.
+			// For simplicity in this test, we'll build a new series manually.
+
+			newValues := make([]float64, valueSeries.Len())
+			valids := make([]bool, valueSeries.Len())
+			for i := 0; i < valueSeries.Len(); i++ {
+				if valueSeries.IsNil(i) {
+					valids[i] = false
+				} else {
+					newValues[i] = valueSeries.Get(i).GetAsFloat() + 10.0
+					valids[i] = true
+				}
+			}
+
+			newValArray := getTestFloat64Array(mem, newValues, valids) // Uses test helper
+			defer newValArray.Release()
+
+			newValSeriesSchema := valueSeries.Schema() // Keep name and type, nullability might change based on data
+			newValSeriesSchema.Nullable = newValArray.NullN() > 0
+
+			newSeries := arrowimpl.NewArrowSeries(newValArray, newValSeriesSchema)
+			// UpdateSeriesByName returns a new DataFrame, ensure it's released by caller (Map func)
+			return groupContent.UpdateSeriesByName("value", newSeries)
 		})
-		// Since current Map returns original, it doesn't need its own release.
-		// If Map started returning a new GDF, mappedGdf would need release.
-		assert.Same(t, groupedDf, mappedGdf, "Map should return the original GDF for now")
+		defer mappedGdf.(df.Releaser).Release()
+
+		assert.Equal(t, groupedDf.Len(), mappedGdf.Len(), "Number of groups should be the same")
+
+		// Check group "A"
+		keyA := getFirstKeyForRow(t, groupedDf.GetKeys(), "cat1", "A")
+		assert.NotNil(t, keyA, "Key 'A' for original group not found")
+
+		originalGroupA := groupedDf.Get(keyA); defer originalGroupA.(df.Releaser).Release()
+		mappedGroupA := mappedGdf.Get(keyA); defer mappedGroupA.(df.Releaser).Release()
+
+		assert.Equal(t, originalGroupA.Len(), mappedGroupA.Len(), "Group 'A' length should be same")
+		originalValA := originalGroupA.GetSeriesByName("value"); defer originalValA.Release()
+		mappedValA := mappedGroupA.GetSeriesByName("value"); defer mappedValA.Release()
+
+		for i:=0; i<originalValA.Len(); i++ {
+			if originalValA.IsNil(i) {
+				assert.True(t, mappedValA.IsNil(i), "Nil should be preserved if operation implies it")
+			} else {
+				assert.Equal(t, originalValA.Get(i).GetAsFloat() + 10.0, mappedValA.Get(i).GetAsFloat(), "Value in group A not transformed correctly")
+			}
+		}
 	})
+
+	// Scenario 2: f returns empty DataFrames for some groups
+	t.Run("ReturnEmptyForSomeGroups", func(t *testing.T) {
+		mappedGdf := groupedDf.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+			// Drop group "B" by returning an empty DF with original schema
+			if !key.Get(0).IsNil() && key.Get(0).GetAsString() == "B" {
+				emptyRec := array.NewRecord(groupContent.(*arrowimpl.ArrowDataFrame).Schema().Schema(), nil, 0) // Use underlying arrow schema
+				defer emptyRec.Release()
+				return arrowimpl.NewArrowDataFrame("empty_B", emptyRec, groupContent.Schema().(*arrowimpl.ArrowDataFrameSchema))
+			}
+			groupContent.(df.Releaser).Retain() // Retain if returning original
+			return groupContent
+		})
+		defer mappedGdf.(df.Releaser).Release()
+
+		assert.Equal(t, groupedDf.Len()-1, mappedGdf.Len(), "One group ('B') should be dropped")
+
+		keyA := getFirstKeyForRow(t, mappedGdf.GetKeys(), "cat1", "A")
+		assert.NotNil(t, keyA, "Group 'A' should exist")
+		keyNil := getFirstKeyForRow(t, mappedGdf.GetKeys(), "cat1", nilPlaceholder)
+        assert.NotNil(t, keyNil, "Group 'nil' should exist")
+
+		keyB := getFirstKeyForRow(t, mappedGdf.GetKeys(), "cat1", "B")
+		assert.Nil(t, keyB, "Group 'B' should not exist")
+	})
+
+	// Scenario 3: f changes schema (adds a column), consistently
+	t.Run("ChangeSchemaConsistently", func(t *testing.T) {
+		mappedGdf := groupedDf.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+			if groupContent.Len() == 0 { // Important: if group is empty, AddSeries might behave differently or output schema might be hard to get.
+				// For an empty group, create the new column as an empty series of the target type.
+				newColSchema := df.SeriesSchema{Name: "new_col", Format: df.IntegerFormat, Nullable: true}
+				emptyIntArr := getTestInt64Array(mem, []int64{}, nil); defer emptyIntArr.Release()
+				newEmptySeries := arrowimpl.NewArrowSeries(emptyIntArr, newColSchema)
+				return groupContent.AddSeries("new_col", newEmptySeries)
+			}
+
+			newColValues := make([]int64, groupContent.Len())
+			for i := 0; i < groupContent.Len(); i++ { newColValues[i] = int64(i * 100) }
+			newColArr := getTestInt64Array(mem, newColValues, nil); defer newColArr.Release()
+			newColSeries := arrowimpl.NewArrowSeries(newColArr, df.SeriesSchema{Name: "new_col", Format: df.IntegerFormat})
+			return groupContent.AddSeries("new_col", newColSeries)
+		})
+		defer mappedGdf.(df.Releaser).Release()
+
+		assert.Equal(t, groupedDf.Len(), mappedGdf.Len(), "Number of groups should be same after consistent schema change")
+		keyA := getFirstKeyForRow(t, mappedGdf.GetKeys(), "cat1", "A")
+		assert.NotNil(t, keyA)
+
+		mappedGroupA := mappedGdf.Get(keyA); defer mappedGroupA.(df.Releaser).Release()
+		assert.Equal(t, 4, mappedGroupA.Schema().Len(), "Group 'A' should have 4 columns (original 3 + new_col)")
+		assert.Equal(t, "new_col", mappedGroupA.Schema().Get(3).Name)
+		assert.Equal(t, int64(0), mappedGroupA.GetValue(0,3).GetAsInt()) // 0 * 100
+		assert.Equal(t, int64(100), mappedGroupA.GetValue(1,3).GetAsInt()) // 1 * 100
+	})
+
+	// Scenario 4: Panic on incompatible schemas
+	t.Run("PanicOnIncompatibleSchemas", func(t *testing.T) {
+		assert.PanicsWithValue(t,
+			"Map: schema mismatch for concatenation. Group key (index 1 of 3 keys) resulted in schema\nFields:\n 0: col_int: type=int64\nMetadata:\n\nExpected schema (from first non-empty result)\nFields:\n 0: cat1: type=utf8, nullable\n 1: cat2: type=int64, nullable\n 2: value: type=float64, nullable\nMetadata:\n", // Exact message depends on key order and actual schemas
+			func() {
+			mappedGdf := groupedDf.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+				if !key.Get(0).IsNil() && key.Get(0).GetAsString() == "B" {
+					// Return a DF with a completely different schema for group "B"
+					diffSchema := arrow.NewSchema([]arrow.Field{{Name: "col_int", Type: arrow.PrimitiveTypes.Int64}}, nil)
+					diffRb := array.NewRecordBuilder(mem, diffSchema); defer diffRb.Release()
+					diffRb.Field(0).(*array.Int64Builder).AppendValues([]int64{1,2}, nil)
+					diffRec := diffRb.NewRecord(); defer diffRec.Release()
+					return arrowimpl.NewArrowDataFrame("diff_df", diffRec, arrowimpl.NewArrowDataFrameSchema(diffSchema).(*arrowimpl.ArrowDataFrameSchema))
+				}
+				groupContent.(df.Releaser).Retain()
+				return groupContent
+			})
+			defer mappedGdf.(df.Releaser).Release() // Will panic before this
+		})
+	})
+
+	// Scenario 5: Map on an empty grouped DataFrame
+	t.Run("MapOnEmptyGroupedDF", func(t *testing.T) {
+		emptyBase := baseDf.Limit(0,0); defer emptyBase.(df.Releaser).Release() // Create an empty DF with same schema
+		emptyGrouped := emptyBase.GroupBy("cat1"); defer emptyGrouped.(df.Releaser).Release()
+
+		mappedEmptyGdf := emptyGrouped.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+			// This function should not be called if there are no groups
+			t.Error("Map function called for empty grouped DataFrame")
+			groupContent.(df.Releaser).Retain()
+			return groupContent
+		})
+		assert.Equal(t, int64(0), mappedEmptyGdf.Len(), "Map on empty grouped DF should result in empty grouped DF")
+		assert.Same(t, emptyGrouped, mappedEmptyGdf, "Map on empty grouped DF should return self")
+	})
+
+	// Scenario 6: Panic if f is nil
+	t.Run("PanicOnNilFunction", func(t *testing.T) {
+		assert.PanicsWithValue(t, "Map: map function f cannot be nil", func() {
+			groupedDf.Map(nil)
+		})
+	})
+
+	// Scenario 7: Function drops a grouping column
+	t.Run("PanicOnGroupingColumnDrop", func(t *testing.T) {
+		expectedPanicMsg := "Map: grouping column 'cat1' is missing from the DataFrame returned by the map function. The map function must preserve grouping columns for re-grouping."
+		assert.PanicsWithValue(t, expectedPanicMsg, func() {
+			mappedGdf := groupedDf.Map(func(key df.Row, groupContent df.DataFrame) df.DataFrame {
+				return groupContent.RemoveSeriesByName("cat1") // Drop the grouping column
+			})
+			if mappedGdf != nil { // If it didn't panic (it should)
+				defer mappedGdf.(df.Releaser).Release()
+			}
+		})
+	})
+}
+
+// Helper to get the first key that matches a specific value for a given column in the key row.
+// This is useful when key order isn't guaranteed after operations or in GetKeys().
+func getFirstKeyForRow(t *testing.T, keys []df.Row, colName string, targetVal interface{}) df.Row {
+	t.Helper()
+	if len(keys) == 0 { return nil }
+	// Find the index of colName in the key schema (all keys have same schema)
+	idx := -1
+	if keys[0] != nil && keys[0].Schema() != nil {
+		for i := 0; i < keys[0].Schema().Len(); i++ {
+			if keys[0].Schema().Get(i).Name == colName {
+				idx = i; break
+			}
+		}
+	}
+	if idx == -1 && keys[0].Schema().Len() == 1 && colName == keys[0].Schema().Get(0).Name { // common case for single group key
+		idx = 0
+	}
+	if idx == -1 {
+		// Fallback if colName not directly in key schema (e.g. single key, name not explicitly set in test)
+		// This is fragile, assumes single key if name not found.
+		if keys[0].Len() == 1 { idx = 0 } else {
+			t.Errorf("getFirstKeyForRow: Column '%s' not found in key schema or key has unexpected structure", colName)
+			return nil
+		}
+	}
+
+
+	for _, k := range keys {
+		if targetVal == nilPlaceholder || targetVal == nil {
+			if k.Get(idx).IsNil() { return k }
+		} else {
+			if !k.Get(idx).IsNil() && reflect.DeepEqual(k.Get(idx).Get(), targetVal) {
+				return k
+			}
+		}
+	}
+	return nil
 }

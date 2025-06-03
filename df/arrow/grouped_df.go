@@ -25,10 +25,10 @@ type AggregationConfig struct {
 }
 
 type arrowGroupedDataFrame struct {
-	originalRecord    arrow.Record
+	originalRecord    arrow.Record // This is the full record from which groups are derived.
 	originalSchema    *arrowDataFrameSchema
 	groupingColNames  []string
-	uniqueKeysTable   arrow.Table
+	uniqueKeysTable   arrow.Table // Table containing unique key combinations.
 	mem               memory.Allocator
 }
 
@@ -48,7 +48,7 @@ func (agdf *arrowGroupedDataFrame) GetKeys() []df.Row {
 	keyRecReader := array.NewTableReader(agdf.uniqueKeysTable, -1);	defer keyRecReader.Release()
 	dfRows := make([]df.Row, 0, agdf.uniqueKeysTable.NumRows())
 	for keyRecReader.Next() {
-		rec := keyRecReader.Record(); // This record is managed by TableReader for current iteration
+		rec := keyRecReader.Record();
 		for i := int64(0); i < rec.NumRows(); i++ {
 			keyRow, err := NewArrowRowFromRecord(keyRowSchema, rec, int(i))
 			if err != nil { panic(fmt.Sprintf("GetKeys: error creating df.Row from key record: %v", err)) }
@@ -90,7 +90,6 @@ func (agdf *arrowGroupedDataFrame) Get(keyRow df.Row) df.DataFrame {
 		currentMaskDatum, err := compute.Compare(ctx, colDatum, scalarDatum, compute.Equal)
 
 		if needsKeyScalarRelease { releasableKeyScalar.Release() }
-
 		if err != nil { if combinedMaskDatum != nil { combinedMaskDatum.Release() }; panic(fmt.Sprintf("Get: error comparing column '%s' with key value: %v", groupColName, err)) }
 
 		if combinedMaskDatum == nil {
@@ -105,9 +104,9 @@ func (agdf *arrowGroupedDataFrame) Get(keyRow df.Row) df.DataFrame {
 		}
 	}
 
-	if combinedMaskDatum == nil {
+	if combinedMaskDatum == nil { // Should not happen if groupingColNames is not empty
 		emptyRec := array.NewRecord(agdf.originalSchema.schema, nil, 0); defer emptyRec.Release()
-		return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group_emptykey", emptyRec, agdf.originalSchema, agdf.mem)
+		return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group_emptykey", emptyRec, agdf.originalSchema, adf.mem)
 	}
 
 	groupRecordDatum, err := compute.Filter(ctx, arrow.NewRecordDatum(agdf.originalRecord), combinedMaskDatum, compute.FilterOptions{NullSelectionBehavior: compute.Drop})
@@ -117,9 +116,11 @@ func (agdf *arrowGroupedDataFrame) Get(keyRow df.Row) df.DataFrame {
 
 	groupRecordResult, ok := groupRecordDatum.(*arrow.RecordDatum)
     if !ok || groupRecordResult == nil { panic("Get: Filter did not return a valid RecordDatum") }
-    groupRecord := groupRecordResult.Value().(arrow.Record)
+    groupRecordVal := groupRecordResult.Value()
+	if groupRecordVal == nil { panic("Get: Filter RecordDatum Value is nil") }
+	groupRecord := groupRecordVal.(arrow.Record)
 
-	return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group", groupRecord, agdf.originalSchema, agdf.mem)
+	return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group", groupRecord, agdf.originalSchema, adf.mem)
 }
 
 func (agdf *arrowGroupedDataFrame) ForEach(f func(key df.Row, groupDf df.DataFrame)) {
@@ -127,183 +128,201 @@ func (agdf *arrowGroupedDataFrame) ForEach(f func(key df.Row, groupDf df.DataFra
 	keys := agdf.GetKeys()
 	for _, keyRow := range keys {
 		groupDataFrame := agdf.Get(keyRow)
-		arrowGroupDf, ok := groupDataFrame.(*arrowDataFrame)
-		if !ok && groupDataFrame != nil { panic(fmt.Sprintf("ForEach: agdf.Get() returned unexpected DataFrame type: %T", groupDataFrame)) }
+		// No need to cast to arrowDataFrame for Release, df.Releaser is enough
 		f(keyRow, groupDataFrame)
-		if arrowGroupDf != nil { arrowGroupDf.Release() }
+		if releasable, ok := groupDataFrame.(df.Releaser); ok { releasable.Release() }
 	}
 }
 
 func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFrame {
 	if agdf.originalRecord == nil { panic("Agg called on GroupedDataFrame with nil originalRecord") }
-
-	if len(configs) == 0 {
+	if len(configs) == 0 { // Return distinct keys if no aggregations specified
 		if agdf.uniqueKeysTable.NumRows() == 0 {
-			emptyKeySchema := agdf.uniqueKeysTable.Schema()
-			emptyKeyRecord := array.NewRecord(emptyKeySchema, nil, 0); defer emptyKeyRecord.Release()
-			return NewArrowDataFrameWithAllocator("agg_keys_empty", emptyKeyRecord,
-				NewArrowDataFrameSchema(emptyKeySchema).(*arrowDataFrameSchema), agdf.mem)
-		}
-		tblReader := array.NewTableReader(agdf.uniqueKeysTable, -1); defer tblReader.Release() // Read all chunks
-		var records []arrow.Record
-		for tblReader.Next() {
-			rec := tblReader.Record(); rec.Retain(); records = append(records, rec)
-		}
-		if tblReader.Err() != nil { panic(fmt.Sprintf("Agg: error reading uniqueKeysTable for key-only output: %v", tblReader.Err()))}
-		if len(records) == 0 { // Should be caught by NumRows == 0, but defensive
 			emptyKeySchema := agdf.uniqueKeysTable.Schema()
 			emptyKeyRecord := array.NewRecord(emptyKeySchema, nil, 0); defer emptyKeyRecord.Release()
 			return NewArrowDataFrameWithAllocator("agg_keys_empty", emptyKeyRecord, NewArrowDataFrameSchema(emptyKeySchema).(*arrowDataFrameSchema), agdf.mem)
 		}
-		// For simplicity, if multiple records (chunks) in uniqueKeysTable, concatenate them.
-		// This is not ideal for very large key tables but handles chunking.
+		// Convert Table to Record(s) then to DataFrame
+		// This path might be simplified if uniqueKeysTable can be directly wrapped.
+		// For now, ensure it becomes a single record for NewArrowDataFrameWithAllocator.
+		tblReader := array.NewTableReader(agdf.uniqueKeysTable, -1); defer tblReader.Release()
+		var records []arrow.Record
+		for tblReader.Next() { rec := tblReader.Record(); rec.Retain(); records = append(records, rec) }
+		if tblReader.Err() != nil { panic(fmt.Sprintf("Agg: error reading uniqueKeysTable: %v", tblReader.Err()))}
+		if len(records) == 0 { /* Should be caught by NumRows == 0 */ }
+
 		var keysRecord arrow.Record
-		if len(records) == 1 {
-			keysRecord = records[0] // Already retained
-		} else {
-			var errConcat error
-			keysRecord, errConcat = array.ConcatenateRecords(agdf.uniqueKeysTable.Schema(), records, agdf.mem)
-			if errConcat != nil { panic(fmt.Sprintf("Agg: failed to concatenate key records: %v", errConcat))}
-			// Release individual retained records as ConcatenateRecords makes a new one.
-			for _, r := range records { r.Release() }
-		}
-		// keysRecord is now the one to use, NewArrowDataFrameWithAllocator will retain it.
+		if len(records) == 1 { keysRecord = records[0]
+		} else { var errConcat error; keysRecord, errConcat = array.ConcatenateRecords(agdf.uniqueKeysTable.Schema(), records, agdf.mem); if errConcat != nil { panic(errConcat)}; for _, r := range records { r.Release() } }
 		defer keysRecord.Release()
 		return NewArrowDataFrameWithAllocator("agg_keys", keysRecord, NewArrowDataFrameSchema(agdf.uniqueKeysTable.Schema()).(*arrowDataFrameSchema), agdf.mem)
 	}
 
 	ctx := compute.WithAllocator(context.Background(), agdf.mem)
 	groupKeyRefs := make([]arrow.FieldRef, len(agdf.groupingColNames))
-	for i, name := range agdf.groupingColNames {
-		ref, err := arrow.FieldRefFromPath(name)
-		if err != nil { panic(fmt.Sprintf("Agg: invalid grouping column name '%s': %v", name, err)) }
-		groupKeyRefs[i] = ref
-	}
+	for i, name := range agdf.groupingColNames { ref, err := arrow.FieldRefFromPath(name); if err != nil { panic(err) }; groupKeyRefs[i] = ref }
 
 	computeAggs := make([]compute.Aggregate, len(configs))
 	for i, cfg := range configs {
 		var inputRef *arrow.FieldRef; var aggOpts compute.FunctionOptions = nil
-		if cfg.InputCol != "" {
-			ref, err := arrow.FieldRefFromPath(cfg.InputCol)
-			if err != nil { panic(fmt.Sprintf("Agg: invalid input col '%s' for agg '%s': %v", cfg.InputCol, cfg.Func, err)) }
-			inputRef = &ref
-		} else {
-			if strings.ToLower(cfg.Func) != "count" { /* Might allow other "count_all" like functions */ }
-			aggOpts = &compute.CountOptions{Mode: compute.CountAll}
-		}
+		if cfg.InputCol != "" { ref, err := arrow.FieldRefFromPath(cfg.InputCol); if err != nil { panic(err) }; inputRef = &ref
+		} else if strings.ToLower(cfg.Func) == "count" { aggOpts = &compute.CountOptions{Mode: compute.CountAll} }
 		arrowFuncName := strings.ToLower(cfg.Func); if arrowFuncName == "avg" { arrowFuncName = "mean" }
-		computeAggs[i] = compute.Aggregate{Name: arrowFuncName, Input: inputRef, Output: cfg.OutputColName, DataType: nil, Options: aggOpts }
+		computeAggs[i] = compute.Aggregate{Name: arrowFuncName, Input: inputRef, Output: cfg.OutputColName, Options: aggOpts }
 	}
 
 	inputDatum := arrow.NewRecordDatum(agdf.originalRecord); defer inputDatum.Release()
 	aggResultDatum, err := compute.GroupBy(ctx, inputDatum, groupKeyRefs, computeAggs)
 	if err != nil { panic(fmt.Sprintf("Agg: compute.GroupBy failed: %v", err)) }; defer aggResultDatum.Release()
-	resultRecord, ok := aggResultDatum.(*arrow.RecordDatum).Value().(arrow.Record)
-	if !ok { panic("Agg: compute.GroupBy did not return a RecordDatum as expected") }
+
+	aggResultVal := aggResultDatum.Value()
+	if aggResultVal == nil { panic("Agg: compute.GroupBy result datum value is nil") }
+	resultRecord, ok := aggResultVal.(arrow.Record)
+	if !ok { panic("Agg: compute.GroupBy did not return a Record as expected") }
 
 	resultDfSchema := NewArrowDataFrameSchema(resultRecord.Schema()).(*arrowDataFrameSchema)
-	aggDfName := agdf.originalSchema.Name() + "_agg"; if len(agdf.groupingColNames) > 0 { aggDfName = agdf.originalSchema.Name() + "_gb_" + strings.Join(agdf.groupingColNames, "_") }
-	// NewArrowDataFrameWithAllocator will retain resultRecord
-	return NewArrowDataFrameWithAllocator(aggDfName, resultRecord, resultDfSchema, agdf.mem)
+	return NewArrowDataFrameWithAllocator(agdf.name+"_agg", resultRecord, resultDfSchema, adf.mem)
 }
 
-func (agdf *arrowGroupedDataFrame) Map(f func(df.Row, df.DataFrame) df.DataFrame) df.GroupedDataFrame {
-	// TODO: This is a complex operation. The current interface implies that the function f
-	// transforms each group DataFrame into a new DataFrame, and these are then re-grouped.
-	// This would require careful schema management and potentially creating a new originalRecord
-	// by concatenating the results from f, if schemas are compatible.
-	// A full implementation is deferred. For now, it removes the panic and returns the original.
-	fmt.Println("Warning: arrowGroupedDataFrame.Map is not fully implemented and returns the original GroupedDataFrame.")
-	return agdf
+func (agdf *arrowGroupedDataFrame) Map(f func(key df.Row, groupDf df.DataFrame) df.DataFrame) df.GroupedDataFrame {
+	if f == nil { panic("Map: map function f cannot be nil") }
+	if agdf.uniqueKeysTable == nil || agdf.uniqueKeysTable.NumRows() == 0 { return agdf }
+
+	keys := agdf.GetKeys()
+	if len(keys) == 0 { return agdf }
+
+	mappedGroupDataFrames := make([]df.DataFrame, 0, len(keys))
+	defer func() { for _, mappedDf := range mappedGroupDataFrames { if r, ok := mappedDf.(df.Releaser); ok { r.Release() } } }()
+
+	var firstNonEmptyResultArrowSchema *arrow.Schema = nil
+
+	for _, keyRow := range keys {
+		groupDf := agdf.Get(keyRow) // This is an arrowDataFrame
+		transformedDf := f(keyRow, groupDf)
+		if releasable, ok := groupDf.(df.Releaser); ok { releasable.Release() }
+
+		if transformedDf == nil { panic(fmt.Sprintf("Map: function f returned a nil DataFrame for key %v", keyRow)) }
+
+		arrowTransformedDf, ok := transformedDf.(*arrowDataFrame)
+		if !ok { if r, ok := transformedDf.(df.Releaser); ok { r.Release() }; panic(fmt.Sprintf("Map: function f must return an *arrowDataFrame, got %T for key %v", transformedDf, keyRow)) }
+
+		mappedGroupDataFrames = append(mappedGroupDataFrames, arrowTransformedDf) // Stays in scope, released by defer
+
+		if firstNonEmptyResultArrowSchema == nil && arrowTransformedDf.record != nil && arrowTransformedDf.record.NumCols() > 0 {
+			// Use a copy of the schema, not a pointer to a potentially changing one
+			s := arrowTransformedDf.record.Schema()
+			firstNonEmptyResultArrowSchema = &s
+		}
+	}
+
+	if len(mappedGroupDataFrames) == 0 { // Should not happen if keys is not empty
+		return agdf // Or an empty grouped DF
+	}
+
+	// Determine the schema for concatenation. If all results were empty (0 rows but with schema),
+	// use the schema of the first result. If all results were truly empty (0 cols), schema is empty.
+	var concatSchema *arrow.Schema
+	if firstNonEmptyResultArrowSchema != nil {
+		concatSchema = firstNonEmptyResultArrowSchema
+	} else if mappedGroupDataFrames[0].(*arrowDataFrame).schema != nil && mappedGroupDataFrames[0].(*arrowDataFrame).schema.schema != nil {
+		// All groups might have mapped to DataFrames with 0 rows but a valid schema.
+		concatSchema = mappedGroupDataFrames[0].(*arrowDataFrame).schema.schema
+	} else {
+		// Truly empty results, create an empty schema
+		s := arrow.NewSchema([]arrow.Field{},nil)
+		concatSchema = &s
+	}
+
+
+	recordsToConcat := make([]arrow.Record, 0, len(mappedGroupDataFrames))
+	for i, dfInstance := range mappedGroupDataFrames {
+		adf := dfInstance.(*arrowDataFrame) // Already type-checked
+		if adf.record == nil || adf.record.NumRows() == 0 { continue } // Skip empty records
+
+		if !adf.record.Schema().Equal(*concatSchema) {
+			panic(fmt.Sprintf("Map: schema mismatch for concatenation. Group key (index %d of %d keys) resulted in schema\n%s\nExpected schema (from first non-empty result)\n%s",
+				i, len(keys), adf.record.Schema().String(), concatSchema.String()))
+		}
+		adf.record.Retain(); recordsToConcat = append(recordsToConcat, adf.record)
+	}
+	defer func() { for _, rec := range recordsToConcat { rec.Release() } }()
+
+	var concatenatedRecord arrow.Record
+	if len(recordsToConcat) == 0 {
+		concatenatedRecord = array.NewRecord(concatSchema, nil, 0)
+	} else {
+		var err error
+		concatenatedRecord, err = array.ConcatenateRecords(*concatSchema, recordsToConcat, agdf.mem)
+		if err != nil { panic(fmt.Sprintf("Map: failed to concatenate records: %v", err)) }
+	}
+	defer concatenatedRecord.Release()
+
+	concatenatedDfSchema := NewArrowDataFrameSchema(concatenatedRecord.Schema()).(*arrowDataFrameSchema)
+	concatenatedBaseDf := NewArrowDataFrameWithAllocator(agdf.name+"_map_result", concatenatedRecord, concatenatedDfSchema, agdf.mem)
+	defer concatenatedBaseDf.(df.Releaser).Release()
+
+	// Re-group using original grouping column names.
+	// This assumes the map function `f` preserves these columns with compatible types.
+	for _, groupColName := range agdf.groupingColNames {
+		if concatenatedBaseDf.Schema().GetIndexByName(groupColName) == -1 {
+			panic(fmt.Sprintf("Map: grouping column '%s' is missing from the DataFrame returned by the map function. The map function must preserve grouping columns for re-grouping.", groupColName))
+		}
+	}
+
+	finalGroupedDf := concatenatedBaseDf.GroupBy(agdf.groupingColNames...)
+	return finalGroupedDf
 }
 
 func (agdf *arrowGroupedDataFrame) Where(f func(key df.Row, groupDf df.DataFrame) bool) df.GroupedDataFrame {
-	if f == nil {
-		panic("Where: filter function f cannot be nil")
-	}
-	if agdf.uniqueKeysTable == nil || agdf.uniqueKeysTable.NumRows() == 0 {
-		// No groups to filter, return self or an empty grouped df with same structure
-		return agdf
-	}
+	if f == nil { panic("Where: filter function f cannot be nil") }
+	if agdf.uniqueKeysTable == nil || agdf.uniqueKeysTable.NumRows() == 0 { return agdf }
 
 	ctx := compute.WithAllocator(context.Background(), agdf.mem)
-	keptKeyIndices := make([]int64, 0) // Stores indices of rows in uniqueKeysTable to keep
+	keptKeyIndices := make([]int64, 0)
 
-	// Need a TableReader to iterate through uniqueKeysTable record by record (chunk by chunk)
-	// and then row by row within each record.
-	keyTblReader := array.NewTableReader(agdf.uniqueKeysTable, -1)
-	defer keyTblReader.Release()
-
+	keyTblReader := array.NewTableReader(agdf.uniqueKeysTable, -1); defer keyTblReader.Release()
 	keyRowSchema := NewArrowDataFrameSchema(agdf.uniqueKeysTable.Schema()).(*arrowDataFrameSchema)
-
-	currentKeyIndexOffset := int64(0) // Tracks the base index for rows in uniqueKeysTable across chunks
+	currentKeyIndexOffset := int64(0)
 
 	for keyTblReader.Next() {
-		keyRecord := keyTblReader.Record() // This is a chunk of the uniqueKeysTable
+		keyRecord := keyTblReader.Record()
 		for i := 0; i < int(keyRecord.NumRows()); i++ {
 			keyRow, err := NewArrowRowFromRecord(keyRowSchema, keyRecord, i)
-			if err != nil {
-				panic(fmt.Sprintf("Where: error creating df.Row from key record: %v", err))
-			}
-
-			// Get the actual data group for this keyRow
-			// This Get call is expensive as it filters originalRecord each time.
-			// For performance, a more advanced implementation might directly work with indices.
+			if err != nil { panic(fmt.Sprintf("Where: error creating df.Row from key record: %v", err)) }
 			groupDf := agdf.Get(keyRow)
-
-			if f(keyRow, groupDf) {
-				keptKeyIndices = append(keptKeyIndices, currentKeyIndexOffset + int64(i))
-			}
-
-			// Release the dataframe obtained from Get
-			if releasable, ok := groupDf.(df.Releaser); ok {
-				releasable.Release()
-			}
+			if f(keyRow, groupDf) { keptKeyIndices = append(keptKeyIndices, currentKeyIndexOffset + int64(i)) }
+			if releasable, ok := groupDf.(df.Releaser); ok { releasable.Release() }
 		}
 		currentKeyIndexOffset += keyRecord.NumRows()
 	}
-	if keyTblReader.Err() != nil {
-		panic(fmt.Sprintf("Where: error reading uniqueKeysTable: %v", keyTblReader.Err()))
-	}
-
+	if keyTblReader.Err() != nil { panic(fmt.Sprintf("Where: error reading uniqueKeysTable: %v", keyTblReader.Err())) }
 
 	if len(keptKeyIndices) == 0 {
-		// Return a new empty grouped data frame but with the same structure
-		emptyKeysTable, _ := array.NewTableFromRecords(agdf.uniqueKeysTable.Schema(), []arrow.Record{})
-		defer emptyKeysTable.Release()
-		agdf.originalRecord.Retain() // Retain for the new structure
+		emptyKeysTable, _ := array.NewTableFromRecords(agdf.uniqueKeysTable.Schema(), []arrow.Record{}); defer emptyKeysTable.Release()
+		agdf.originalRecord.Retain()
 		return &arrowGroupedDataFrame{
-			originalRecord:   agdf.originalRecord,
-			originalSchema:   agdf.originalSchema,
-			groupingColNames: agdf.groupingColNames,
-			uniqueKeysTable:  emptyKeysTable, // Empty table with original schema
+			originalRecord:   agdf.originalRecord, originalSchema:   agdf.originalSchema,
+			groupingColNames: agdf.groupingColNames, uniqueKeysTable:  emptyKeysTable,
 			mem:              agdf.mem,
 		}
 	}
 
-	// Create a new uniqueKeysTable based on the kept indices
 	indicesBuilder := array.NewInt64Builder(agdf.mem); defer indicesBuilder.Release()
 	indicesBuilder.AppendValues(keptKeyIndices, nil)
 	indicesArr := indicesBuilder.NewArray(); defer indicesArr.Release()
 
-	// Take from the original uniqueKeysTable. This handles chunking correctly.
 	filteredKeysDatum, err := compute.TakeTable(ctx, agdf.uniqueKeysTable, arrow.NewArrayDatum(indicesArr), compute.TakeOptions{})
-	if err != nil {
-		panic(fmt.Sprintf("Where: failed to Take from uniqueKeysTable: %v", err))
-	}
+	if err != nil { panic(fmt.Sprintf("Where: failed to Take from uniqueKeysTable: %v", err)) }
 	defer filteredKeysDatum.Release()
 
-	newUniqueKeysTable, ok := filteredKeysDatum.Value.(arrow.Table);
+	newUniqueKeysTable, ok := filteredKeysDatum.Value().(arrow.Table);
 	if !ok { panic("Where: TakeTable did not return arrow.Table") }
-	newUniqueKeysTable.Retain() // Keep this table for the new grouped dataframe
+	newUniqueKeysTable.Retain()
 
-	agdf.originalRecord.Retain() // The new grouped DF will also reference the original record.
-
+	agdf.originalRecord.Retain();
 	return &arrowGroupedDataFrame{
-		originalRecord:    agdf.originalRecord, // Retained
-		originalSchema:    agdf.originalSchema,
-		groupingColNames:  agdf.groupingColNames,
-		uniqueKeysTable:   newUniqueKeysTable, // Retained
+		originalRecord:    agdf.originalRecord, originalSchema:    agdf.originalSchema,
+		groupingColNames:  agdf.groupingColNames, uniqueKeysTable:   newUniqueKeysTable,
 		mem:               agdf.mem,
 	}
 }

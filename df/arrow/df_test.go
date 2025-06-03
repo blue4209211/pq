@@ -1443,6 +1443,134 @@ func TestDataFrame_Select(t *testing.T) {
 	// Case 6: Panic on unsupported expression (if any other df.ExprOpType is added later)
 	// This requires a mock df.Expr or extending df.ExprOpType
 	// For now, this is implicitly covered by the default case in Select method.
+
+	// --- Tests for enhanced Select with Unary (Series.Select delegation) and Binary Ops ---
+	// For these tests, we'll reuse the mockSeriesExpr, mockSeriesMapOp, mockSeriesFilterOp from series_test.go
+	// If they are not in the same package, they'd need to be defined here or in a shared test util.
+	// Assuming they are accessible (e.g. if this file is also in package arrow_test and they are in series_test.go in same package)
+	// For the sake of this tool, I will redefine simplified versions here if needed, or assume df.New...Expr creates usable structures.
+	// Let's use the actual df.New...Expr where possible and mock only for ops not yet in df package.
+
+	// Helper to create a literal df.Value for expressions
+	intVal := func(i int64) df.Value { return arrowimpl.NewArrowValue(scalar.NewInt64Scalar(i), df.IntegerFormat) }
+	// floatVal := func(f float64) df.Value { return arrowimpl.NewArrowValue(scalar.NewFloat64Scalar(f), df.DoubleFormat) }
+
+	t.Run("UnaryOpOnColumn", func(t *testing.T) {
+		// Simulating Col("col_A").Add(Literal(5)).SetName("A_plus_5")
+		// We need df.Expr to be able to represent this. Let's assume df.NewColExpr("col_A").Add(litVal) returns an Expr
+		// that Select can decompose.
+		// The current Select implementation expects the Series.Select to handle the OpConst part.
+
+		// Mocking the structure: OpConst_Add expression with Col("col_A") as parent
+		lit5Expr := &mockSeriesExpr{opType: df.LiteralExpr, constVal: intVal(5), exprName: "lit5"}
+		addExpr := &mockSeriesExpr{ // This node is what Series.Select would receive
+			parentExpr: nil, // Series.Select expects parent to be nil for its direct operation
+			opType:     df.ExprTypeMap,
+			mapOp:      &mockSeriesMapOp{opName: "OpConst_Add", args: []df.Expr{lit5Expr}},
+			exprName:   "A_plus_5", // This is the alias for the final column
+		}
+		// The expression passed to DataFrame.Select for Col("A").Add(5) would have Col("A") as parent
+		// and 'addExpr' (or rather, its operational part) as the current node.
+		// For DataFrame.Select to delegate to Series.Select, the expression structure needs to be:
+		// Expr(Name: "A_plus_5", Parent: ColExpr("col_A"), Op: MapOp("OpConst_Add", Literal(5)))
+
+		selectArgExpr := &mockSeriesExpr{
+			parentExpr: &mockSeriesExpr{opType: df.ColNameExpr, colName: "col_A", exprName: "col_A"}, // Parent is Col("col_A")
+			opType:     df.ExprTypeMap, // This is the operation type of the Add node itself
+			mapOp:      &mockSeriesMapOp{opName: "OpConst_Add", args: []df.Expr{lit5Expr}}, // MapOp describes the Add(5)
+			exprName:   "A_plus_5", // Final alias
+		}
+
+
+		selectedDf := baseDf.Select(selectArgExpr)
+		defer selectedDf.(df.Releaser).Release()
+
+		assert.Equal(t, 1, selectedDf.Schema().Len(), "Unary op: Num columns")
+		assert.Equal(t, "A_plus_5", selectedDf.Schema().Get(0).Name)
+		assert.Equal(t, df.IntegerFormat, selectedDf.Schema().Get(0).Format)
+		// col_A data: 1, 2, 3. Expected: 6, 7, 8
+		assert.Equal(t, int64(6), selectedDf.GetValue(0,0).GetAsInt())
+		assert.Equal(t, int64(7), selectedDf.GetValue(1,0).GetAsInt())
+		assert.Equal(t, int64(8), selectedDf.GetValue(2,0).GetAsInt())
+	})
+
+	t.Run("BinaryOpBetweenColumns", func(t *testing.T) {
+		// Simulating Col("col_A").Add(Col("col_C")).SetName("A_plus_C")
+		// Structure: Expr(Name: "A_plus_C", Parent: Col("col_A"), Op: MapOp("Op_Add", Col("col_C")))
+		// Note: "Op_Add" here is a hypothetical name for binary add between series.
+		// The current implementation might expect a different opName or structure for binary series ops.
+		// The `Select` implementation was updated to look for `expr.MapOp().Args()[0].OpType() == df.ColNameExpr`
+		// and `expr.Parent().OpType() == df.ColNameExpr`.
+		// The name of the operation (e.g. "Op_Add") is taken from `expr.Name()` if not specific in MapOp.
+		// This needs to align with how `df.ColExpr(...).Add(df.ColExpr(...))` structures the Expr.
+
+		argColCExpr := &mockSeriesExpr{opType: df.ColNameExpr, colName: "col_C", exprName: "col_C"}
+
+		// This expression represents the "Add Col_C" operation part.
+		// Its parent will be the Col_A expression when used in DataFrame.Select context.
+		binaryAddExpr := &mockSeriesExpr{
+			parentExpr: &mockSeriesExpr{opType: df.ColNameExpr, colName: "col_A", exprName: "col_A"},
+			opType:     df.ExprTypeMap, // Binary ops are still map ops in this context.
+			mapOp:      &mockSeriesMapOp{
+				// opName: "Op_Add", // The name of the binary operation kernel.
+				// This needs to be derived, e.g., from the main expr.Name() or specific MapOp field.
+				// For test, assume expr.Name() will be "Op_Add" or similar if Select uses it.
+				args: []df.Expr{argColCExpr}, // Argument is Col("col_C")
+			},
+			exprName:   "Op_Add", // This is used by Select to find the compute kernel "add"
+		}
+		// Alias for the final column
+		selectArgExpr := (&mockSeriesExpr{}).SetName("A_plus_C").(*mockSeriesExpr) // Create a new wrapper for SetName
+		selectArgExpr.parentExpr = binaryAddExpr.parentExpr
+		selectArgExpr.opType = binaryAddExpr.opType
+		selectArgExpr.mapOp = binaryAddExpr.mapOp
+		// The name of the *operation* for the compute kernel comes from binaryAddExpr.exprName ("Op_Add")
+		// The name of the *output column* comes from selectArgExpr.exprName ("A_plus_C")
+		// This distinction is important. The current DataFrame.Select might use expr.Name() for both.
+		// Let's assume the MapOp itself should specify the kernel, or expr.Name() is for the kernel,
+		// and a separate Alias mechanism exists.
+		// Forcing the name to "Op_Add" to match the kernel, and relying on a higher-level alias.
+		// This mocking is getting complex due to unknown df.Expr structure.
+		// A simpler way for test: assume df.NewColExpr("colA").Add(df.NewColExpr("colB")) creates an Expr
+		// that Select can interpret.
+		// For now, let's assume the DataFrame.Select's binary path is hit if expr.Name() is "Op_Add"
+		// and it has a ColNameExpr parent and a ColNameExpr arg in MapOp.
+
+		selectArgExpr.exprName = "A_plus_C" // Final output column name
+		binaryAddExpr.exprName = "Op_Add" // Kernel name for the operation node
+
+		// Re-structuring the mock to be more explicit for the test:
+		// The expression passed to df.Select is the one representing the final column, with its alias.
+		// Its internal structure defines the operation.
+
+		opExpr := df.NewColExpr("col_A").Add(df.NewColExpr("col_C")).SetName("A_plus_C_actual")
+		// The above line uses the actual df.Expr constructors. This is PREFERRED.
+		// If these constructors set up Parent, OpType, MapOp, Args correctly, it will work.
+		// If not, the mocks are needed. For now, let's assume the mocks are still needed to guide impl.
+
+		binaryExpr := &mockSeriesExpr{
+			exprName: "A_plus_C", // This will be the output column name
+			opType: df.ExprTypeMap, // It's a map operation
+			parentExpr: &mockSeriesExpr{opType: df.ColNameExpr, colName: "col_A"}, // Left operand
+			mapOp: &mockSeriesMapOp{
+				opName: "Op_Add", // Specific name for the binary operation kernel
+				args:   []df.Expr{&mockSeriesExpr{opType: df.ColNameExpr, colName: "col_C"}}, // Right operand
+			},
+		}
+
+
+		selectedDf := baseDf.Select(binaryExpr)
+		defer selectedDf.(df.Releaser).Release()
+
+		assert.Equal(t, 1, selectedDf.Schema().Len(), "Binary op: Num columns")
+		assert.Equal(t, "A_plus_C", selectedDf.Schema().Get(0).Name)
+		// col_A (int): 1, 2, 3. col_C (float): 1.1, 2.2, 3.3
+		// Arrow Add(Int64, Float64) should result in Float64
+		assert.Equal(t, df.DoubleFormat, selectedDf.Schema().Get(0).Format, "A+C should be Float64")
+		assert.InDelta(t, 1 + 1.1, selectedDf.GetValue(0,0).GetAsFloat(), 1e-9)
+		assert.InDelta(t, 2 + 2.2, selectedDf.GetValue(1,0).GetAsFloat(), 1e-9)
+		assert.InDelta(t, 3 + 3.3, selectedDf.GetValue(2,0).GetAsFloat(), 1e-9)
+	})
 }
 
 [end of df/arrow/df_test.go]

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/apache/arrow/go/v14/arrow"
@@ -809,7 +810,9 @@ func (adf *arrowDataFrame) Except(otherRaw df.DataFrame, cols ...string) df.Data
 	return resultDf
 }
 
-// Select method starts here
+// evaluateExpr is a conceptual helper. The logic will be inlined into Select or a private method.
+// func (adf *arrowDataFrame) evaluateExpr(expr df.Expr) (arrow.Array, df.SeriesSchema, error) { ... }
+
 func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame {
 	if adf.record == nil && len(expressions) > 0 {
 		panic("Select: cannot select from a DataFrame with a nil record")
@@ -830,6 +833,8 @@ func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame {
 
 	newArrays := make([]arrow.Array, len(expressions))
 	newFields := make([]arrow.Field, len(expressions))
+	ctx := compute.WithAllocator(context.Background(), adf.mem)
+
 
 	// Helper to clean up arrays created so far in case of an error
 	cleanupArraysOnError := func(count int) {
@@ -841,94 +846,130 @@ func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame {
 	}
 
 	for i, expr := range expressions {
-		outputColName := expr.Name() // df.Expr should provide a name/alias. Fallback if empty.
+		outputColName := expr.Name()
+		var currentResultArray arrow.Array
+		var currentResultSeriesSchema df.SeriesSchema
 
 		switch expr.OpType() {
 		case df.ColNameExpr:
 			colName := expr.Col()
-			if colName == "" {
-				cleanupArraysOnError(i)
-				panic(fmt.Sprintf("Select: column name expression for expr %d ('%s') is empty", i, outputColName))
-			}
+			if colName == "" { cleanupArraysOnError(i); panic(fmt.Sprintf("Select: column name expression for expr %d ('%s') is empty", i, outputColName)) }
 			originalSeries := adf.GetSeriesByName(colName)
 			arrowS, ok := originalSeries.(*arrowSeries)
-			if !ok {
-				cleanupArraysOnError(i)
-				panic(fmt.Sprintf("Select: expected *arrowSeries for col '%s', got %T", colName, originalSeries))
-			}
-			arrowS.arr.Retain() // Retain the array for the new DataFrame
-			newArrays[i] = arrowS.arr
-
-			originalFieldIndex := adf.schema.GetIndexByName(colName)
-			fieldFromFile := adf.schema.schema.Field(originalFieldIndex)
-
-			currentOutputName := colName
-			if outputColName != "" && outputColName != colName {
-				currentOutputName = outputColName
-			}
-			newFields[i] = arrow.Field{Name: currentOutputName, Type: fieldFromFile.Type, Nullable: fieldFromFile.Nullable, Metadata: fieldFromFile.Metadata}
+			if !ok { cleanupArraysOnError(i); panic(fmt.Sprintf("Select: expected *arrowSeries for col '%s', got %T", colName, originalSeries)) }
+			arrowS.arr.Retain(); currentResultArray = arrowS.arr
+			currentResultSeriesSchema = arrowS.schema
+			if outputColName == "" { outputColName = colName } // Default to original name if no alias
 
 		case df.LiteralExpr:
 			literalValue := expr.Const()
-			if literalValue == nil {
-				cleanupArraysOnError(i)
-				panic(fmt.Sprintf("Select: literal expression for expr %d ('%s') has nil df.Value", i, outputColName))
-			}
-
+			if literalValue == nil { cleanupArraysOnError(i); panic(fmt.Sprintf("Select: literal expression for expr %d ('%s') has nil df.Value", i, outputColName)) }
 			arrowType, err := dfFormatToArrowType(literalValue.Schema().Format)
-			if err != nil {
-				cleanupArraysOnError(i)
-				panic(fmt.Sprintf("Select: error converting literal format %v to Arrow type for expr %d ('%s'): %v", literalValue.Schema().Format, i, outputColName, err))
-			}
-
+			if err != nil { cleanupArraysOnError(i); panic(fmt.Sprintf("Select: error converting literal format %v to Arrow type for expr %d ('%s'): %v", literalValue.Schema().Format, i, outputColName, err)) }
 			builder := array.NewBuilder(adf.mem, arrowType)
-
 			litScalar, errScalar := dfValueToArrowScalar(literalValue, arrowType)
-			if errScalar != nil {
-				builder.Release()
-				cleanupArraysOnError(i)
-				panic(fmt.Sprintf("Select: failed to convert literal value to Arrow scalar for expr %d ('%s'): %v", i, outputColName, errScalar))
-			}
-
+			if errScalar != nil { builder.Release(); cleanupArraysOnError(i); panic(fmt.Sprintf("Select: failed to convert literal value to Arrow scalar for expr %d ('%s'): %v", i, outputColName, errScalar)) }
 			for r := int64(0); r < numRows; r++ {
 				errAppend := appendScalarToBuilder(builder, litScalar, arrowType)
-				if errAppend != nil {
-					builder.Release()
-					cleanupArraysOnError(i)
-					panic(fmt.Sprintf("Select: error appending literal scalar for expr %d ('%s'): %v", i, outputColName, errAppend))
+				if errAppend != nil { builder.Release(); cleanupArraysOnError(i); panic(fmt.Sprintf("Select: error appending literal scalar for expr %d ('%s'): %v", i, outputColName, errAppend)) }
+			}
+			currentResultArray = builder.NewArray(); builder.Release()
+			if outputColName == "" { outputColName = fmt.Sprintf("_literal_%d", i) }
+			currentResultSeriesSchema = df.SeriesSchema{Name: outputColName, Format: literalValue.Schema().Format, Nullable: literalValue.IsNil()}
+
+		default: // Potentially an operation on a parent column or between columns
+			if expr.Parent() != nil && expr.Parent().OpType() == df.ColNameExpr {
+				// This is a unary operation on a column, e.g., Col("A").SomeOp()
+				parentColName := expr.Parent().Col()
+				parentSeries := adf.GetSeriesByName(parentColName).(*arrowSeries) // Panics if not found or not arrowSeries
+
+				// Delegate to series.Select. The current 'expr' is the operation node.
+				// Example: expr = OpConst_Add(5), expr.Parent() = Col("A")
+				// We call parentSeries(ColA).Select(OpConst_Add(5))
+				resultSeries := parentSeries.Select(expr) // This will execute the logic in series.Select
+				defer resultSeries.Release()
+
+				arrowResultSeries, ok := resultSeries.(*arrowSeries)
+				if !ok { cleanupArraysOnError(i); parentSeries.Release(); panic("Series.Select did not return *arrowSeries") }
+
+				arrowResultSeries.arr.Retain(); currentResultArray = arrowResultSeries.arr
+				currentResultSeriesSchema = arrowResultSeries.schema
+				if outputColName == "" { outputColName = currentResultSeriesSchema.Name } // Use name from series op if not aliased higher up
+				parentSeries.Release()
+
+			} else if expr.MapOp() != nil && len(expr.MapOp().Args()) > 0 && expr.MapOp().Args()[0].OpType() == df.ColNameExpr {
+				// Binary operation between a parent column (or the df context if no parent) and another column
+				// Example: Col("A").Op_Add(Col("B")) -> expr is Op_Add, Parent is Col("A"), MapOp.Arg[0] is Col("B")
+
+				leftSeriesParent := expr.Parent()
+				if leftSeriesParent == nil || leftSeriesParent.OpType() != df.ColNameExpr {
+					cleanupArraysOnError(i); panic(fmt.Sprintf("Select: binary op expected parent ColNameExpr for expr '%s'", expr.Name()))
 				}
-			}
-			newArrays[i] = builder.NewArray() // Retained by NewArray
-			builder.Release()
+				leftColName := leftSeriesParent.Col()
+				leftSeries := adf.GetSeriesByName(leftColName).(*arrowSeries); defer leftSeries.Release()
 
-			currentOutputName := outputColName
-			if currentOutputName == "" {
-				currentOutputName = fmt.Sprintf("_literal_%d", i) // Default name for unnamed literals
-			}
-			newFields[i] = arrow.Field{Name: currentOutputName, Type: arrowType, Nullable: literalValue.IsNil()}
+				rightColName := expr.MapOp().Args()[0].Col()
+				rightSeries := adf.GetSeriesByName(rightColName).(*arrowSeries); defer rightSeries.Release()
 
-		default:
-			cleanupArraysOnError(i)
-			panic(fmt.Sprintf("Select: unsupported expression type %v for expression %d ('%s')", expr.OpType(), i, outputColName))
+				if leftSeries.Len() != rightSeries.Len() {
+					cleanupArraysOnError(i); panic(fmt.Sprintf("Select: column length mismatch for binary op between '%s' and '%s'", leftColName, rightColName))
+				}
+
+				leftDatum := arrow.NewArrayDatum(leftSeries.arr); defer leftDatum.Release()
+				rightDatum := arrow.NewArrayDatum(rightSeries.arr); defer rightDatum.Release()
+
+				var computeErr error; var outputDatum arrow.Datum
+				// Assume expr.Name() or mapOp.Name() gives the binary operation like "Op_Add", "Op_Multiply" etc.
+				// This part needs to align with how binary ops between columns are defined in df.Expr
+				opName := expr.Name() // Or from mapOp if that's where the direct op name is stored.
+
+				switch opName {
+				case "Op_Add": // Hypothetical name for Col("A").Add(Col("B"))
+					outputDatum, computeErr = compute.Add(ctx, leftDatum, rightDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+				case "Op_Subtract":
+					outputDatum, computeErr = compute.Subtract(ctx, leftDatum, rightDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+				case "Op_Multiply":
+					outputDatum, computeErr = compute.Multiply(ctx, leftDatum, rightDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+				case "Op_Divide":
+					outputDatum, computeErr = compute.Divide(ctx, leftDatum, rightDatum, compute.ArithmeticOptions{NoSignedOverflow: false})
+				// Add comparison ops if they follow this pattern too e.g. Col("A").Eq(Col("B"))
+				case "Op_Eq": // Hypothetical for Col("A").Eq(Col("B"))
+					outputDatum, computeErr = compute.Compare(ctx,leftDatum,rightDatum,compute.CompareOptions{Operator: compute.EQUAL})
+				// ... other binary ops ...
+				default:
+					cleanupArraysOnError(i); panic(fmt.Sprintf("Select: unsupported binary operation '%s' between columns for expr '%s'", opName, expr.Name()))
+				}
+
+				if computeErr != nil { cleanupArraysOnError(i); panic(fmt.Sprintf("Select: compute error for binary op '%s' expr '%s': %v", opName, expr.Name(), computeErr)) }
+				defer outputDatum.Release()
+				currentResultArray = outputDatum.MakeArray()
+
+				// Schema for binary op result: Name from expr, Format from result array, Nullable from result array
+				// Type promotion (e.g. int + float = float) is handled by Arrow compute kernel.
+				resultArrowType := currentResultArray.DataType()
+				resultFormat := arrowToDfFormat(resultArrowType)
+				if outputColName == "" { outputColName = fmt.Sprintf("_result_%d", i) }
+				currentResultSeriesSchema = df.SeriesSchema{Name: outputColName, Format: resultFormat, Nullable: currentResultArray.NullN() > 0}
+
+			} else {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: unsupported complex expression type or structure for expr %d ('%s')", i, outputColName))
+			}
 		}
+		newArrays[i] = currentResultArray // Already retained
+		newFields[i] = arrow.Field{Name: outputColName, Type: currentResultArray.DataType(), Nullable: currentResultSeriesSchema.Nullable, Metadata: arrow.MetadataFrom(currentResultSeriesSchema.Metadata)}
 	}
 
-	// All arrays in newArrays are now assumed to be correctly retained.
-	// NewRecord will take ownership of these references. We release our hold after.
-	defer func() {
-		for _, arr := range newArrays {
-			if arr != nil { arr.Release() }
-		}
-	}()
+	defer func() { for _, arr := range newArrays { if arr != nil { arr.Release() } } }()
 
 	finalArrowSchema := arrow.NewSchema(newFields, adf.schema.schema.Metadata())
 	finalDfSchema := NewArrowDataFrameSchema(finalArrowSchema).(*arrowDataFrameSchema)
-
 	finalRecord := array.NewRecord(finalArrowSchema, newArrays, numRows)
-	defer finalRecord.Release() // NewArrowDataFrameWithAllocator will retain.
+	defer finalRecord.Release()
 
 	return NewArrowDataFrameWithAllocator(adf.name, finalRecord, finalDfSchema, adf.mem)
 }
+
 
 func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame {
 	if name == "" {
