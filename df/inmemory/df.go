@@ -202,8 +202,104 @@ func (t *inmemoryDataFrame) RenameSeriesByName(col string, name string, inplace 
 	return t.RenameSeries(index, name, inplace)
 }
 
-func (t *inmemoryDataFrame) Select(index ...df.Expr) (d df.DataFrame) {
-	return d
+func (t *inmemoryDataFrame) Select(expressions ...df.Expr) df.DataFrame {
+	if len(expressions) == 0 {
+		// Return a new DataFrame with the same number of rows but no columns
+		emptySchema := NewInMemorySchema(t.name, []df.SeriesSchema{})
+		emptyRows := make([]df.Row, t.Len())
+		for i := range emptyRows {
+			emptyRows[i] = NewInMemoryRow(emptySchema, []df.Value{})
+		}
+		return NewDataframeFromRowAndName(t.name+"_select_empty", emptySchema, &emptyRows)
+	}
+
+	var newSchemaSeries []df.SeriesSchema
+	newRowsData := make([]df.Row, 0, t.Len())
+	var finalSchema df.DataFrameSchema
+
+	for i, inputRow := range t.data {
+		outputValues := make([]df.Value, 0, len(expressions))
+		for _, expr := range expressions {
+			var val df.Value
+			outputName := expr.Name() // Use expr.Name() for the output column name
+
+			switch e := expr.(type) {
+			case df.ColNameExpr:
+				colName := e.Col()
+				val = inputRow.GetByName(colName)
+				if i == 0 { // First row, determine schema
+					// Ensure outputName is used for the schema
+					if outputName == "" { // Should ideally be set by Alias or Col itself
+						outputName = colName
+					}
+					newSchemaSeries = append(newSchemaSeries, df.SeriesSchema{Name: outputName, Format: val.Schema()})
+				}
+			case df.LiteralExpr:
+				val = e.Const()
+				if i == 0 { // First row, determine schema
+					if outputName == "" { // Literals might not have a pre-defined name unless aliased
+						// Create a generic name or use a convention like "literal_N"
+						// For now, let's try to use the string representation of the literal,
+ Daunting if it's long.
+						// A better approach would be to require aliases for literals if a specific name is needed.
+						// For simplicity, if no alias, could panic or use a default.
+						// Let's assume expr.Name() handles aliasing correctly for literals too.
+						// If expr.Name() is empty for a literal, it implies it wasn't aliased.
+						// The problem statement implies expr.Name() should be used.
+						if outputName == "" {
+							panic(fmt.Sprintf("literal expression %v must have an alias via Name()", e.Const().GetAsString()))
+						}
+					}
+					newSchemaSeries = append(newSchemaSeries, df.SeriesSchema{Name: outputName, Format: val.Schema()})
+				}
+			default:
+				// Placeholder for more complex expressions
+				panic(fmt.Sprintf("unsupported expression type: %T", expr))
+			}
+			outputValues = append(outputValues, val)
+		}
+
+		if i == 0 {
+			finalSchema = NewInMemorySchema(t.name+"_select", newSchemaSeries)
+		}
+		newRowsData = append(newRowsData, NewInMemoryRow(finalSchema, outputValues))
+	}
+
+	// Handle case where t.data is empty, newSchemaSeries would be empty too
+	if len(t.data) == 0 {
+		// Construct schema based on expressions, assuming types can be inferred
+		// without data. This is tricky for ColNameExpr without data.
+		// For now, if there's no data, the schema might be incomplete or incorrect for ColNameExpr.
+		// LiteralExprs can still define their part of the schema.
+		if finalSchema == nil { // if t.data was empty
+			newSchemaSeries = make([]df.SeriesSchema, 0, len(expressions))
+			for _, expr := range expressions {
+				outputName := expr.Name()
+				switch e := expr.(type) {
+				case df.ColNameExpr:
+					// Cannot determine format without data or schema introspection of original df
+					// This part needs refinement: how to get schema for a col if no data?
+					// Fallback: try to get from original schema if possible
+					originalSeriesSchema, found := t.schema.GetByName(e.Col())
+					if !found {
+						panic(fmt.Sprintf("cannot determine schema for column %s with no data and not in original schema", e.Col()))
+					}
+					if outputName == "" { outputName = e.Col() }
+					newSchemaSeries = append(newSchemaSeries, df.SeriesSchema{Name: outputName, Format: originalSeriesSchema.Format})
+				case df.LiteralExpr:
+					litVal := e.Const()
+					if outputName == "" { panic(fmt.Sprintf("literal expression %v must have an alias", e.Const().GetAsString()))}
+					newSchemaSeries = append(newSchemaSeries, df.SeriesSchema{Name: outputName, Format: litVal.Schema()})
+				default:
+					panic(fmt.Sprintf("unsupported expression type for schema generation with no data: %T", expr))
+				}
+			}
+			finalSchema = NewInMemorySchema(t.name+"_select", newSchemaSeries)
+		}
+	}
+
+
+	return NewDataframeFromRowAndName(t.name+"_select", finalSchema, &newRowsData)
 }
 
 func (t *inmemoryDataFrame) SelectBySeriesIndex(index ...int) (d df.DataFrame) {
@@ -440,7 +536,7 @@ func (t *inmemoryDataFrame) Append(d df.DataFrame) df.DataFrame {
 	return NewDataframeFromRow(t.schema, &s1)
 }
 
-func (t *inmemoryDataFrame) Group(others ...string) df.GroupedDataFrame {
+func (t *inmemoryDataFrame) GroupBy(others ...string) df.GroupedDataFrame {
 	return NewGroupedDf(t, others...)
 }
 
