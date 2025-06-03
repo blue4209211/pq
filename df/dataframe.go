@@ -104,6 +104,14 @@ type GroupedDataFrame interface {
 	Map(f func(Row, DataFrame) DataFrame) GroupedDataFrame
 	Where(f func(Row, DataFrame) bool) GroupedDataFrame
 	Len() int64
+	Agg(configs ...AggregationConfig) DataFrame
+}
+
+// AggregationConfig defines an aggregation function, input column, and output column name.
+type AggregationConfig struct {
+	Func          string
+	InputCol      string
+	OutputColName string
 }
 
 // Series Type for Storing column data of Dataframe

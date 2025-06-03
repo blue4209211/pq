@@ -1,3 +1,4 @@
+//go:build inmemory
 package inmemory
 
 import (
@@ -99,8 +100,8 @@ func TestInMemoryDf(t *testing.T) {
 	assert.Equal(t, "renamed", data.Name())
 	assert.Equal(t, "renamed", renamedData.Name())
 
-	// Group
-	grouped := data.Group("c1")
+	// GroupBy
+	grouped := data.GroupBy("c1")
 	assert.Equal(t, int64(4), grouped.Len())
 
 	// Append

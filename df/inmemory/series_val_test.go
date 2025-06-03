@@ -1,3 +1,4 @@
+//go:build inmemory
 package inmemory
 
 import (
@@ -42,8 +43,9 @@ func TestNewDataFrameVal(t *testing.T) {
 	assert.Equal(t, df.StringFormat, val.Schema())
 	assert.Equal(t, true, val.IsNil())
 	assert.Equal(t, nil, val.Get())
-	//TODO assert panic
-	//assert.Equal(t, "", val.GetAsString())
+	assert.PanicsWithValue(t, "GetAsString() called on a nil value", func() {
+		val.GetAsString()
+	}, "Calling GetAsString() on a nil string value should panic with the specified message.")
 }
 
 func TestNewDataFrameValEqual(t *testing.T) {
