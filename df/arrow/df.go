@@ -483,8 +483,12 @@ func (adf *arrowDataFrame) Join(outputSchemaGiven df.DataFrameSchema, otherRaw d
 	outputArrowDFSchema, ok := outputSchemaGiven.(*arrowDataFrameSchema); if !ok { panic(fmt.Sprintf("Join: outputSchemaGiven must be *arrowDataFrameSchema, got %T", outputSchemaGiven)) }
 	if outputArrowDFSchema.schema == nil { panic("Join: outputSchemaGiven's internal arrow.Schema is nil") }
 
-	isSemiOrAntiJoin := (jointype == JoinLeftAnti || jointype == df.JoinRightAnti || jointype == df.JoinLeftSemi || jointype == df.JoinRightSemi)
+	// Ensure all semi/anti join types are correctly identified for fUser check and logic path.
+	// df.JoinLeftAnti was previously `JoinLeftAnti` (local const) or `df.JoinType("leftanti")`. Assuming it's now a proper df.JoinType const.
+	isSemiOrAntiJoin := (jointype == df.JoinLeftAnti || jointype == df.JoinRightAnti || jointype == df.JoinLeftSemi || jointype == df.JoinRightSemi)
 	if fUser == nil && !isSemiOrAntiJoin {
+		// fUser is not allowed for Inner, Left, Right, FullOuter, Cross if it's nil.
+		// It IS allowed to be nil for Semi/Anti joins.
 		panic("Join: user function fUser cannot be nil for this join type")
 	}
 
@@ -610,8 +614,18 @@ func (adf *arrowDataFrame) Join(outputSchemaGiven df.DataFrameSchema, otherRaw d
 	case df.JoinLeft: hjComputeJoinType = compute.LeftOuterJoin
 	case df.JoinRight: hjComputeJoinType = compute.RightOuterJoin
 	case df.JoinOuter: hjComputeJoinType = compute.FullOuterJoin
-	case df.JoinType("leftanti"): hjComputeJoinType = compute.LeftAntiJoin // Assuming string comparison for custom types
-	default: panic(fmt.Sprintf("Join: unsupported join type %s for HashJoin path", jointype))
+	// Assuming df.JoinLeftAnti, etc., are defined constants of type df.JoinType
+	case df.JoinLeftAnti: hjComputeJoinType = compute.LeftAntiJoin
+	case df.JoinLeftSemi: hjComputeJoinType = compute.LeftSemiJoin
+	case df.JoinRightSemi: hjComputeJoinType = compute.RightSemiJoin
+	case df.JoinRightAnti: hjComputeJoinType = compute.RightAntiJoin
+	default:
+		// If fUser is nil here, it means it was a semi/anti join not caught above, which is an issue.
+		// Or, it's a non-semi/anti join type that's not supported by HashJoin path.
+		if fUser == nil && isSemiOrAntiJoin { // Should have been caught by the switch
+			panic(fmt.Sprintf("Join: internal error - semi/anti join type %s not mapped for HashJoin", jointype))
+		}
+		panic(fmt.Sprintf("Join: unsupported join type %s for HashJoin path", jointype))
 	}
 
 	hjIndicesTable, err := compute.HashJoin(ctx, leftKeyDatums, rightKeyDatums,
@@ -621,22 +635,67 @@ func (adf *arrowDataFrame) Join(outputSchemaGiven df.DataFrameSchema, otherRaw d
 	defer hjIndicesTable.Release()
 
 	if isSemiOrAntiJoin {
-		if hjIndicesTable.NumCols() != 1 { panic(fmt.Sprintf("Join: %s HashJoin result expected 1 col indices, got %d", jointype, hjIndicesTable.NumCols())) }
-		hjTr, errTr := array.NewTableReader(hjIndicesTable, -1); if errTr != nil { panic(errTr) }; defer hjTr.Release()
-		var finalRecord arrow.Record
-		if hjTr.Next() {
-			indicesRecord := hjTr.Record()
-			leftIndicesArr := indicesRecord.Column(0)
-			takenDatum, errTake := compute.Take(ctx, compute.TakeOptions{}, arrow.NewRecordDatum(adf.record), arrow.NewArrayDatum(leftIndicesArr))
-			if errTake != nil { panic(fmt.Sprintf("Join: %s Take failed: %v", jointype, errTake)) }; defer takenDatum.Release()
-			resultRecord, okRec := takenDatum.(*arrow.RecordDatum).Value().(arrow.Record); if !okRec { panic(fmt.Sprintf("Join: %s Take bad return", jointype)) }
-			finalRecord = resultRecord
+		if hjIndicesTable.NumCols() != 1 { panic(fmt.Sprintf("Join: %s HashJoin result expected 1 col (indices), got %d", jointype, hjIndicesTable.NumCols())) }
+
+		var sourceRecordForTake arrow.Record
+		var sourceSchemaForOutput *arrowDataFrameSchema
+
+		// Determine which table's rows to output based on the join type
+		if jointype == df.JoinLeftSemi || jointype == df.JoinLeftAnti {
+			sourceRecordForTake = adf.record
+			sourceSchemaForOutput = adf.schema
+		} else if jointype == df.JoinRightSemi || jointype == df.JoinRightAnti {
+			sourceRecordForTake = otherArrowDf.record
+			sourceSchemaForOutput = otherArrowDf.schema
 		} else {
-		    if hjTr.Err() != nil { panic(fmt.Sprintf("Join: error reading %s HashJoin indices: %v", jointype, hjTr.Err())) }
-			finalRecord = array.NewRecord(adf.schema.schema, nil, 0)
+			panic(fmt.Sprintf("Join: internal error - unhandled semi/anti join type %s in output determination logic", jointype))
 		}
-		defer finalRecord.Release() // NewArrowDataFrameWithAllocator will retain it
-		return NewArrowDataFrameWithAllocator(adf.name, finalRecord, adf.schema, adf.mem)
+
+		// If the designated source table for the semi/anti join is nil or empty, the result is also empty,
+		// but with the schema of that source table.
+		if sourceRecordForTake == nil || sourceRecordForTake.NumRows() == 0 {
+			emptyFinalRecord := array.NewRecord(sourceSchemaForOutput.schema, nil, 0)
+			// No defer release for emptyFinalRecord if it's immediately returned and not retained elsewhere.
+			// NewArrowDataFrameWithAllocator will handle it.
+			return NewArrowDataFrameWithAllocator(adf.name, emptyFinalRecord, sourceSchemaForOutput, adf.mem)
+		}
+
+		hjTr, errTr := array.NewTableReader(hjIndicesTable, -1);
+		if errTr != nil { panic(fmt.Sprintf("Join: Failed to create TableReader for HashJoin result for %s: %v", jointype, errTr)) }
+		defer hjTr.Release()
+
+		var finalRecord arrow.Record
+
+		if hjTr.Next() { // Check if there's at least one batch of indices
+			indicesRecord := hjTr.Record() // This record contains a single column of indices.
+			indicesArr := indicesRecord.Column(0)
+
+			if indicesArr.Len() > 0 {
+				takenDatum, errTake := compute.Take(ctx, compute.TakeOptions{},
+					arrow.NewRecordDatum(sourceRecordForTake),
+					arrow.NewArrayDatum(indicesArr))
+				if errTake != nil { panic(fmt.Sprintf("Join: %s Take failed: %v", jointype, errTake)) }
+
+				resultValue := takenDatum.Value()
+				if resultValue == nil { takenDatum.Release(); panic(fmt.Sprintf("Join: %s Take result datum value is nil", jointype)) }
+				recResult, okRec := resultValue.(arrow.Record)
+				if !okRec { takenDatum.Release(); panic(fmt.Sprintf("Join: %s Take did not return arrow.Record, got %T", jointype, resultValue)) }
+				// recResult is effectively owned by takenDatum. We need our own ref if takenDatum is released.
+				recResult.Retain()
+				takenDatum.Release()
+				finalRecord = recResult // Now we own this reference
+			} else {
+				// No indices found by HashJoin (e.g., no matches), result is empty.
+				finalRecord = array.NewRecord(sourceSchemaForOutput.schema, nil, 0)
+			}
+		} else { // No records in hjIndicesTable
+		    if hjTr.Err() != nil { panic(fmt.Sprintf("Join: error reading %s HashJoin indices: %v", jointype, hjTr.Err())) }
+			finalRecord = array.NewRecord(sourceSchemaForOutput.schema, nil, 0)
+		}
+		// finalRecord is now either a record with data (retained) or an empty record (newly created).
+		// NewArrowDataFrameWithAllocator will retain it again. So, we must release our hold here.
+		defer finalRecord.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, finalRecord, sourceSchemaForOutput, adf.mem)
 	}
 
 	// Path for INNER, LEFT, RIGHT, FULL OUTER (uses fUser)

@@ -923,7 +923,94 @@ func (as *arrowSeries) Select(e df.Expr) df.Series {
 
 // Group and Join are more complex and often belong to DataFrame or a specific GroupedSeries type.
 // func (as *arrowSeries) Group() df.GroupedSeries { panic("not implemented") }
-// func (as *arrowSeries) Join(schema df.Format, series df.Series, jointype df.JoinType, f func(df.Value, df.Value) []df.Value) df.Series { panic("not implemented") }
+
+func (as *arrowSeries) Join(outputFormat df.Format, otherRaw df.Series, jointype df.JoinType, f func(v1 df.Value, v2 df.Value) []df.Value) df.Series {
+	if f == nil {
+		panic("Join: function f cannot be nil")
+	}
+	if outputFormat == nil || outputFormat == df.UnknownFormat {
+		panic("Join: outputFormat cannot be nil or UnknownFormat")
+	}
+	if otherRaw == nil {
+		panic("Join: otherRaw series cannot be nil")
+	}
+	otherSeries, ok := otherRaw.(*arrowSeries)
+	if !ok {
+		panic(fmt.Sprintf("Join: expected *arrowSeries for otherRaw, got %T", otherRaw))
+	}
+	if otherSeries.arr == nil {
+		panic("Join: otherRaw series has a nil internal array")
+	}
+	if as.arr == nil { // Current series being nil is also problematic
+		panic("Join: called on an arrowSeries with a nil internal array")
+	}
+
+
+	outputArrowType, err := dfFormatToArrowType(outputFormat)
+	if err != nil {
+		panic(fmt.Sprintf("Join: error converting outputFormat %v to Arrow type: %v", outputFormat, err))
+	}
+	b := array.NewBuilder(as.mem, outputArrowType)
+	defer b.Release()
+
+	switch jointype {
+	case df.JoinCross:
+		if as.Len() == 0 || otherSeries.Len() == 0 {
+			// Return empty series of the output type
+			emptyArr := b.NewArray(); //defer emptyArr.Release() // NewArrowSeriesWithAllocator will manage
+			return NewArrowSeriesWithAllocator(emptyArr, df.SeriesSchema{Name: as.schema.Name, Format: outputFormat, Nullable: true}, as.mem)
+		}
+		for i := 0; i < as.Len(); i++ {
+			val1 := as.Get(i)
+			for j := 0; j < otherSeries.Len(); j++ {
+				val2 := otherSeries.Get(j)
+				results := f(val1, val2)
+				for _, resVal := range results {
+					scalarToAppend, errConv := dfValueToArrowScalar(resVal, outputArrowType)
+					if errConv != nil {
+						panic(fmt.Sprintf("Join (Cross): error converting result value from f() to Arrow scalar for output type %s: %v. Value: %v", outputArrowType.Name(), errConv, resVal))
+					}
+					errAppend := appendScalarToBuilder(b, scalarToAppend, outputArrowType)
+					if errAppend != nil {
+						panic(fmt.Sprintf("Join (Cross): error appending scalar to builder for output type %s: %v. Scalar: %v", outputArrowType.Name(), errAppend, scalarToAppend))
+					}
+				}
+			}
+		}
+	case df.JoinEqui: // Element-wise join
+		if as.Len() != otherSeries.Len() {
+			panic(fmt.Sprintf("Join (Equi): series lengths must be equal. Self: %d, Other: %d", as.Len(), otherSeries.Len()))
+		}
+		if as.Len() == 0 {
+			emptyArr := b.NewArray(); //defer emptyArr.Release()
+			return NewArrowSeriesWithAllocator(emptyArr, df.SeriesSchema{Name: as.schema.Name, Format: outputFormat, Nullable: true}, as.mem)
+		}
+		for i := 0; i < as.Len(); i++ {
+			val1 := as.Get(i)
+			val2 := otherSeries.Get(i)
+			results := f(val1, val2)
+			for _, resVal := range results {
+				scalarToAppend, errConv := dfValueToArrowScalar(resVal, outputArrowType)
+				if errConv != nil {
+					panic(fmt.Sprintf("Join (Equi): error converting result value from f() to Arrow scalar for output type %s: %v. Value: %v", outputArrowType.Name(), errConv, resVal))
+				}
+				errAppend := appendScalarToBuilder(b, scalarToAppend, outputArrowType)
+				if errAppend != nil {
+					panic(fmt.Sprintf("Join (Equi): error appending scalar to builder for output type %s: %v. Scalar: %v", outputArrowType.Name(), errAppend, scalarToAppend))
+				}
+			}
+		}
+	default:
+		panic(fmt.Sprintf("JoinType '%s' not supported for arrowSeries.Join", jointype))
+	}
+
+	newArr := b.NewArray()
+	// newArr is already retained by NewArray.
+	// NewArrowSeriesWithAllocator will retain it again, and manage its release when the series is released.
+	// So, we don't defer newArr.Release() here.
+	return NewArrowSeriesWithAllocator(newArr, df.SeriesSchema{Name: as.schema.Name, Format: outputFormat, Nullable: newArr.NullN() > 0, Metadata: as.schema.Metadata}, as.mem)
+}
+
 
 var _ df.Series = (*arrowSeries)(nil)
 

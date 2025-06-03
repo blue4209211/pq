@@ -46,15 +46,9 @@ func TestMedian(t *testing.T) {
 	assert.Equal(t, float64(3), Median(s1).GetAsDouble())
 }
 
-func TestDescribe(t *testing.T) {
-}
-
 func TestCountDistinctValues(t *testing.T) {
 	s1 := inmemory.NewIntSeriesVarArg(1, 2, 3, 4, 1, 1)
 	s2 := CountDistinctValues(s1)
 	assert.Equal(t, 4, len(s2))
 	assert.Equal(t, int64(3), s2["1"])
-}
-
-func TestCovariance(t *testing.T) {
 }
