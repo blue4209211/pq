@@ -17,13 +17,6 @@ import (
 	"github.com/blue4209211/pq/df"
 )
 
-// AggregationConfig defines how a single aggregation should be performed.
-type AggregationConfig struct {
-	Func          string // e.g., "sum", "mean", "count", "min", "max"
-	InputCol      string // Column to aggregate. Empty for count_all behavior.
-	OutputColName string // Name of the resulting aggregated column.
-}
-
 type arrowGroupedDataFrame struct {
 	originalRecord    arrow.Record // This is the full record from which groups are derived.
 	originalSchema    *arrowDataFrameSchema
@@ -134,7 +127,7 @@ func (agdf *arrowGroupedDataFrame) ForEach(f func(key df.Row, groupDf df.DataFra
 	}
 }
 
-func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFrame {
+func (agdf *arrowGroupedDataFrame) Agg(configs ...df.AggregationConfig) df.DataFrame {
 	if agdf.originalRecord == nil { panic("Agg called on GroupedDataFrame with nil originalRecord") }
 	if len(configs) == 0 { // Return distinct keys if no aggregations specified
 		if agdf.uniqueKeysTable.NumRows() == 0 {
