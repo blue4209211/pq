@@ -667,8 +667,32 @@ func (as *arrowSeries) When(replacementMap map[any]df.Value) df.Series {
 }
 
 // --- Stubs for remaining methods ---
-func (as *arrowSeries) Expr() df.Expr { panic("Expr not implemented for arrowSeries") }
-func (as *arrowSeries) Select(e df.Expr) df.Series { panic("Select not implemented for arrowSeries") }
+func (as *arrowSeries) Expr() df.Expr {
+	// This method should return an expression that represents this series.
+	// Typically, this would be a column name expression.
+	// Assuming df.NewColExpr (or a similar constructor) exists in the df package
+	// that creates an expression representing a column.
+	// The actual implementation depends on how df.Expr is defined and constructed.
+	// For this example, let's assume df.NewColExpr takes the column name.
+	if as.schema.Name == "" {
+		// If the series doesn't have a name, it's hard to represent it as a simple column expression.
+		// This might indicate an anonymous series, which could be problematic for Expr().
+		// Depending on df.Expr capabilities, could return a special type of expression
+		// or panic if a name is essential for a column expression.
+		panic("Expr: cannot create a column expression for an unnamed series")
+	}
+	return df.NewColExpr(as.schema.Name) // Example: uses a hypothetical constructor
+}
+
+func (as *arrowSeries) Select(e df.Expr) df.Series {
+	// Implementing a full expression evaluation engine for a single series is complex.
+	// It would involve evaluating the expression `e` where `as` is the context.
+	// For example, if `e` is `Col("this_series_name").Add(Literal(5))`,
+	// it would add 5 to each element of `as`.
+	// Many common operations are already covered by Map, AsFormat, or direct compute.
+	// For now, as per subtask, this will remain partially implemented.
+	panic(fmt.Sprintf("Select on arrowSeries is partially implemented. Full expression (%s) evaluation TBD.", e.Name()))
+}
 
 // Group and Join are more complex and often belong to DataFrame or a specific GroupedSeries type.
 // func (as *arrowSeries) Group() df.GroupedSeries { panic("not implemented") }

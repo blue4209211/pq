@@ -17,18 +17,12 @@ import (
 	"git.querycap.com/practice/df" // MODIFIED import path
 )
 
-// const JoinLeftAnti df.JoinType = "leftanti" // Assuming df package might provide this or it's handled via string.
-// For now, if Join uses string types for joinType, this might not be needed here.
-// If df.JoinType is an enum, this const would only be valid if "leftanti" is part of that enum.
-// Let's assume for now the df package handles the join types adequately.
 type arrowDataFrame struct {
 	name   string
 	schema *arrowDataFrameSchema
 	record arrow.Record
 	mem    memory.Allocator
 }
-
-// REMOVED local dfValueToArrowScalar - will use the one from types.go
 
 func NewArrowDataFrame(name string, record arrow.Record, dfSchema *arrowDataFrameSchema) df.DataFrame {
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, memory.DefaultAllocator)
@@ -70,93 +64,42 @@ func NewArrowDataFrameFromArraysWithAllocator(name string, cols []arrow.Array, s
 		}
 	} else {numRows = 0}
 	record := array.NewRecord(schema, cols, numRows);
-	for _, col := range cols { col.Release() }
+	for _, col := range cols { col.Release() } // NewRecord created its own references or copied data.
 	dfSchema := NewArrowDataFrameSchema(schema).(*arrowDataFrameSchema)
-	defer record.Release()
+	defer record.Release() // Release the record created here after NewArrowDataFrameWithAllocator is done.
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, mem), nil
 }
-
-// NewArrowDataFrameFromSeries creates a DataFrame from a slice of df.Series.
-// All series must be *arrowSeries and have the same length.
-// The names for the new DataFrame's columns will be taken from the Series' schemas.
-// If series array is empty, a DataFrame with 0 columns and 0 rows is created.
 func NewArrowDataFrameFromSeries(name string, series []df.Series, mem memory.Allocator) (df.DataFrame, error) {
-	if mem == nil {
-		mem = memory.DefaultAllocator
-	}
-
+	if mem == nil { mem = memory.DefaultAllocator }
 	if len(series) == 0 {
 		emptyArrowSchema := arrow.NewSchema([]arrow.Field{}, nil)
-		// NewArrowDataFrameSchema returns df.DataFrameSchema, cast to *arrowDataFrameSchema
 		emptyDfSchema := NewArrowDataFrameSchema(emptyArrowSchema).(*arrowDataFrameSchema)
-		// Create an empty record. NewRecord doesn't retain, but it's fine as it's empty.
 		emptyRecord := array.NewRecord(emptyArrowSchema, nil, 0)
-		// NewArrowDataFrameWithAllocator will handle its lifecycle.
 		return NewArrowDataFrameWithAllocator(name, emptyRecord, emptyDfSchema, mem), nil
 	}
-
 	arrowArrays := make([]arrow.Array, len(series))
 	arrowFields := make([]arrow.Field, len(series))
-	var numRows int = -1 // Changed to int to match series.Len()
-
+	var numRows int = -1
 	for i, s := range series {
-		as, ok := s.(*arrowSeries)
-		if !ok {
-			// Release any arrays already retained if we error out
-			for j := 0; j < i; j++ {
-				arrowArrays[j].Release()
-			}
-			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: all series must be *arrowSeries, found %T at index %d", s, i)
-		}
-		if numRows == -1 {
-			numRows = as.Len() // series.Len() returns int
-		} else if as.Len() != numRows {
-			for j := 0; j < i; j++ {
-				arrowArrays[j].Release()
-			}
-			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: all series must have the same length (expected %d, got %d for series '%s')", numRows, as.Len(), as.Schema().Name)
-		}
-
-		as.arr.Retain() // Retain each array as the record will effectively take ownership via NewRecord
-		arrowArrays[i] = as.arr
-
-		// Create arrow.Field from df.SeriesSchema
-		sSchema := as.Schema()
-		arrowDataType, err := dfFormatToArrowType(sSchema.Format)
-		if err != nil {
-			for j := 0; j <= i; j++ { // Release all retained arrays up to this point
-				arrowArrays[j].Release()
-			}
-			return nil, fmt.Errorf("NewArrowDataFrameFromSeries: error converting format for series %s: %w", sSchema.Name, err)
-		}
-		arrowFields[i] = arrow.Field{
-			Name:     sSchema.Name,
-			Type:     arrowDataType, // Use converted type
-			Nullable: sSchema.Nullable,
-			Metadata: arrow.MetadataFrom(sSchema.Metadata),
-		}
+		as, ok := s.(*arrowSeries);
+		if !ok { for j := 0; j < i; j++ { arrowArrays[j].Release() }; return nil, fmt.Errorf("NewArrowDataFrameFromSeries: all series must be *arrowSeries, found %T at index %d", s, i) }
+		if numRows == -1 { numRows = as.Len() } else if as.Len() != numRows { for j := 0; j < i; j++ { arrowArrays[j].Release() }; return nil, fmt.Errorf("NewArrowDataFrameFromSeries: series length mismatch") }
+		as.arr.Retain(); arrowArrays[i] = as.arr
+		sSchema := as.Schema(); arrowDataType, err := dfFormatToArrowType(sSchema.Format)
+		if err != nil { for j := 0; j <=i; j++ { arrowArrays[j].Release()}; return nil, fmt.Errorf("NewArrowDataFrameFromSeries: %w", err)}
+		arrowFields[i] = arrow.Field{Name: sSchema.Name, Type: arrowDataType, Nullable: sSchema.Nullable, Metadata: arrow.MetadataFrom(sSchema.Metadata)}
 	}
-
-	arrowSchema := arrow.NewSchema(arrowFields, nil) // TODO: DataFrame level metadata?
-
-	// array.NewRecord does not retain the input arrays again, it assumes ownership of the references passed.
-	// Since we retained them from the series, this is correct.
+	arrowSchema := arrow.NewSchema(arrowFields, nil)
 	record := array.NewRecord(arrowSchema, arrowArrays, int64(numRows))
-	// After NewRecord, the record owns these array references. We can release our temporary holds.
-	for _, arr := range arrowArrays {
-		arr.Release()
-	}
-
+	for _, arr := range arrowArrays { arr.Release() } // Record has them now
 	dfSchema := NewArrowDataFrameSchema(record.Schema()).(*arrowDataFrameSchema)
-	// NewArrowDataFrameWithAllocator will retain the record.
-	// We must release the record created here after NewArrowDataFrameWithAllocator is done with it.
 	defer record.Release()
 	return NewArrowDataFrameWithAllocator(name, record, dfSchema, mem), nil
 }
 
 func (adf *arrowDataFrame) Schema() df.DataFrameSchema { return adf.schema }
 func (adf *arrowDataFrame) Name() string { return adf.name }
-func (adf *arrowDataFrame) Len() int { if adf.record == nil { return 0 }; return int(adf.record.NumRows()) } // MODIFIED to return int
+func (adf *arrowDataFrame) Len() int { if adf.record == nil { return 0 }; return int(adf.record.NumRows()) }
 func (adf *arrowDataFrame) Release() { if adf.record != nil { adf.record.Release(); adf.record = nil } }
 func (adf *arrowDataFrame) GetSeries(index int) df.Series {
 	if adf.record == nil || index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("series index %d out of bounds", index)) }
@@ -340,7 +283,7 @@ func (adf *arrowDataFrame) MapRow(outputSchemaGiven df.DataFrameSchema, f func(d
 			if err := appendScalarToBuilder(colBuilders[c], arrowVal.val, colBuilders[c].Type()); err != nil { panic(fmt.Sprintf("MapRow append col %d (name: %s): %v. Scalar: %s, Builder: %s",c, outputInternalArrowSchema.Field(c).Name, err, arrowVal.val.DataType().Name(), colBuilders[c].Type().Name()))}
 		}
 	}
-	newCols := make([]array.Array, numOutputCols); var newRecordLen int64
+	newCols := make([]arrow.Array, numOutputCols); var newRecordLen int64
 	if len(colBuilders) > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) }
 	for i, b := range colBuilders { newCols[i] = b.NewArray() }
 	mappedRecord := array.NewRecord(outputInternalArrowSchema, newCols, newRecordLen)
@@ -368,7 +311,7 @@ func (adf *arrowDataFrame) FlatMapRow(outputSchemaGiven df.DataFrameSchema, f fu
 			}
 		}
 	}
-	newCols := make([]array.Array, numOutputCols); var newRecordLen int64
+	newCols := make([]arrow.Array, numOutputCols); var newRecordLen int64
 	if len(colBuilders) > 0 && colBuilders[0] != nil { newRecordLen = int64(colBuilders[0].Len()) }
 	for i, b := range colBuilders { newCols[i] = b.NewArray() }
 	flatMappedRecord := array.NewRecord(outputInternalArrowSchema, newCols, newRecordLen)
@@ -547,8 +490,99 @@ func (adf *arrowDataFrame) Join(outputSchemaGiven df.DataFrameSchema, otherRaw d
 
 	ctx := compute.WithAllocator(context.Background(), adf.mem)
 
+	// Handle CrossJoin separately as it doesn't use keys from joinColsMap
 	if jointype == df.JoinCross {
-		panic("Join: CrossJoin with fUser adaptation is not fully implemented in this pass.")
+		if fUser == nil {
+			panic("Join: CrossJoin requires an fUser function")
+		}
+		// Ensure output schema is provided
+		if outputArrowDFSchema == nil || outputArrowDFSchema.schema == nil {
+			panic("Join: CrossJoin requires a valid outputSchemaGiven with an internal arrow.Schema")
+		}
+
+		outputInternalSchema := outputArrowDFSchema.schema
+		numOutputCols := outputInternalSchema.NumFields()
+		finalBuilders := make([]array.Builder, numOutputCols)
+		for i := 0; i < numOutputCols; i++ {
+			finalBuilders[i] = builder.NewBuilder(adf.mem, outputInternalSchema.Field(i).Type)
+		}
+		defer func() {
+			for _, b := range finalBuilders {
+				if b != nil {
+					b.Release()
+				}
+			}
+		}()
+
+		// Handle empty inputs for CrossJoin
+		if adf.record == nil || adf.record.NumRows() == 0 || otherArrowDf.record == nil || otherArrowDf.record.NumRows() == 0 {
+			// Result is an empty dataframe with the output schema
+			emptyCols := make([]arrow.Array, numOutputCols)
+			for i, b := range finalBuilders {
+				emptyCols[i] = b.NewArray()
+			}
+			finalRecord := array.NewRecord(outputInternalSchema, emptyCols, 0)
+			for _, col := range emptyCols {
+				col.Release()
+			}
+			defer finalRecord.Release()
+			return NewArrowDataFrameWithAllocator(adf.name, finalRecord, outputArrowDFSchema, adf.mem)
+		}
+
+		// Iterate through all combinations of rows
+		for lIdx := int64(0); lIdx < adf.record.NumRows(); lIdx++ {
+			leftRowView, errL := NewArrowRowFromRecord(adf.schema, adf.record, int(lIdx))
+			if errL != nil {
+				panic(fmt.Sprintf("Join: CrossJoin error creating left row view for index %d: %v", lIdx, errL))
+			}
+
+			for rIdx := int64(0); rIdx < otherArrowDf.record.NumRows(); rIdx++ {
+				rightRowView, errR := NewArrowRowFromRecord(otherArrowDf.schema, otherArrowDf.record, int(rIdx))
+				if errR != nil {
+					panic(fmt.Sprintf("Join: CrossJoin error creating right row view for index %d: %v", rIdx, errR))
+				}
+
+				outputRows := fUser(leftRowView, rightRowView)
+				for _, outRow := range outputRows {
+					if outRow.Len() != numOutputCols {
+						panic(fmt.Sprintf("Join: CrossJoin fUser returned row with %d columns, expected %d", outRow.Len(), numOutputCols))
+					}
+					for c := 0; c < numOutputCols; c++ {
+						val := outRow.Get(c)
+						av, ok_av := val.(*arrowValue)
+						var scalarToAppend scalar.Scalar
+						if val.IsNil() || !ok_av { // Handle nil or non-arrowValue from fUser by using Null scalar of target type
+							scalarToAppend = scalar.NewNullScalar(finalBuilders[c].Type())
+						} else {
+							scalarToAppend = av.val
+						}
+						// Using 3-argument appendScalarToBuilder from types.go
+						errAppend := appendScalarToBuilder(finalBuilders[c], scalarToAppend, finalBuilders[c].Type())
+						if errAppend != nil {
+							panic(fmt.Sprintf("Join: CrossJoin append col %d (name: %s): %v. Scalar: %s, BuilderType: %s", c, outputInternalSchema.Field(c).Name, errAppend, scalarToAppend.DataType().Name(), finalBuilders[c].Type().Name()))
+						}
+					}
+				}
+			}
+		}
+
+		finalCols := make([]arrow.Array, numOutputCols)
+		var finalNumRows int64
+		if numOutputCols > 0 && finalBuilders[0] != nil {
+			finalNumRows = int64(finalBuilders[0].Len())
+		}
+		for i, b := range finalBuilders {
+			if b == nil {
+				panic(fmt.Sprintf("Join: CrossJoin nil builder at index %d", i))
+			}
+			finalCols[i] = b.NewArray()
+		}
+		finalRecord := array.NewRecord(outputInternalSchema, finalCols, finalNumRows)
+		for _, col := range finalCols {
+			col.Release()
+		}
+		defer finalRecord.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, finalRecord, outputArrowDFSchema, adf.mem)
 	}
 
 	leftKeyDatums := make([]arrow.Datum, 0, len(joinColsMap))
@@ -775,12 +809,259 @@ func (adf *arrowDataFrame) Except(otherRaw df.DataFrame, cols ...string) df.Data
 	return resultDf
 }
 
+// Select method starts here
+func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame {
+	if adf.record == nil && len(expressions) > 0 {
+		panic("Select: cannot select from a DataFrame with a nil record")
+	}
 
-func (adf *arrowDataFrame) Select(expressions ...df.Expr) df.DataFrame { /* ... */ }
-func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame { /* ... */ }
-func (adf *arrowDataFrame) AsFormat(t map[string]df.Format) df.DataFrame { /* ... */ }
-func (adf *arrowDataFrame) UpdateSeries(index int, series df.Series) df.DataFrame { /* ... */ }
-func (adf *arrowDataFrame) UpdateSeriesByName(name string, series df.Series) df.DataFrame { /* ... */ }
-func (adf *arrowDataFrame) ForEachRow(f func(df.Row)) { /* ... */ }
+	numRows := int64(0)
+	if adf.record != nil {
+		numRows = adf.record.NumRows()
+	}
+
+	if len(expressions) == 0 { // Return a DataFrame with 0 columns but same number of rows
+		emptyArrowSchema := arrow.NewSchema([]arrow.Field{}, nil)
+		emptyDfSchema := NewArrowDataFrameSchema(emptyArrowSchema).(*arrowDataFrameSchema)
+		emptyRecord := array.NewRecord(emptyArrowSchema, nil, numRows)
+		defer emptyRecord.Release()
+		return NewArrowDataFrameWithAllocator(adf.name, emptyRecord, emptyDfSchema, adf.mem)
+	}
+
+	newArrays := make([]arrow.Array, len(expressions))
+	newFields := make([]arrow.Field, len(expressions))
+
+	// Helper to clean up arrays created so far in case of an error
+	cleanupArraysOnError := func(count int) {
+		for k := 0; k < count; k++ {
+			if newArrays[k] != nil {
+				newArrays[k].Release()
+			}
+		}
+	}
+
+	for i, expr := range expressions {
+		outputColName := expr.Name() // df.Expr should provide a name/alias. Fallback if empty.
+
+		switch expr.OpType() {
+		case df.ColNameExpr:
+			colName := expr.Col()
+			if colName == "" {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: column name expression for expr %d ('%s') is empty", i, outputColName))
+			}
+			originalSeries := adf.GetSeriesByName(colName)
+			arrowS, ok := originalSeries.(*arrowSeries)
+			if !ok {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: expected *arrowSeries for col '%s', got %T", colName, originalSeries))
+			}
+			arrowS.arr.Retain() // Retain the array for the new DataFrame
+			newArrays[i] = arrowS.arr
+
+			originalFieldIndex := adf.schema.GetIndexByName(colName)
+			fieldFromFile := adf.schema.schema.Field(originalFieldIndex)
+
+			currentOutputName := colName
+			if outputColName != "" && outputColName != colName {
+				currentOutputName = outputColName
+			}
+			newFields[i] = arrow.Field{Name: currentOutputName, Type: fieldFromFile.Type, Nullable: fieldFromFile.Nullable, Metadata: fieldFromFile.Metadata}
+
+		case df.LiteralExpr:
+			literalValue := expr.Const()
+			if literalValue == nil {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: literal expression for expr %d ('%s') has nil df.Value", i, outputColName))
+			}
+
+			arrowType, err := dfFormatToArrowType(literalValue.Schema().Format)
+			if err != nil {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: error converting literal format %v to Arrow type for expr %d ('%s'): %v", literalValue.Schema().Format, i, outputColName, err))
+			}
+
+			builder := array.NewBuilder(adf.mem, arrowType)
+
+			litScalar, errScalar := dfValueToArrowScalar(literalValue, arrowType)
+			if errScalar != nil {
+				builder.Release()
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("Select: failed to convert literal value to Arrow scalar for expr %d ('%s'): %v", i, outputColName, errScalar))
+			}
+
+			for r := int64(0); r < numRows; r++ {
+				errAppend := appendScalarToBuilder(builder, litScalar, arrowType)
+				if errAppend != nil {
+					builder.Release()
+					cleanupArraysOnError(i)
+					panic(fmt.Sprintf("Select: error appending literal scalar for expr %d ('%s'): %v", i, outputColName, errAppend))
+				}
+			}
+			newArrays[i] = builder.NewArray() // Retained by NewArray
+			builder.Release()
+
+			currentOutputName := outputColName
+			if currentOutputName == "" {
+				currentOutputName = fmt.Sprintf("_literal_%d", i) // Default name for unnamed literals
+			}
+			newFields[i] = arrow.Field{Name: currentOutputName, Type: arrowType, Nullable: literalValue.IsNil()}
+
+		default:
+			cleanupArraysOnError(i)
+			panic(fmt.Sprintf("Select: unsupported expression type %v for expression %d ('%s')", expr.OpType(), i, outputColName))
+		}
+	}
+
+	// All arrays in newArrays are now assumed to be correctly retained.
+	// NewRecord will take ownership of these references. We release our hold after.
+	defer func() {
+		for _, arr := range newArrays {
+			if arr != nil { arr.Release() }
+		}
+	}()
+
+	finalArrowSchema := arrow.NewSchema(newFields, adf.schema.schema.Metadata())
+	finalDfSchema := NewArrowDataFrameSchema(finalArrowSchema).(*arrowDataFrameSchema)
+
+	finalRecord := array.NewRecord(finalArrowSchema, newArrays, numRows)
+	defer finalRecord.Release() // NewArrowDataFrameWithAllocator will retain.
+
+	return NewArrowDataFrameWithAllocator(adf.name, finalRecord, finalDfSchema, adf.mem)
+}
+
+func (adf *arrowDataFrame) Rename(name string, inplace bool) df.DataFrame {
+	if name == "" {
+		panic("DataFrame name cannot be empty")
+	}
+	if inplace {
+		adf.name = name
+		return adf
+	}
+
+	if adf.record == nil {
+		return NewArrowDataFrameWithAllocator(name, nil, adf.schema, adf.mem)
+	}
+	return NewArrowDataFrameWithAllocator(name, adf.record, adf.schema, adf.mem)
+}
+
+func (adf *arrowDataFrame) AsFormat(targetFormats map[string]df.Format) df.DataFrame {
+	if adf.record == nil {
+		panic("AsFormat: cannot operate on DataFrame with a nil record")
+	}
+	if len(targetFormats) == 0 {
+		return NewArrowDataFrameWithAllocator(adf.name, adf.record, adf.schema, adf.mem)
+	}
+
+	numCols := int(adf.record.NumCols())
+	newArrays := make([]arrow.Array, numCols)
+	newFields := make([]arrow.Field, numCols)
+	copy(newFields, adf.schema.schema.Fields())
+
+	changed := false
+	ctx := compute.WithAllocator(context.Background(), adf.mem)
+
+	cleanupArraysOnError := func(count int) {
+		for k := 0; k < count; k++ { if newArrays[k] != nil { newArrays[k].Release() } }
+	}
+
+	for i := 0; i < numCols; i++ {
+		originalCol := adf.record.Column(i)
+		originalField := adf.schema.schema.Field(i)
+		colName := originalField.Name
+
+		targetFormat, ok := targetFormats[colName]
+		if !ok || targetFormat == nil {
+			originalCol.Retain(); newArrays[i] = originalCol; continue
+		}
+		currentFormat := adf.schema.Get(i).Format
+		if currentFormat == targetFormat {
+			originalCol.Retain(); newArrays[i] = originalCol; continue
+		}
+
+		changed = true
+		targetArrowType, err := dfFormatToArrowType(targetFormat)
+		if err != nil {
+			cleanupArraysOnError(i)
+			panic(fmt.Sprintf("AsFormat: error converting target format %v for column '%s' to Arrow type: %v", targetFormat, colName, err))
+		}
+
+		if arrow.TypeEqual(originalCol.DataType(), targetArrowType) {
+			originalCol.Retain(); newArrays[i] = originalCol
+		} else {
+			castOptions := compute.DefaultCastOptions(false)
+			castedArray, castErr := compute.Cast(ctx, originalCol, targetArrowType, castOptions)
+			if castErr != nil {
+				cleanupArraysOnError(i)
+				panic(fmt.Sprintf("AsFormat: error casting column '%s' from %s to %s: %v", colName, originalCol.DataType(), targetArrowType, castErr))
+			}
+			newArrays[i] = castedArray
+		}
+		newFields[i].Type = targetArrowType
+		newFields[i].Nullable = newArrays[i].NullN() > 0 || originalField.Nullable
+	}
+
+	if !changed {
+		for _, arr := range newArrays { if arr != nil { arr.Release() } } // Release retained original arrays
+		return NewArrowDataFrameWithAllocator(adf.name, adf.record, adf.schema, adf.mem)
+	}
+
+	defer func() { for _, arr := range newArrays { if arr != nil { arr.Release() } } }()
+
+	newArrowSchemaInternal := arrow.NewSchema(newFields, adf.schema.schema.Metadata())
+	newDfSchema := NewArrowDataFrameSchema(newArrowSchemaInternal).(*arrowDataFrameSchema)
+
+	newRecord := array.NewRecord(newArrowSchemaInternal, newArrays, adf.record.NumRows())
+	defer newRecord.Release()
+
+	return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
+}
+
+func (adf *arrowDataFrame) UpdateSeries(index int, series df.Series) df.DataFrame {
+	if adf.record == nil { panic("UpdateSeries: cannot update series on a DataFrame with a nil record") }
+	if index < 0 || index >= int(adf.record.NumCols()) { panic(fmt.Sprintf("UpdateSeries: index %d out of bounds for %d columns", index, adf.record.NumCols())) }
+	if series == nil { panic("UpdateSeries: input series cannot be nil") }
+	arrowSeriesToUpdate, ok := series.(*arrowSeries)
+	if !ok { panic(fmt.Sprintf("UpdateSeries: expected *arrowSeries, got %T", series)) }
+	if arrowSeriesToUpdate.arr == nil { panic("UpdateSeries: input arrowSeries has a nil internal array") }
+	if arrowSeriesToUpdate.Len() != adf.Len() { panic(fmt.Sprintf("UpdateSeries: length mismatch. DataFrame has %d rows, input series has %d rows", adf.Len(), arrowSeriesToUpdate.Len())) }
+
+	newRecordCols := make([]arrow.Array, adf.record.NumCols())
+	for i, col := range adf.record.Columns() {
+		if i == index { arrowSeriesToUpdate.arr.Retain(); newRecordCols[i] = arrowSeriesToUpdate.arr
+		} else { col.Retain(); newRecordCols[i] = col }
+	}
+	defer func() { for _, col := range newRecordCols { col.Release() } }()
+
+	newSchemaFields := make([]arrow.Field, adf.record.NumCols())
+	copy(newSchemaFields, adf.schema.schema.Fields())
+	inputSeriesSchema := arrowSeriesToUpdate.Schema()
+	inputArrowType, err := dfFormatToArrowType(inputSeriesSchema.Format)
+	if err != nil { panic(fmt.Sprintf("UpdateSeries: could not convert input series format %v to arrow type: %v", inputSeriesSchema.Format, err)) }
+	newSchemaFields[index] = arrow.Field{ Name: inputSeriesSchema.Name, Type: inputArrowType, Nullable: inputSeriesSchema.Nullable, Metadata: arrow.MetadataFrom(inputSeriesSchema.Metadata)}
+	for i, field := range newSchemaFields { if i != index && field.Name == inputSeriesSchema.Name { panic(fmt.Sprintf("UpdateSeries: new series name '%s' conflicts with existing column at index %d", inputSeriesSchema.Name, i)) } }
+
+	newArrowSchema := arrow.NewSchema(newSchemaFields, adf.schema.schema.Metadata())
+	newDfSchema := NewArrowDataFrameSchema(newArrowSchema).(*arrowDataFrameSchema)
+	newRecord := array.NewRecord(newArrowSchema, newRecordCols, adf.record.NumRows())
+	defer newRecord.Release()
+	return NewArrowDataFrameWithAllocator(adf.name, newRecord, newDfSchema, adf.mem)
+}
+
+func (adf *arrowDataFrame) UpdateSeriesByName(name string, series df.Series) df.DataFrame {
+	idx := adf.schema.GetIndexByName(name)
+	if idx == -1 { panic(fmt.Sprintf("UpdateSeriesByName: column '%s' not found", name)) }
+	return adf.UpdateSeries(idx, series)
+}
+
+func (adf *arrowDataFrame) ForEachRow(f func(df.Row)) {
+	if f == nil { panic("ForEachRow: function f cannot be nil") }
+	if adf.record == nil || adf.record.NumRows() == 0 { return }
+	for i := int64(0); i < adf.record.NumRows(); i++ {
+		rowView, err := NewArrowRowFromRecord(adf.schema, adf.record, int(i))
+		if err != nil { panic(fmt.Sprintf("ForEachRow: error creating row view for index %d: %v", i, err)) }
+		f(rowView)
+	}
+}
 
 var _ df.DataFrame = (*arrowDataFrame)(nil)

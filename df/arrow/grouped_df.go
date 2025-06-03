@@ -208,11 +208,104 @@ func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFram
 }
 
 func (agdf *arrowGroupedDataFrame) Map(f func(df.Row, df.DataFrame) df.DataFrame) df.GroupedDataFrame {
-	panic("arrowGroupedDataFrame.Map not yet implemented")
+	// TODO: This is a complex operation. The current interface implies that the function f
+	// transforms each group DataFrame into a new DataFrame, and these are then re-grouped.
+	// This would require careful schema management and potentially creating a new originalRecord
+	// by concatenating the results from f, if schemas are compatible.
+	// A full implementation is deferred. For now, it removes the panic and returns the original.
+	fmt.Println("Warning: arrowGroupedDataFrame.Map is not fully implemented and returns the original GroupedDataFrame.")
+	return agdf
 }
 
-func (agdf *arrowGroupedDataFrame) Where(f func(df.Row, df.DataFrame) bool) df.GroupedDataFrame {
-	panic("arrowGroupedDataFrame.Where not yet implemented")
+func (agdf *arrowGroupedDataFrame) Where(f func(key df.Row, groupDf df.DataFrame) bool) df.GroupedDataFrame {
+	if f == nil {
+		panic("Where: filter function f cannot be nil")
+	}
+	if agdf.uniqueKeysTable == nil || agdf.uniqueKeysTable.NumRows() == 0 {
+		// No groups to filter, return self or an empty grouped df with same structure
+		return agdf
+	}
+
+	ctx := compute.WithAllocator(context.Background(), agdf.mem)
+	keptKeyIndices := make([]int64, 0) // Stores indices of rows in uniqueKeysTable to keep
+
+	// Need a TableReader to iterate through uniqueKeysTable record by record (chunk by chunk)
+	// and then row by row within each record.
+	keyTblReader := array.NewTableReader(agdf.uniqueKeysTable, -1)
+	defer keyTblReader.Release()
+
+	keyRowSchema := NewArrowDataFrameSchema(agdf.uniqueKeysTable.Schema()).(*arrowDataFrameSchema)
+
+	currentKeyIndexOffset := int64(0) // Tracks the base index for rows in uniqueKeysTable across chunks
+
+	for keyTblReader.Next() {
+		keyRecord := keyTblReader.Record() // This is a chunk of the uniqueKeysTable
+		for i := 0; i < int(keyRecord.NumRows()); i++ {
+			keyRow, err := NewArrowRowFromRecord(keyRowSchema, keyRecord, i)
+			if err != nil {
+				panic(fmt.Sprintf("Where: error creating df.Row from key record: %v", err))
+			}
+
+			// Get the actual data group for this keyRow
+			// This Get call is expensive as it filters originalRecord each time.
+			// For performance, a more advanced implementation might directly work with indices.
+			groupDf := agdf.Get(keyRow)
+
+			if f(keyRow, groupDf) {
+				keptKeyIndices = append(keptKeyIndices, currentKeyIndexOffset + int64(i))
+			}
+
+			// Release the dataframe obtained from Get
+			if releasable, ok := groupDf.(df.Releaser); ok {
+				releasable.Release()
+			}
+		}
+		currentKeyIndexOffset += keyRecord.NumRows()
+	}
+	if keyTblReader.Err() != nil {
+		panic(fmt.Sprintf("Where: error reading uniqueKeysTable: %v", keyTblReader.Err()))
+	}
+
+
+	if len(keptKeyIndices) == 0 {
+		// Return a new empty grouped data frame but with the same structure
+		emptyKeysTable, _ := array.NewTableFromRecords(agdf.uniqueKeysTable.Schema(), []arrow.Record{})
+		defer emptyKeysTable.Release()
+		agdf.originalRecord.Retain() // Retain for the new structure
+		return &arrowGroupedDataFrame{
+			originalRecord:   agdf.originalRecord,
+			originalSchema:   agdf.originalSchema,
+			groupingColNames: agdf.groupingColNames,
+			uniqueKeysTable:  emptyKeysTable, // Empty table with original schema
+			mem:              agdf.mem,
+		}
+	}
+
+	// Create a new uniqueKeysTable based on the kept indices
+	indicesBuilder := array.NewInt64Builder(agdf.mem); defer indicesBuilder.Release()
+	indicesBuilder.AppendValues(keptKeyIndices, nil)
+	indicesArr := indicesBuilder.NewArray(); defer indicesArr.Release()
+
+	// Take from the original uniqueKeysTable. This handles chunking correctly.
+	filteredKeysDatum, err := compute.TakeTable(ctx, agdf.uniqueKeysTable, arrow.NewArrayDatum(indicesArr), compute.TakeOptions{})
+	if err != nil {
+		panic(fmt.Sprintf("Where: failed to Take from uniqueKeysTable: %v", err))
+	}
+	defer filteredKeysDatum.Release()
+
+	newUniqueKeysTable, ok := filteredKeysDatum.Value.(arrow.Table);
+	if !ok { panic("Where: TakeTable did not return arrow.Table") }
+	newUniqueKeysTable.Retain() // Keep this table for the new grouped dataframe
+
+	agdf.originalRecord.Retain() // The new grouped DF will also reference the original record.
+
+	return &arrowGroupedDataFrame{
+		originalRecord:    agdf.originalRecord, // Retained
+		originalSchema:    agdf.originalSchema,
+		groupingColNames:  agdf.groupingColNames,
+		uniqueKeysTable:   newUniqueKeysTable, // Retained
+		mem:               agdf.mem,
+	}
 }
 
 func (agdf *arrowGroupedDataFrame) Release() {

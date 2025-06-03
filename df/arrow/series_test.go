@@ -83,8 +83,54 @@ func TestArrowSeries_Append(t *testing.T) { /* ... */ }
 func TestArrowSeries_Union(t *testing.T) { /* ... */ }
 func TestArrowSeries_Intersection(t *testing.T) { /* ... */ }
 func TestArrowSeries_Except(t *testing.T) { /* ... */ }
-func TestArrowSeries_Expr(t *testing.T) { /* ... */ }
-func TestArrowSeries_Select(t *testing.T) { /* ... */ }
+
+func TestArrowSeries_Expr(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	seriesName := "my_series"
+	sSchema := df.SeriesSchema{Name: seriesName, Format: df.IntegerFormat}
+	arr := getTestInt64Array(mem, []int64{1, 2, 3}, nil); defer arr.Release()
+	s := arrowimpl.NewArrowSeries(arr, sSchema); defer s.(*arrowimpl.ArrowSeries).Release()
+
+	expr := s.Expr()
+	assert.NotNil(t, expr, "Expr() should not return nil")
+
+	// Assuming df.Expr has methods to inspect its properties,
+	// consistent with how df.ColNameExpr and df.LiteralExpr were used in DataFrame.Select
+	assert.Equal(t, df.ColNameExpr, expr.OpType(), "Expression type should be ColNameExpr")
+	assert.Equal(t, seriesName, expr.Col(), "Expression column name should match series name")
+	assert.Equal(t, seriesName, expr.Name(), "Expression name should match series name by default for ColExpr")
+
+	// Test unnamed series panic
+	unnamedSchema := df.SeriesSchema{Name: "", Format: df.IntegerFormat}
+	unnamedSeries := arrowimpl.NewArrowSeries(arr, unnamedSchema) // arr is already created
+	// No defer release for unnamedSeries explicitly if it's just for this panic test,
+	// or if arr is the main owner and already deferred. arr is from getTestInt64Array, used by `s`.
+	// For safety, if NewArrowSeries always retains, then a release would be needed if not panicking.
+	// But since it panics, it's okay.
+	assert.PanicsWithValue(t, "Expr: cannot create a column expression for an unnamed series", func() {
+		unnamedSeries.Expr()
+	}, "Expr() on unnamed series should panic")
+}
+
+func TestArrowSeries_Select(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	sSchema := df.SeriesSchema{Name: "test_series_for_select", Format: df.IntegerFormat}
+	arr := getTestInt64Array(mem, []int64{1, 2, 3}, nil); defer arr.Release()
+	s := arrowimpl.NewArrowSeries(arr, sSchema); defer s.(*arrowimpl.ArrowSeries).Release()
+
+	// Create a dummy expression to pass to Select
+	// This would typically be a more complex expression in real use.
+	// For this test, we only care that Select panics correctly.
+	// We use a literal expression as a simple valid df.Expr.
+	dummyExpr := df.NewLiteralExpr(arrowimpl.NewArrowValue(scalar.NewInt64Scalar(5), df.IntegerFormat)).SetName("dummy_expr_for_series_select")
+
+	expectedPanicMsg := fmt.Sprintf("Select on arrowSeries is partially implemented. Full expression (%s) evaluation TBD.", dummyExpr.Name())
+
+	assert.PanicsWithValue(t, expectedPanicMsg, func() {
+		s.Select(dummyExpr)
+	}, "Series.Select should panic with the specified message")
+}
+
 func TestArrowSeries_Join(t *testing.T) { /* ... */ }
 
 
