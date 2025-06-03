@@ -40,12 +40,12 @@ func setupGroupedTestData(t *testing.T, mem memory.Allocator, groupByCols ...str
 	rb := array.NewRecordBuilder(mem, schema); defer rb.Release()
 	rb.Field(0).(*array.StringBuilder).AppendValues([]string{"A", "B", "A", "A", "B", "", "A", ""}, []bool{true, true, true, true, true, false, true, false})
 	rb.Field(1).(*array.Int64Builder).AppendValues([]int64{1, 2, 1, 2, 1, 1, 0, 0}, []bool{true, true, true, true, true, true, false, false})
-	rb.Field(2).(*array.Float64Builder).AppendValues([]float64{10.1, 20.2, 10.11, 30.3, 40.4, 50.5, 60.6, 70.7}, nil) 
+	rb.Field(2).(*array.Float64Builder).AppendValues([]float64{10.1, 20.2, 10.11, 30.3, 40.4, 50.5, 60.6, 70.7}, nil)
 	record := rb.NewRecord(); // Do not release here, baseDf takes ownership
-	
+
 	baseDf := arrowimpl.NewArrowDataFrame("grouped_df_test_base", record, dfSchema)
 	// NewArrowDataFrame retains record, so we can release our hold on 'record'
-	record.Release() 
+	record.Release()
 
 	groupedDf := baseDf.GroupBy(groupByCols...)
 	return baseDf, groupedDf
@@ -75,7 +75,7 @@ func TestArrowGroupedDataFrame_GetGroupColumns_Len_GetKeys(t *testing.T) {
 		if k2.IsNil() { k2Str = "nil" } else { k2Str = strconv.FormatInt(k2.GetAsInt(),10) }
 		keyMap[fmt.Sprintf("(%s,%s)", k1Str, k2Str)] = true
 	}
-	
+
 	expectedKeyStrings := []string{
 		"(A,1)", "(B,2)", "(A,2)", "(B,1)", "(nil,1)", "(A,nil)", "(nil,nil)",
 	}
@@ -87,20 +87,20 @@ func TestArrowGroupedDataFrame_GetGroupColumns_Len_GetKeys(t *testing.T) {
 
 func TestArrowGroupedDataFrame_Get_ForEach(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	baseDf, groupedDf := setupGroupedTestData(t, mem, "cat1") 
+	baseDf, groupedDf := setupGroupedTestData(t, mem, "cat1")
 	defer baseDf.(*arrowimpl.ArrowDataFrame).Release()
 	defer groupedDf.(*arrowimpl.ArrowGroupedDataFrame).Release()
 
 	assert.Equal(t, int64(3), groupedDf.Len()) // Groups for "cat1": "A", "B", nil
-	
+
 	keys := groupedDf.GetKeys()
 	var keyA, keyB, keyNil df.Row
 	for _, k := range keys {
 		// Ensure Get(0) is safe to call
 		if k.Len() > 0 {
 			val := k.Get(0)
-			if val.IsNil() { keyNil = k 
-			} else if val.GetAsString() == "A" { keyA = k 
+			if val.IsNil() { keyNil = k
+			} else if val.GetAsString() == "A" { keyA = k
 			} else if val.GetAsString() == "B" { keyB = k }
 		}
 	}
@@ -136,7 +136,7 @@ func TestArrowGroupedDataFrame_Get_ForEach(t *testing.T) {
 		keyCat1Val := k.Get(0)
 		for r := int64(0); r < groupContentDf.Len(); r++ {
 			rowInGroup := groupContentDf.GetRow(r)
-			valInGroup := rowInGroup.Get(0) 
+			valInGroup := rowInGroup.Get(0)
 			if keyCat1Val.IsNil() {
 				assert.True(t, valInGroup.IsNil(), "Mismatch: key is nil, val in group is not for key %v", dfToSliceOfInterfaceSlices(k))
 			} else {

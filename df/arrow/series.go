@@ -34,15 +34,15 @@ func NewArrowSeriesWithAllocator(rawArr arrow.Array, schema df.SeriesSchema, mem
 
 	// If schema.Format is UnknownFormat (or nil, if Format is an interface and nil is possible for "unknown"),
 	// and inference from array also yields UnknownFormat, then it's an issue, unless it's a NullType array.
-	if (schema.Format == df.UnknownFormat || schema.Format == nil) && 
-	   arrowToDfFormat(rawArr.DataType()) == df.UnknownFormat && 
+	if (schema.Format == df.UnknownFormat || schema.Format == nil) &&
+	   arrowToDfFormat(rawArr.DataType()) == df.UnknownFormat &&
 	   rawArr.DataType().ID() != arrow.NULL {
          panic(fmt.Sprintf("NewArrowSeriesWithAllocator: df.SeriesSchema.Format is %v and cannot be inferred from array type %s", schema.Format, rawArr.DataType().Name()))
     }
 
 	// 1. Determine effective df.Format
 	effectiveFormat := schema.Format
-	if effectiveFormat == df.UnknownFormat || effectiveFormat == nil { 
+	if effectiveFormat == df.UnknownFormat || effectiveFormat == nil {
 		inferredFormat := arrowToDfFormat(rawArr.DataType())
 		// If still unknown after inference (and not a Null array type), then panic.
 		if inferredFormat == df.UnknownFormat && rawArr.DataType().ID() != arrow.NULL {
@@ -58,7 +58,7 @@ func NewArrowSeriesWithAllocator(rawArr arrow.Array, schema df.SeriesSchema, mem
 
 	// 2. Validate df.Format compatibility with rawArr.DataType()
 	// expectedArrowType is what the effectiveFormat maps to in Arrow terms.
-	expectedArrowType, err := dfFormatToArrowType(effectiveFormat) 
+	expectedArrowType, err := dfFormatToArrowType(effectiveFormat)
 	if err != nil {
 		// This panic should ideally not be reached if effectiveFormat is not UnknownFormat
 		// and dfFormatToArrowType covers all known df.Formats.
@@ -70,33 +70,33 @@ func NewArrowSeriesWithAllocator(rawArr arrow.Array, schema df.SeriesSchema, mem
 	if rawArr.DataType().ID() != arrow.NULL && expectedArrowType.ID() != rawArr.DataType().ID() {
 		actualArrFormat := arrowToDfFormat(rawArr.DataType()) // What df.Format the actual array maps to
 		compatible := false
-		if isIntegerFormat(actualArrFormat) && isIntegerFormat(effectiveFormat) { 
+		if isIntegerFormat(actualArrFormat) && isIntegerFormat(effectiveFormat) {
 			compatible = true
-		} else if isFloatFormat(actualArrFormat) && isFloatFormat(effectiveFormat) { 
+		} else if isFloatFormat(actualArrFormat) && isFloatFormat(effectiveFormat) {
 			compatible = true
 		} else if isStringFormat(actualArrFormat) && isStringFormat(effectiveFormat) {
 			compatible = true
 		} else if isBoolFormat(actualArrFormat) && isBoolFormat(effectiveFormat) {
 			compatible = true
-		} else if isTimeFormat(actualArrFormat) && isTimeFormat(effectiveFormat) { 
+		} else if isTimeFormat(actualArrFormat) && isTimeFormat(effectiveFormat) {
             compatible = true
         } else if isDateFormat(actualArrFormat) && isDateFormat(effectiveFormat) {
             compatible = true
         }
         // Add other compatibility rules if necessary
 
-		if !compatible && actualArrFormat != effectiveFormat { 
+		if !compatible && actualArrFormat != effectiveFormat {
 			panic(fmt.Sprintf("NewArrowSeriesWithAllocator: effectiveFormat %v (expects Arrow %s) is not compatible with actual array type %s (which maps to df.Format %v)",
 				effectiveFormat, expectedArrowType.Name(), rawArr.DataType().Name(), actualArrFormat))
 		}
 	}
-	
+
 	// 3. Determine effective Nullability
 	effectiveNullable := schema.Nullable // Start with user's preference from input schema
 	if rawArr.NullN() > 0 {
 		// Data has nulls. If schema was explicitly set by user to NOT nullable, this is a contradiction.
 		// Check if schema.Format was originally set (not inferred) to make this decision.
-		if (schema.Format != nil && schema.Format != df.UnknownFormat) && !schema.Nullable { 
+		if (schema.Format != nil && schema.Format != df.UnknownFormat) && !schema.Nullable {
 			panic(fmt.Sprintf("NewArrowSeriesWithAllocator: schema for series '%s' (Format: %v) is marked non-nullable, but data contains %d nulls",
                 schema.Name, effectiveFormat, rawArr.NullN()))
 		}
@@ -105,8 +105,8 @@ func NewArrowSeriesWithAllocator(rawArr arrow.Array, schema df.SeriesSchema, mem
 		// Data has no nulls.
 		// If schema.Format was NOT specified by user (i.e., it was inferred), then nullability also gets inferred as false (non-nullable).
 		// Otherwise (schema.Format was specified by user), respect schema.Nullable specified by the user.
-		if schema.Format == nil || schema.Format == df.UnknownFormat { 
-			effectiveNullable = false 
+		if schema.Format == nil || schema.Format == df.UnknownFormat {
+			effectiveNullable = false
 		}
 		// if schema.Format was specified by user, effectiveNullable is already schema.Nullable from above, which is correct.
 	}
@@ -192,12 +192,12 @@ func (as *arrowSeries) Where(f func(df.Value) bool) df.Series {
 func (as *arrowSeries) Sort(order df.SortOrder) df.Series {
     if as.arr == nil || as.arr.Len() == 0 { return as.Copy() };
     ctx := compute.WithAllocator(context.Background(), as.mem) // compute.DefaultContext might be enough if no specific allocator needed for compute ops
-    
+
     arrowSortOrder := arrow.Ascending
     if order == df.Descending { // Assuming df.Descending is the correct enum value
         arrowSortOrder = arrow.Descending
     }
-    
+
     // compute.SortIndices takes an Datum input
     arrDatum := arrow.NewArrayDatum(as.arr)
     // arrDatum does not need Release() if it's just a wrapper and doesn't retain as.arr
@@ -207,7 +207,7 @@ func (as *arrowSeries) Sort(order df.SortOrder) df.Series {
     indicesDatum, err := compute.SortIndices(ctx, arrDatum, compute.SortOptions{Order: arrowSortOrder, NullPlacement: arrow.NullsFirst})
     if err != nil { panic(fmt.Errorf("SortIndices failed: %w", err)) };
     defer indicesDatum.Release() // indicesDatum is a new Datum, needs release.
-    
+
     indicesArr, ok := indicesDatum.Value().(arrow.Array) // Use Value() then type assert
     if !ok { panic("SortIndices did not return a valid ArrayDatum containing an Array") }
     // indicesArr is owned by indicesDatum.
@@ -220,7 +220,7 @@ func (as *arrowSeries) Sort(order df.SortOrder) df.Series {
     sortedArrDatum, err := compute.Take(ctx, compute.TakeOptions{}, arrDatum, indicesArrDatum)
     if err != nil { panic(fmt.Errorf("Take failed: %w", err)) };
     defer sortedArrDatum.Release() // sortedArrDatum is new, needs release.
-    
+
     sortedArr, ok := sortedArrDatum.Value().(arrow.Array)
     if !ok { panic("Take did not return a valid ArrayDatum containing an Array") }
     // sortedArr is owned by sortedArrDatum. NewArrowSeriesWithAllocator will Retain.
@@ -318,7 +318,7 @@ func (as *arrowSeries) Distinct() df.Series {
 	uniqueDatum, err := compute.Unique(ctx, arrDatum)
 	if err != nil { panic(fmt.Sprintf("Unique failed: %v", err)) };
 	defer uniqueDatum.Release()
-	
+
 	uniqueArr, ok := uniqueDatum.(*arrow.ArrayDatum).Value().(arrow.Array)
 	if !ok { panic("Unique did not return a valid ArrayDatum containing an Array") }
     return NewArrowSeriesWithAllocator(uniqueArr, as.schema, as.mem)
@@ -385,7 +385,7 @@ func (as *arrowSeries) Append(otherSeriesRaw df.Series) df.Series {
 	if as.arr == nil { // If current series is nil (e.g. uninitialized)
 		if otherSeriesRaw == nil || otherSeriesRaw.Len() == 0 { // Appending nothing to nil series
 			// Return a valid empty series or panic, current Copy handles creating empty from schema
-			return as.Copy() 
+			return as.Copy()
 		}
 		// If as.arr is nil but other is not, effectively this becomes otherSeriesRaw.Copy()
 		// This case should ideally be handled by ensuring as.arr is initialized (e.g. to empty array)
@@ -412,7 +412,7 @@ func (as *arrowSeries) Append(otherSeriesRaw df.Series) df.Series {
 		}
 		return otherSeriesRaw.Copy()
 	}
-	
+
 	otherArr, err := as.prepareOtherForSetOp(otherSeriesRaw, "Append")
 	if err != nil { panic(err) }
 	defer otherArr.Release()
@@ -429,7 +429,7 @@ func (as *arrowSeries) Union(otherSeries df.Series) df.Series {
 	appended := as.Append(otherSeries) // This returns a new series
 	// Make sure to release the intermediate 'appended' series' array
 	defer appended.Release()
-	
+
 	// Distinct will operate on the result of Append.
 	return appended.Distinct()
 }
@@ -452,11 +452,11 @@ func (as *arrowSeries) Intersection(otherSeriesRaw df.Series) df.Series {
 	// NewArrayData does not retain input array, so no release needed for leftDatum/rightDatum wrappers
 	leftDatum := arrow.NewArrayDatum(as.arr)
 	rightDatum := arrow.NewArrayDatum(otherArr)
-	
+
 	resultSetDatum, err := compute.SetIntersection(ctx, leftDatum, rightDatum, compute.SetLookupOptions{NullMatchingBehavior: compute.MatchNulls})
 	if err != nil { panic(fmt.Sprintf("Intersection: compute.SetIntersection failed: %w", err)) };
 	defer resultSetDatum.Release() // This is a new datum, release it
-	
+
 	resultArr, ok := resultSetDatum.Value().(arrow.Array)
 	if !ok { panic("Intersection: compute.SetIntersection did not return ArrayDatum containing an Array") }
 	// resultArr is owned by resultSetDatum. NewArrowSeries retains it.
@@ -485,7 +485,7 @@ func (as *arrowSeries) Except(otherSeriesRaw df.Series) df.Series {
 	resultSetDatum, err := compute.SetDifference(ctx, leftDatum, rightDatum, compute.SetLookupOptions{NullMatchingBehavior: compute.MatchNulls})
 	if err != nil { panic(fmt.Errorf("Except: compute.SetDifference failed: %w", err)) };
 	defer resultSetDatum.Release() // This is a new datum, release it
-	
+
 	resultArr, ok := resultSetDatum.Value().(arrow.Array)
 	if !ok { panic("Except: compute.SetDifference did not return ArrayDatum containing an Array") }
 	// resultArr is owned by resultSetDatum. NewArrowSeries retains it.
@@ -511,7 +511,7 @@ func (as *arrowSeries) AsFormat(targetFormat df.Format) df.Series {
 		newSchema := df.SeriesSchema{Name: as.schema.Name, Format: targetFormat, Nullable: as.arr.NullN() > 0}
 		return NewArrowSeriesWithAllocator(as.arr, newSchema, as.mem)
 	}
-	
+
 	ctx := compute.WithAllocator(context.Background(), as.mem)
 	castOptions := compute.DefaultCastOptions(false) // false = allow unsafe casts like float to int truncation.
 	                                               // Set to true for strict (error on overflow/truncation).
@@ -521,7 +521,7 @@ func (as *arrowSeries) AsFormat(targetFormat df.Format) df.Series {
 			as.arr.DataType().Name(), as.schema.Format, targetArrowType.Name(), targetFormat, err))
 	}
 	// castedArray is new and retained by compute.Cast. NewArrowSeriesWithAllocator will retain again.
-	
+
 	newSchema := df.SeriesSchema{Name: as.schema.Name, Format: targetFormat, Nullable: castedArray.NullN() > 0, Metadata: as.schema.Metadata}
 	return NewArrowSeriesWithAllocator(castedArray, newSchema, as.mem)
 }
@@ -530,7 +530,7 @@ func (as *arrowSeries) AsFormat(targetFormat df.Format) df.Series {
 func (as *arrowSeries) WhenNil(fillValue df.Value) df.Series {
 	if as.arr == nil { panic("WhenNil called on nil series array") }
 	if fillValue == nil { panic("WhenNil: fillValue interface cannot be nil (can be a nil df.Value though)")} // df.Value can be nil if interface itself is nil
-	
+
 	if as.arr.NullN() == 0 { return as.Copy() } // No nulls to fill
 
 	ctx := compute.WithAllocator(context.Background(), as.mem)
@@ -550,16 +550,16 @@ func (as *arrowSeries) WhenNil(fillValue df.Value) df.Series {
 	// compute.FillNull is idempotent if fillScalar is a typed null of the array's type.
 	// So, no need for an early exit if fillValue.IsNil().
 
-	fillScalarDatum := arrow.NewScalarDatum(fillScalar) 
+	fillScalarDatum := arrow.NewScalarDatum(fillScalar)
 	seriesDatum := arrow.NewArrayDatum(as.arr)
 
 	resultDatum, err := compute.FillNull(ctx, seriesDatum, fillScalarDatum)
 	if err != nil { panic(fmt.Errorf("WhenNil: FillNull compute failed: %w", err)) }
-	defer resultDatum.Release() 
+	defer resultDatum.Release()
 
 	// The resultDatum contains the new array.
-	newArr := resultDatum.Value().(arrow.Array) 
-	
+	newArr := resultDatum.Value().(arrow.Array)
+
 	currentSchema := as.schema
 	finalNullable := true
 	if !fillValue.IsNil() && newArr.NullN() == 0 { // If filled with non-null and result has no nulls
@@ -590,7 +590,7 @@ func (as *arrowSeries) When(replacementMap map[any]df.Value) df.Series {
 
 	for r := 0; r < as.Len(); r++ {
 		currentDfVal := as.Get(r) // This is *arrowValue from our Get method
-		
+
 		// Determine the key for map lookup. If df.Value is nil, use nil as key.
 		// Otherwise, use its Go representation.
 		var goKeyForLookup any
@@ -626,7 +626,7 @@ func (as *arrowSeries) When(replacementMap map[any]df.Value) df.Series {
             }
 		}
 		// dfValueToArrowScalar from types.go does not retain, so no release for scalarToAppend here.
-		
+
 		errAppend := appendScalarToBuilder(b, scalarToAppend, colType)
 		if errAppend != nil {
 			panic(fmt.Errorf("When: error appending scalar (for key %v, scalar %v) to builder: %w",
@@ -634,7 +634,7 @@ func (as *arrowSeries) When(replacementMap map[any]df.Value) df.Series {
 		}
 	}
 	newArr := b.NewArray()
-	
+
 	currentSchema := as.schema
 	finalNullable := true // Default to true because replacements can introduce nulls.
 	if newArr.NullN() == 0 {

@@ -98,7 +98,7 @@ func TestArrowValue_Boolean(t *testing.T) {
 }
 
 func TestArrowValue_Timestamp(t *testing.T) {
-	now := time.Now().Truncate(time.Nanosecond) 
+	now := time.Now().Truncate(time.Nanosecond)
 	tsType := arrow.TimestampTypes.Timestamp_ns
 	s := scalar.NewTimestampScalar(arrow.Timestamp(now.UnixNano()), tsType)
 	f := df.DateTimeFormat
@@ -157,7 +157,7 @@ func getTestArrowSchema() *arrow.Schema {
 			{Name: "col_bool", Type: arrow.PrimitiveTypes.Boolean},
 			{Name: "col_time", Type: arrow.TimestampTypes.Timestamp_ns},
 		},
-		nil, 
+		nil,
 	)
 }
 
@@ -169,7 +169,7 @@ func TestArrowDataFrameSchema_Basic(t *testing.T) {
 	assert.Equal(t, []string{"col_str", "col_int", "col_float", "col_bool", "col_time"}, dfSchema.Names())
 	seriesSchema0 := dfSchema.Get(0)
 	assert.Equal(t, "col_str", seriesSchema0.Name)
-	assert.Equal(t, df.StringFormat.Name(), seriesSchema0.Format.Name()) 
+	assert.Equal(t, df.StringFormat.Name(), seriesSchema0.Format.Name())
 	seriesSchema1 := dfSchema.Get(1)
 	assert.Equal(t, "col_int", seriesSchema1.Name)
 	assert.Equal(t, df.IntegerFormat.Name(), seriesSchema1.Format.Name())
@@ -192,7 +192,7 @@ func TestArrowDataFrameSchema_Basic(t *testing.T) {
 
 func TestArrowDataFrameSchema_Equals(t *testing.T) {
 	schema1 := arrowimpl.NewArrowDataFrameSchema(getTestArrowSchema())
-	schema2 := arrowimpl.NewArrowDataFrameSchema(getTestArrowSchema()) 
+	schema2 := arrowimpl.NewArrowDataFrameSchema(getTestArrowSchema())
 	schemaDiffName := arrowimpl.NewArrowDataFrameSchema(arrow.NewSchema(
 		[]arrow.Field{{Name: "col_str_diff", Type: arrow.BinaryTypes.String}, getTestArrowSchema().Field(1)}, nil))
 	schemaDiffType := arrowimpl.NewArrowDataFrameSchema(arrow.NewSchema(
@@ -351,7 +351,7 @@ func TestArrowRow_NewArrowRowFromRecord(t *testing.T) {
 func TestArrowRow_Copy(t *testing.T) {
 	schema := arrowimpl.NewArrowDataFrameSchema(getTestArrowSchema()).(*arrowimpl.ArrowDataFrameSchema)
 	vals := []scalar.Scalar{scalar.NewStringScalar("copy_me"), scalar.NewInt64Scalar(55)}
-	
+
 	// Adjust schema to match vals
 	simpleArrowSchema := arrow.NewSchema([]arrow.Field{getTestArrowSchema().Field(0), getTestArrowSchema().Field(1)}, nil)
 	simpleDfSchema := arrowimpl.NewArrowDataFrameSchema(simpleArrowSchema).(*arrowimpl.ArrowDataFrameSchema)
@@ -405,6 +405,6 @@ func TestArrowRow_Select(t *testing.T) {
 	assert.Equal(t, "col_str", selectedRowReordered.Schema().Get(1).Name)
 	assert.Equal(t, int64(1), selectedRowReordered.Get(0).GetAsInt())
 	assert.Equal(t, "hello", selectedRowReordered.Get(1).GetAsString())
-	
+
 	assert.Panics(t, func() { row.Select(0, 10) }, "Select with out-of-bounds index should panic")
 }

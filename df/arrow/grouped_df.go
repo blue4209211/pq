@@ -4,7 +4,7 @@ package arrow
 import (
 	"context"
 	"fmt"
-	// "reflect" 
+	// "reflect"
 	// "time"
 	"strings"
 
@@ -25,10 +25,10 @@ type AggregationConfig struct {
 }
 
 type arrowGroupedDataFrame struct {
-	originalRecord    arrow.Record          
-	originalSchema    *arrowDataFrameSchema 
-	groupingColNames  []string              
-	uniqueKeysTable   arrow.Table           
+	originalRecord    arrow.Record
+	originalSchema    *arrowDataFrameSchema
+	groupingColNames  []string
+	uniqueKeysTable   arrow.Table
 	mem               memory.Allocator
 }
 
@@ -61,7 +61,7 @@ func (agdf *arrowGroupedDataFrame) GetKeys() []df.Row {
 
 func (agdf *arrowGroupedDataFrame) Len() int64 {
 	if agdf.uniqueKeysTable == nil { return 0 }
-	return agdf.uniqueKeysTable.NumRows() 
+	return agdf.uniqueKeysTable.NumRows()
 }
 
 func (agdf *arrowGroupedDataFrame) Get(keyRow df.Row) df.DataFrame {
@@ -72,53 +72,53 @@ func (agdf *arrowGroupedDataFrame) Get(keyRow df.Row) df.DataFrame {
 	}
 
 	ctx := compute.WithAllocator(context.Background(), agdf.mem)
-	var combinedMaskDatum arrow.Datum 
-	
+	var combinedMaskDatum arrow.Datum
+
 	for i, groupColName := range agdf.groupingColNames {
-		keyVal := keyRow.Get(i) 
+		keyVal := keyRow.Get(i)
 		originalColIdx := agdf.originalSchema.GetIndexByName(groupColName)
 		if originalColIdx == -1 { if combinedMaskDatum != nil { combinedMaskDatum.Release() }; panic(fmt.Sprintf("Get: grouping column '%s' not found in original schema", groupColName)) }
 		originalColumnArray := agdf.originalRecord.Column(originalColIdx)
-		
+
 		keyScalar, err := dfValueToArrowScalar(keyVal, originalColumnArray.DataType(), agdf.mem)
 		if err != nil { if combinedMaskDatum != nil { combinedMaskDatum.Release() }; panic(fmt.Sprintf("Get: error converting keyRow value for col '%s' to Arrow scalar: %v", groupColName, err)) }
-		
+
 		releasableKeyScalar, needsKeyScalarRelease := keyScalar.(interface{ Release() })
 
 		colDatum := arrow.NewArrayDatum(originalColumnArray)
-		scalarDatum := arrow.NewScalarDatum(keyScalar)    
+		scalarDatum := arrow.NewScalarDatum(keyScalar)
 		currentMaskDatum, err := compute.Compare(ctx, colDatum, scalarDatum, compute.Equal)
-		
-		if needsKeyScalarRelease { releasableKeyScalar.Release() } 
+
+		if needsKeyScalarRelease { releasableKeyScalar.Release() }
 
 		if err != nil { if combinedMaskDatum != nil { combinedMaskDatum.Release() }; panic(fmt.Sprintf("Get: error comparing column '%s' with key value: %v", groupColName, err)) }
-		
+
 		if combinedMaskDatum == nil {
-			combinedMaskDatum = currentMaskDatum 
+			combinedMaskDatum = currentMaskDatum
 		} else {
 			prevCombinedMask := combinedMaskDatum
 			newCombinedMaskDatum, errAnd := compute.And(ctx, prevCombinedMask, currentMaskDatum)
-			currentMaskDatum.Release()  
-			prevCombinedMask.Release() 
+			currentMaskDatum.Release()
+			prevCombinedMask.Release()
 			if errAnd != nil { panic(fmt.Sprintf("Get: error ANDing masks for column '%s': %v", groupColName, errAnd)) }
 			combinedMaskDatum = newCombinedMaskDatum
 		}
 	}
 
-	if combinedMaskDatum == nil { 
+	if combinedMaskDatum == nil {
 		emptyRec := array.NewRecord(agdf.originalSchema.schema, nil, 0); defer emptyRec.Release()
 		return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group_emptykey", emptyRec, agdf.originalSchema, agdf.mem)
 	}
-	
+
 	groupRecordDatum, err := compute.Filter(ctx, arrow.NewRecordDatum(agdf.originalRecord), combinedMaskDatum, compute.FilterOptions{NullSelectionBehavior: compute.Drop})
-	combinedMaskDatum.Release() 
+	combinedMaskDatum.Release()
 	if err != nil { panic(fmt.Sprintf("Get: error filtering original record for group: %v", err)) }
 	defer groupRecordDatum.Release()
 
 	groupRecordResult, ok := groupRecordDatum.(*arrow.RecordDatum)
     if !ok || groupRecordResult == nil { panic("Get: Filter did not return a valid RecordDatum") }
     groupRecord := groupRecordResult.Value().(arrow.Record)
-	
+
 	return NewArrowDataFrameWithAllocator(agdf.originalSchema.Name()+"_group", groupRecord, agdf.originalSchema, agdf.mem)
 }
 
@@ -129,7 +129,7 @@ func (agdf *arrowGroupedDataFrame) ForEach(f func(key df.Row, groupDf df.DataFra
 		groupDataFrame := agdf.Get(keyRow)
 		arrowGroupDf, ok := groupDataFrame.(*arrowDataFrame)
 		if !ok && groupDataFrame != nil { panic(fmt.Sprintf("ForEach: agdf.Get() returned unexpected DataFrame type: %T", groupDataFrame)) }
-		f(keyRow, groupDataFrame) 
+		f(keyRow, groupDataFrame)
 		if arrowGroupDf != nil { arrowGroupDf.Release() }
 	}
 }
@@ -141,7 +141,7 @@ func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFram
 		if agdf.uniqueKeysTable.NumRows() == 0 {
 			emptyKeySchema := agdf.uniqueKeysTable.Schema()
 			emptyKeyRecord := array.NewRecord(emptyKeySchema, nil, 0); defer emptyKeyRecord.Release()
-			return NewArrowDataFrameWithAllocator("agg_keys_empty", emptyKeyRecord, 
+			return NewArrowDataFrameWithAllocator("agg_keys_empty", emptyKeyRecord,
 				NewArrowDataFrameSchema(emptyKeySchema).(*arrowDataFrameSchema), agdf.mem)
 		}
 		tblReader := array.NewTableReader(agdf.uniqueKeysTable, -1); defer tblReader.Release() // Read all chunks
@@ -175,7 +175,7 @@ func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFram
 	ctx := compute.WithAllocator(context.Background(), agdf.mem)
 	groupKeyRefs := make([]arrow.FieldRef, len(agdf.groupingColNames))
 	for i, name := range agdf.groupingColNames {
-		ref, err := arrow.FieldRefFromPath(name) 
+		ref, err := arrow.FieldRefFromPath(name)
 		if err != nil { panic(fmt.Sprintf("Agg: invalid grouping column name '%s': %v", name, err)) }
 		groupKeyRefs[i] = ref
 	}
@@ -200,7 +200,7 @@ func (agdf *arrowGroupedDataFrame) Agg(configs ...AggregationConfig) df.DataFram
 	if err != nil { panic(fmt.Sprintf("Agg: compute.GroupBy failed: %v", err)) }; defer aggResultDatum.Release()
 	resultRecord, ok := aggResultDatum.(*arrow.RecordDatum).Value().(arrow.Record)
 	if !ok { panic("Agg: compute.GroupBy did not return a RecordDatum as expected") }
-	
+
 	resultDfSchema := NewArrowDataFrameSchema(resultRecord.Schema()).(*arrowDataFrameSchema)
 	aggDfName := agdf.originalSchema.Name() + "_agg"; if len(agdf.groupingColNames) > 0 { aggDfName = agdf.originalSchema.Name() + "_gb_" + strings.Join(agdf.groupingColNames, "_") }
 	// NewArrowDataFrameWithAllocator will retain resultRecord

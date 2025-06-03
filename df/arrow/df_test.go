@@ -4,7 +4,7 @@ package arrow_test
 
 import (
 	"fmt"
-	"sort" 
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -15,7 +15,7 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/memory"
 	"github.com/apache/arrow/go/v14/arrow/scalar"
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/df/expr" 
+	"github.com/blue4209211/pq/df/expr"
 	"github.com/stretchr/testify/assert"
 
 	arrowimpl "github.com/blue4209211/pq/df/arrow"
@@ -35,8 +35,8 @@ func getTestDataFrameArrowSchema() *arrow.Schema {
 func getTestDataFrameRecord(mem memory.Allocator, schema *arrow.Schema) arrow.Record {
 	b := array.NewRecordBuilder(mem, schema); defer b.Release()
 	b.Field(0).(*array.StringBuilder).AppendValues([]string{"alpha", "beta", "gamma"}, nil)
-	b.Field(1).(*array.Int64Builder).AppendValues([]int64{100, 0, 300}, []bool{true, false, true})   
-	b.Field(2).(*array.Float64Builder).AppendValues([]float64{1.1, 2.2, 0}, []bool{true, true, false}) 
+	b.Field(1).(*array.Int64Builder).AppendValues([]int64{100, 0, 300}, []bool{true, false, true})
+	b.Field(2).(*array.Float64Builder).AppendValues([]float64{1.1, 2.2, 0}, []bool{true, true, false})
 	return b.NewRecord()
 }
 func getBaseTestDf(t *testing.T, mem memory.Allocator) df.DataFrame {
@@ -49,22 +49,22 @@ func getBaseTestDf(t *testing.T, mem memory.Allocator) df.DataFrame {
 	rb := array.NewRecordBuilder(mem, schema); defer rb.Release()
 	rb.Field(0).(*array.StringBuilder).AppendValues([]string{"row1", "row2", "row3"}, nil)
 	rb.Field(1).(*array.Int64Builder).AppendValues([]int64{10, 20, 30}, nil)
-	record := rb.NewRecord() 
+	record := rb.NewRecord()
 	dfSchema := arrowimpl.NewArrowDataFrameSchema(schema).(*arrowimpl.ArrowDataFrameSchema)
 	return arrowimpl.NewArrowDataFrame("test_df", record, dfSchema)
 }
-func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arrow.Array { 
+func getTestInt64Array(mem memory.Allocator, values []int64, valids []bool) arrow.Array {
 	b := array.NewInt64Builder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
-func getTestStringArray(mem memory.Allocator, values []string, valids []bool) arrow.Array { 
+func getTestStringArray(mem memory.Allocator, values []string, valids []bool) arrow.Array {
 	b := array.NewStringBuilder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
-func getTestFloat64Array(mem memory.Allocator, values []float64, valids []bool) arrow.Array { 
+func getTestFloat64Array(mem memory.Allocator, values []float64, valids []bool) arrow.Array {
 	b := array.NewFloat64Builder(mem); defer b.Release(); b.AppendValues(values, valids); return b.NewArray()
 }
 
 
-const nilPlaceholder = "__NIL_PLACEHOLDER__" 
+const nilPlaceholder = "__NIL_PLACEHOLDER__"
 
 func dfToSliceOfInterfaceSlices(dataFrame df.DataFrame) [][]interface{} {
 	var result [][]interface{}
@@ -93,7 +93,7 @@ func (m *mockExpr) Name() string { return m.exprName }
 func (m *mockExpr) Const() df.Value { return m.exprConstVal }
 func (m *mockExpr) Col() string { return m.exprColName }
 func (m *mockExpr) OpType() df.ExprOpType { return m.exprOpType }
-func (m *mockExpr) FilterOp() df.FilterOp { return nil } 
+func (m *mockExpr) FilterOp() df.FilterOp { return nil }
 func (m *mockExpr) MapOp() df.MapOp { return m.exprMapOp }
 func (m *mockExpr) Parent() df.Expr { return m.exprParent }
 func (m *mockExpr) SetParent(p df.Expr) df.Expr { m.exprParent = p; return m }
@@ -153,15 +153,15 @@ func TestArrowDataFrame_Except_KernelBased(t *testing.T) {
 	dfSchemaL := arrowimpl.NewArrowDataFrameSchema(schemaL).(*arrowimpl.ArrowDataFrameSchema)
 
 	lrb := array.NewRecordBuilder(mem, schemaL); defer lrb.Release()
-	lrb.Field(0).(*array.Int64Builder).AppendValues([]int64{1, 2, 3, 4, 1, 5, 0}, []bool{true, true, true, true, true, true, false}) 
+	lrb.Field(0).(*array.Int64Builder).AppendValues([]int64{1, 2, 3, 4, 1, 5, 0}, []bool{true, true, true, true, true, true, false})
 	lrb.Field(1).(*array.StringBuilder).AppendValues([]string{"A_one", "A_two", "A_three", "A_four", "A_one", "", "A_nil_id"}, []bool{true, true, true, true, true, false, true})
 	lrb.Field(2).(*array.Int64Builder).AppendValues([]int64{100, 0, 300, 100, 100, 500, 600}, []bool{true, false, true, true, true, true, true})
 	lRec := lrb.NewRecord(); defer lRec.Release()
 	ldf := arrowimpl.NewArrowDataFrame("ldf_A_except", lRec, dfSchemaL)
 	defer ldf.(*arrowimpl.ArrowDataFrame).Release()
 
-	rrb := array.NewRecordBuilder(mem, schemaL); defer rrb.Release() 
-	rrb.Field(0).(*array.Int64Builder).AppendValues([]int64{2, 3, 6, 5, 0}, []bool{true, true, true, true, false}) 
+	rrb := array.NewRecordBuilder(mem, schemaL); defer rrb.Release()
+	rrb.Field(0).(*array.Int64Builder).AppendValues([]int64{2, 3, 6, 5, 0}, []bool{true, true, true, true, false})
 	rrb.Field(1).(*array.StringBuilder).AppendValues([]string{"B_two", "A_three", "B_six", "", "A_nil_id_diff"}, []bool{true, true, true, false, true})
 	rrb.Field(2).(*array.Int64Builder).AppendValues([]int64{2000, 300, 6000, 500, 600}, []bool{true, true, true, true, true})
 	rRec := rrb.NewRecord(); defer rRec.Release()

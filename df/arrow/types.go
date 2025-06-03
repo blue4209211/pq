@@ -24,35 +24,35 @@ type arrowValue struct {
 }
 
 func NewArrowValue(s scalar.Scalar, f df.Format) df.Value {
-	if s == nil { 
+	if s == nil {
 		panic("NewArrowValue: input scalar.Scalar cannot be nil; use scalar.NewNullScalar for typed nulls")
 	}
-	if f == nil { 
+	if f == nil {
 		panic("NewArrowValue: input df.Format cannot be nil")
 	}
 	return &arrowValue{val: s, format: f}
 }
-func (v *arrowValue) Schema() df.Format { return v.format } 
+func (v *arrowValue) Schema() df.Format { return v.format }
 func (v *arrowValue) IsNil() bool       { return v.val == nil || !v.val.IsValid() }
 
 func (v *arrowValue) Get() any {
 	if v.IsNil() { return nil }
 	switch s := v.val.(type) {
-	case *scalar.String: return s.String() 
+	case *scalar.String: return s.String()
 	case *scalar.LargeString: return s.String()
 	case *scalar.Int64: return s.Value
 	case *scalar.Float64: return s.Value
 	case *scalar.Boolean: return s.Value
-	case *scalar.Timestamp: return s.ToTime(arrow.Nanosecond) 
+	case *scalar.Timestamp: return s.ToTime(arrow.Nanosecond)
 	case *scalar.Date32: return s.ToTime()
 	case *scalar.Date64: return s.ToTime()
 	default:
 		panic(fmt.Sprintf("arrowValue.Get(): unhandled scalar type %T (value: %s)", v.val, v.val.String()))
 	}
 }
-func (v *arrowValue) GetAsString() string { 
-	if v.IsNil() { return "" } 
-	return fmt.Sprintf("%v", v.Get()) 
+func (v *arrowValue) GetAsString() string {
+	if v.IsNil() { return "" }
+	return fmt.Sprintf("%v", v.Get())
 }
 func (v *arrowValue) GetAsInt() int64 {
 	if s, ok := v.val.(*scalar.Int64); ok && s.IsValid() { return s.Value }
@@ -67,20 +67,20 @@ func (v *arrowValue) GetAsBool() bool {
 	panic(fmt.Sprintf("cannot convert arrowValue of format %s (scalar type %T, value %s) to bool", v.format.Name(), v.val, v.val.String()))
 }
 func (v *arrowValue) GetAsDatetime() time.Time {
-	if s, ok := v.val.(*scalar.Timestamp); ok && s.IsValid() { return s.ToTime(arrow.Nanosecond) } 
+	if s, ok := v.val.(*scalar.Timestamp); ok && s.IsValid() { return s.ToTime(arrow.Nanosecond) }
 	if s, ok := v.val.(*scalar.Date32); ok && s.IsValid() { return s.ToTime()}
 	if s, ok := v.val.(*scalar.Date64); ok && s.IsValid() { return s.ToTime()}
 	panic(fmt.Sprintf("cannot convert arrowValue of format %s (scalar type %T, value %s) to time.Time", v.format.Name(), v.val, v.val.String()))
 }
 func (v *arrowValue) Equals(other df.Value) bool {
 	if other == nil || other.IsNil() { return v.IsNil() }
-	if v.IsNil() { return false } 
+	if v.IsNil() { return false }
 	otherArrowVal, ok := other.(*arrowValue)
-	if !ok { 
+	if !ok {
 		if v.format.Name() == other.Schema().Name() && v.format.Type() == other.Schema().Type() {
 			return reflect.DeepEqual(v.Get(), other.Get())
 		}
-		return false 
+		return false
 	}
 	return scalar.Equals(v.val, otherArrowVal.val)
 }
@@ -93,8 +93,8 @@ var _ df.Value = (*arrowValue)(nil)
 
 // --- arrowRow ---
 type arrowRow struct {
-	schema *arrowDataFrameSchema 
-	values []scalar.Scalar     
+	schema *arrowDataFrameSchema
+	values []scalar.Scalar
 }
 
 // Internal constructor for arrowRow
@@ -131,7 +131,7 @@ func (r *arrowRow) Get(i int) df.Value {
 	if i < 0 || i >= len(r.values) { panic("Get: index out of bounds") }
 	// This relies on arrowDataFrameSchema.Get returning a valid df.SeriesSchema
 	// which includes the correct df.Format for the column.
-	seriesSchema := r.schema.Get(i) 
+	seriesSchema := r.schema.Get(i)
 	return NewArrowValue(r.values[i], seriesSchema.Format)
 }
 func (r *arrowRow) GetByName(s string) df.Value {
@@ -144,8 +144,8 @@ func (r *arrowRow) GetRaw(i int) any {
 	s := r.values[i]
 	if s == nil || !s.IsValid() { return nil }
 	seriesSchema := r.schema.Get(i)
-	v := NewArrowValue(s, seriesSchema.Format) 
-	return v.Get() 
+	v := NewArrowValue(s, seriesSchema.Format)
+	return v.Get()
 }
 func (r *arrowRow) GetAsString(i int) string      { return r.Get(i).GetAsString() }
 func (r *arrowRow) GetAsInt(i int) int64          { return r.Get(i).GetAsInt() }
@@ -168,7 +168,7 @@ func (r *arrowRow) IsAnyNil() bool {
 }
 func (r *arrowRow) Copy() df.Row {
 	newValues := make([]scalar.Scalar, len(r.values))
-	copy(newValues, r.values) 
+	copy(newValues, r.values)
 	return newArrowRow(r.schema, newValues)
 }
 func (r *arrowRow) Select(indices ...int) df.Row {
@@ -178,7 +178,7 @@ func (r *arrowRow) Select(indices ...int) df.Row {
 	for i, idx := range indices {
 		if idx < 0 || idx >= len(currentFields) { panic(fmt.Sprintf("select index %d out of bounds", idx)) }
 		newSchemaFields[i] = currentFields[idx]
-		newValues[i] = r.values[idx] 
+		newValues[i] = r.values[idx]
 	}
 	selectedArrowSchema := arrow.NewSchema(newSchemaFields, r.schema.schema.Metadata())
 	selectedDfSchema := NewArrowDataFrameSchema(selectedArrowSchema).(*arrowDataFrameSchema)
@@ -192,16 +192,16 @@ var _ df.Row = (*arrowRow)(nil)
 
 // --- arrowDataFrameSchema ---
 type arrowDataFrameSchema struct {
-	schema *arrow.Schema 
+	schema *arrow.Schema
 }
 func NewArrowDataFrameSchema(schema *arrow.Schema) df.DataFrameSchema {
-	if schema == nil { 
+	if schema == nil {
 		schema = arrow.NewSchema([]arrow.Field{}, nil)
 	}
 	return &arrowDataFrameSchema{schema: schema}
 }
 // Exported for testing from arrow_test package
-func (s *arrowDataFrameSchema) InternalArrowSchema() *arrow.Schema { return s.schema } 
+func (s *arrowDataFrameSchema) InternalArrowSchema() *arrow.Schema { return s.schema }
 
 func (s *arrowDataFrameSchema) Series() []df.SeriesSchema {
 	seriesSchemas := make([]df.SeriesSchema, s.schema.NumFields())
@@ -217,7 +217,7 @@ func (s *arrowDataFrameSchema) Names() []string {
 }
 // GetByName from existing df.go (blue4209211/pq/df) returns df.SeriesSchema directly, not (int, df.SeriesSchema, bool)
 // Adhering to that for now.
-func (s *arrowDataFrameSchema) GetByName(name string) df.SeriesSchema { 
+func (s *arrowDataFrameSchema) GetByName(name string) df.SeriesSchema {
 	idx := s.schema.FieldIndices(name)
 	if len(idx) == 0 { return df.SeriesSchema{Name:name, Format:df.UnknownFormat} } // Return an empty/unknown schema if not found
 	field := s.schema.Field(idx[0])
@@ -230,7 +230,7 @@ func (s *arrowDataFrameSchema) GetIndexByName(name string) int {
 }
 func (s *arrowDataFrameSchema) HasName(name string) bool { return len(s.schema.FieldIndices(name)) > 0 }
 // Get from existing df.go (blue4209211/pq/df) returns df.SeriesSchema directly
-func (s *arrowDataFrameSchema) Get(i int) df.SeriesSchema { 
+func (s *arrowDataFrameSchema) Get(i int) df.SeriesSchema {
 	if i < 0 || i >= s.schema.NumFields() { panic("Get: index out of bounds for schema fields") }
 	field := s.schema.Field(i)
 	return df.SeriesSchema{Name: field.Name, Format: ArrowToDfFormat(field.Type), Nullable: field.Nullable}
@@ -239,7 +239,7 @@ func (s *arrowDataFrameSchema) Len() int { return s.schema.NumFields() }
 func (s *arrowDataFrameSchema) Equals(other df.DataFrameSchema) bool {
 	if other == nil { return false }
 	otherArrowSchema, ok := other.(*arrowDataFrameSchema)
-	if !ok { 
+	if !ok {
 		if s.Len() != other.Len() { return false }
 		for i := 0; i < s.Len(); i++ {
 			s1, s2 := s.Get(i), other.Get(i)
@@ -252,11 +252,11 @@ func (s *arrowDataFrameSchema) Equals(other df.DataFrameSchema) bool {
 			} else if s1.Format == nil && other.Get(i).Format == nil {
 				formatEquals = true
 			}
-			if s1.Name != s2.Name || !formatEquals || s1.Nullable != s2.Nullable { return false } 
+			if s1.Name != s2.Name || !formatEquals || s1.Nullable != s2.Nullable { return false }
 		}
 		return true
 	}
-	return s.schema.Equal(otherArrowSchema.schema) 
+	return s.schema.Equal(otherArrowSchema.schema)
 }
 var _ df.DataFrameSchema = (*arrowDataFrameSchema)(nil)
 
@@ -267,13 +267,13 @@ func ArrowToDfFormat(dt arrow.DataType) df.Format {
 	switch dt.ID() {
 	case arrow.STRING, arrow.LARGE_STRING: return df.StringFormat
 	case arrow.BINARY, arrow.LARGE_BINARY: return df.StringFormat // Consider a distinct df.BinaryFormat if needed
-	case arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64: return df.IntegerFormat 
-	case arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64: return df.IntegerFormat 
-	case arrow.FLOAT32, arrow.FLOAT64: return df.DoubleFormat 
+	case arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64: return df.IntegerFormat
+	case arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64: return df.IntegerFormat
+	case arrow.FLOAT32, arrow.FLOAT64: return df.DoubleFormat
 	case arrow.BOOL: return df.BoolFormat
-	case arrow.TIMESTAMP: return df.DateTimeFormat 
-	case arrow.DATE32, arrow.DATE64: return df.DateTimeFormat 
-	case arrow.NULL: return df.UnknownFormat 
+	case arrow.TIMESTAMP: return df.DateTimeFormat
+	case arrow.DATE32, arrow.DATE64: return df.DateTimeFormat
+	case arrow.NULL: return df.UnknownFormat
 	default:
 		panic(fmt.Sprintf("ArrowToDfFormat: unhandled Arrow data type %s", dt.Name()))
 	}
@@ -281,11 +281,11 @@ func ArrowToDfFormat(dt arrow.DataType) df.Format {
 func dfFormatToArrowType(f df.Format) (arrow.DataType, error) { // Made error return consistent
 	if f == nil { return nil, fmt.Errorf("dfFormatToArrowType: df.Format cannot be nil") }
 	switch f { // Assuming f is comparable (not an interface with different underlying types for same logical format)
-	case df.StringFormat: return arrow.BinaryTypes.String, nil 
+	case df.StringFormat: return arrow.BinaryTypes.String, nil
 	case df.IntegerFormat: return arrow.PrimitiveTypes.Int64, nil
 	case df.DoubleFormat: return arrow.PrimitiveTypes.Float64, nil
 	case df.BoolFormat: return arrow.PrimitiveTypes.Boolean, nil
-	case df.DateTimeFormat: return arrow.TimestampTypes.Timestamp_ns, nil 
+	case df.DateTimeFormat: return arrow.TimestampTypes.Timestamp_ns, nil
 	case df.UnknownFormat: return nil, fmt.Errorf("cannot convert df.UnknownFormat to Arrow type")
 	default:
 		// This path means f is a df.Format instance not matching known singletons.
@@ -295,8 +295,8 @@ func dfFormatToArrowType(f df.Format) (arrow.DataType, error) { // Made error re
 }
 
 func dfValueToArrowScalar(val df.Value, targetType arrow.DataType, mem memory.Allocator) (scalar.Scalar, error) {
-	if val == nil { return nil, fmt.Errorf("input df.Value is nil interface") } 
-	
+	if val == nil { return nil, fmt.Errorf("input df.Value is nil interface") }
+
 	var effectiveTargetType arrow.DataType = targetType
 	if effectiveTargetType == nil {
 		var err error
@@ -306,18 +306,18 @@ func dfValueToArrowScalar(val df.Value, targetType arrow.DataType, mem memory.Al
 		}
 	}
 
-	if val.IsNil() { 
-		return scalar.NewNullScalar(effectiveTargetType), nil 
+	if val.IsNil() {
+		return scalar.NewNullScalar(effectiveTargetType), nil
 	}
 
-	if av, ok := val.(*arrowValue); ok { 
+	if av, ok := val.(*arrowValue); ok {
 		if arrow.TypeEqual(av.val.DataType(), effectiveTargetType) { return av.val, nil }
 		ctx := context.Background(); if mem != nil { ctx = compute.WithAllocator(ctx, mem) }
 		castedScalar, err := scalar.Cast(ctx, av.val, effectiveTargetType)
 		if err != nil { return nil, fmt.Errorf("failed to cast scalar from %s to %s: %w", av.val.DataType(), effectiveTargetType, err) }
-		return castedScalar, nil 
+		return castedScalar, nil
 	}
-	
+
 	// Fallback for generic df.Value
 	// This is less type-safe and relies on Get() returning types that match the df.Format's promise.
 	switch val.Schema() { // Use val.Schema() to guide conversion from generic df.Value
@@ -341,23 +341,23 @@ func dfValueToArrowScalar(val df.Value, targetType arrow.DataType, mem memory.Al
 
 func appendScalarToBuilder(b array.Builder, s scalar.Scalar, targetType arrow.DataType) error {
 	if s == nil { return fmt.Errorf("appendScalarToBuilder: input scalar is nil pointer")}
-	if !s.IsValid() { b.AppendNull(); return nil } 
-	
+	if !s.IsValid() { b.AppendNull(); return nil }
+
 	var scalarToAppend scalar.Scalar = s
-	var castedScalarReleaser memory.Releasable 
+	var castedScalarReleaser memory.Releasable
 
 	if !arrow.TypeEqual(s.DataType(), targetType) {
-		ctx := context.Background() 
+		ctx := context.Background()
 		casted, err := scalar.Cast(ctx, s, targetType)
 		if err != nil {
 			return fmt.Errorf("casting scalar from %s to %s failed: %w", s.DataType(), targetType, err)
 		}
 		scalarToAppend = casted
-		if releasable, ok := casted.(memory.Releasable); ok { 
-			castedScalarReleaser = releasable 
+		if releasable, ok := casted.(memory.Releasable); ok {
+			castedScalarReleaser = releasable
 		}
 	}
-	if castedScalarReleaser != nil { 
+	if castedScalarReleaser != nil {
 		defer castedScalarReleaser.Release()
 	}
 
@@ -388,12 +388,12 @@ func isConcreteFormatType(format df.Format, targetKnownType df.Format) bool {
 	return format == targetKnownType
 }
 // These assume df package defines these as comparable values (e.g. var StringFormat = &formatImpl{...})
-func isIntegerFormat(f df.Format) bool { return isConcreteFormatType(f, df.IntegerFormat) } 
-func isFloatFormat(f df.Format) bool   { return isConcreteFormatType(f, df.DoubleFormat) }  
+func isIntegerFormat(f df.Format) bool { return isConcreteFormatType(f, df.IntegerFormat) }
+func isFloatFormat(f df.Format) bool   { return isConcreteFormatType(f, df.DoubleFormat) }
 func isStringFormat(f df.Format) bool  { return isConcreteFormatType(f, df.StringFormat) }
 func isBoolFormat(f df.Format) bool    { return isConcreteFormatType(f, df.BoolFormat) }
-func isTimeFormat(f df.Format) bool    { return isConcreteFormatType(f, df.DateTimeFormat) } 
-func isDateFormat(f df.Format) bool    { 
+func isTimeFormat(f df.Format) bool    { return isConcreteFormatType(f, df.DateTimeFormat) }
+func isDateFormat(f df.Format) bool    {
 	// Assuming DateTimeFormat might be used for dates if no specific DateFormat exists in df,
 	// or if df.DateFormat is distinct. This depends on df package definitions.
 	// If df.DateFormat exists and is distinct from df.DateTimeFormat:
@@ -429,12 +429,12 @@ package arrow_test
 import (
 	"fmt"
 	"reflect"
-	"sort" 
-	"strconv" 
+	"sort"
+	"strconv"
 	"testing"
 	"time"
 
-	"git.querycap.com/practice/df" 
+	"git.querycap.com/practice/df"
 	arrowimpl "git.querycap.com/practice/df/arrow"
 	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/array"
@@ -444,7 +444,7 @@ import (
 )
 
 // Helper to get a common test schema (assumed to exist from prior tests)
-func getTestArrowSchemaForNilRowTest() *arrow.Schema { 
+func getTestArrowSchemaForNilRowTest() *arrow.Schema {
 	return arrow.NewSchema(
 		[]arrow.Field{
 			{Name: "col_str", Type: arrow.BinaryTypes.String, Nullable: true},
@@ -454,14 +454,14 @@ func getTestArrowSchemaForNilRowTest() *arrow.Schema {
 			{Name: "col_time_ns", Type: arrow.TimestampTypes.Timestamp_ns, Nullable: true},
 			{Name: "col_date32", Type: arrow.FixedWidthTypes.Date32, Nullable: true},
 		},
-		nil, 
+		nil,
 	)
 }
 
 
 func TestNewNilArrowRow(t *testing.T) {
-	mem := memory.NewGoAllocator() 
-	
+	mem := memory.NewGoAllocator()
+
 	t.Run("SchemaWithMultipleFields", func(t *testing.T) {
 		arrowSchema := getTestArrowSchemaForNilRowTest()
 		// Cast to internal type *arrowimpl.ArrowDataFrameSchema for NewNilArrowRow
@@ -469,24 +469,24 @@ func TestNewNilArrowRow(t *testing.T) {
 		dfSchema := arrowimpl.NewArrowDataFrameSchema(arrowSchema).(*arrowimpl.ArrowDataFrameSchema)
 
 		// Call the (now exported for test) NewNilArrowRow
-		nilRow := arrowimpl.NewNilArrowRow(dfSchema, mem) 
-		
+		nilRow := arrowimpl.NewNilArrowRow(dfSchema, mem)
+
 		assert.NotNil(t, nilRow)
 		assert.Equal(t, arrowSchema.NumFields(), nilRow.Len(), "Row length should match field count")
-		
+
 		assert.True(t, nilRow.Schema().Equals(dfSchema), "Row schema should match input dfSchema")
 
 		for i := 0; i < nilRow.Len(); i++ {
 			originalField := arrowSchema.Field(i)
 			// df.Row.IsNil does not return error
 			assert.True(t, nilRow.IsNil(i), fmt.Sprintf("Value at index %d (%s) should be nil", i, originalField.Name))
-			
+
 			// df.Row.Get does not return error
-			val := nilRow.Get(i) 
+			val := nilRow.Get(i)
 			assert.NotNil(t, val, "df.Value should not be nil interface")
 			assert.True(t, val.IsNil(), fmt.Sprintf("df.Value at index %d (%s) should be nil", i, originalField.Name))
-			
-			expectedDfFormat := arrowimpl.ArrowToDfFormat(originalField.Type) 
+
+			expectedDfFormat := arrowimpl.ArrowToDfFormat(originalField.Type)
 			valSchemaFormat := val.Schema() // This is df.Format as per problem's df.Value interface
 
 			// Check Name and Type of df.Format
@@ -499,7 +499,7 @@ func TestNewNilArrowRow(t *testing.T) {
 
 
 			// Also check the underlying scalar type in the arrowValue
-			if av, ok := val.(*arrowimpl.ArrowValue); ok { 
+			if av, ok := val.(*arrowimpl.ArrowValue); ok {
 				assert.True(t, av.IsNilInternalScalar(), fmt.Sprintf("Internal scalar for col %d (%s) should be nil/invalid", i, originalField.Name))
 				assert.True(t, arrow.TypeEqual(originalField.Type, av.InternalScalarType()), fmt.Sprintf("Internal scalar type for col %d (%s) should match field type", i, originalField.Name))
 			} else {
@@ -580,7 +580,7 @@ func getTestArrowSchema() *arrow.Schema { // From previous tests
 			{Name: "col_bool", Type: arrow.PrimitiveTypes.Boolean, Nullable: true},
 			{Name: "col_time", Type: arrow.TimestampTypes.Timestamp_ns, Nullable: true},
 		},
-		nil, 
+		nil,
 	)
 }
 */
@@ -588,7 +588,7 @@ func getTestArrowSchema() *arrow.Schema { // From previous tests
 
 func TestNewNilArrowRow(t *testing.T) {
 	mem := memory.NewGoAllocator() // Allocator might not be strictly needed by NewNullScalar but good practice if helpers use it.
-	
+
 	// Case 1: Schema with multiple fields of different types
 	arrowSchema1 := arrow.NewSchema(
 		[]arrow.Field{
@@ -600,7 +600,7 @@ func TestNewNilArrowRow(t *testing.T) {
 	dfSchema1 := arrowimpl.NewArrowDataFrameSchema(arrowSchema1).(*arrowimpl.ArrowDataFrameSchema)
 
 	nilRow1 := arrowimpl.CallNewNilArrowRow(dfSchema1, mem) // Using exported wrapper if newNilArrowRow is not exported
-	
+
 	assert.NotNil(t, nilRow1)
 	assert.Equal(t, 3, nilRow1.Len(), "Row length should match field count")
 	assert.True(t, nilRow1.Schema().Equals(dfSchema1), "Row schema should match input")
@@ -629,11 +629,11 @@ func TestNewNilArrowRow(t *testing.T) {
 	assert.PanicsWithValue(t, "newNilArrowRow: input schema or its internal arrow.Schema cannot be nil", func() {
 		arrowimpl.CallNewNilArrowRow(nilDfSchema, mem)
 	})
-	
+
 	// Create a dfSchema with a nil internal arrow.Schema
 	// This state should ideally not occur if constructors are used correctly.
 	// Forcing it for test:
-	dfSchemaWithNilInternal := arrowimpl.NewArrowDataFrameSchema(nil).(*arrowimpl.ArrowDataFrameSchema) 
+	dfSchemaWithNilInternal := arrowimpl.NewArrowDataFrameSchema(nil).(*arrowimpl.ArrowDataFrameSchema)
 	// The above NewArrowDataFrameSchema(nil) actually creates a valid empty schema.
 	// So the panic "internal arrow.Schema cannot be nil" inside newNilArrowRow might not be reachable
 	// if dfSchema itself is not nil. The first check `schema == nil` covers nilDfSchema.
@@ -650,12 +650,12 @@ package arrow_test
 import (
 	"fmt"
 	"reflect"
-	"sort" 
-	"strconv" 
+	"sort"
+	"strconv"
 	"testing"
 	"time"
 
-	"git.querycap.com/practice/df" 
+	"git.querycap.com/practice/df"
 	arrowimpl "git.querycap.com/practice/df/arrow"
 	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/array"
@@ -665,7 +665,7 @@ import (
 )
 
 // Helper to get a common test schema (assumed to exist from prior tests)
-func getTestArrowSchemaForNilRowTest() *arrow.Schema { 
+func getTestArrowSchemaForNilRowTest() *arrow.Schema {
 	return arrow.NewSchema(
 		[]arrow.Field{
 			{Name: "col_str", Type: arrow.BinaryTypes.String, Nullable: true},
@@ -675,14 +675,14 @@ func getTestArrowSchemaForNilRowTest() *arrow.Schema {
 			{Name: "col_time_ns", Type: arrow.TimestampTypes.Timestamp_ns, Nullable: true},
 			{Name: "col_date32", Type: arrow.FixedWidthTypes.Date32, Nullable: true},
 		},
-		nil, 
+		nil,
 	)
 }
 
 
 func TestNewNilArrowRow(t *testing.T) {
-	mem := memory.NewGoAllocator() 
-	
+	mem := memory.NewGoAllocator()
+
 	t.Run("SchemaWithMultipleFields", func(t *testing.T) {
 		arrowSchema := getTestArrowSchemaForNilRowTest()
 		// Cast to internal type *arrowimpl.ArrowDataFrameSchema for NewNilArrowRow
@@ -690,31 +690,31 @@ func TestNewNilArrowRow(t *testing.T) {
 		dfSchema := arrowimpl.NewArrowDataFrameSchema(arrowSchema).(*arrowimpl.ArrowDataFrameSchema)
 
 		// Call the (now exported for test) NewNilArrowRow
-		nilRow := arrowimpl.NewNilArrowRow(dfSchema, mem) 
-		
+		nilRow := arrowimpl.NewNilArrowRow(dfSchema, mem)
+
 		assert.NotNil(t, nilRow)
 		assert.Equal(t, arrowSchema.NumFields(), nilRow.Len(), "Row length should match field count")
-		
+
 		assert.True(t, nilRow.Schema().Equals(dfSchema), "Row schema should match input dfSchema")
 
 		for i := 0; i < nilRow.Len(); i++ {
 			originalField := arrowSchema.Field(i)
 			// df.Row.IsNil does not return error
 			assert.True(t, nilRow.IsNil(i), fmt.Sprintf("Value at index %d (%s) should be nil", i, originalField.Name))
-			
+
 			// df.Row.Get does not return error
-			val := nilRow.Get(i) 
+			val := nilRow.Get(i)
 			assert.NotNil(t, val, "df.Value should not be nil interface")
 			assert.True(t, val.IsNil(), fmt.Sprintf("df.Value at index %d (%s) should be nil", i, originalField.Name))
-			
-			expectedDfFormat := arrowimpl.ArrowToDfFormat(originalField.Type) 
+
+			expectedDfFormat := arrowimpl.ArrowToDfFormat(originalField.Type)
 			valSchemaFormat := val.Schema() // This is df.Format as per problem's df.Value interface
 
 			assert.Equal(t, expectedDfFormat, valSchemaFormat, fmt.Sprintf("Schema format for col %d (%s)", i, originalField.Name))
 
 
 			// Also check the underlying scalar type in the arrowValue
-			if av, ok := val.(*arrowimpl.ArrowValue); ok { 
+			if av, ok := val.(*arrowimpl.ArrowValue); ok {
 				assert.True(t, av.IsNilInternalScalar(), fmt.Sprintf("Internal scalar for col %d (%s) should be nil/invalid", i, originalField.Name))
 				assert.True(t, arrow.TypeEqual(originalField.Type, av.InternalScalarType()), fmt.Sprintf("Internal scalar type for col %d (%s) should match field type", i, originalField.Name))
 			} else {
@@ -749,11 +749,11 @@ func TestArrowValue(t *testing.T) {
 		// For testing, ensure df.StringFormat is part of the df package or defined for tests.
 		// If df.StringFormat is an interface, this comparison might not be direct.
 		// Let's use a format that's known to be df.StringFormat for this test.
-		
+
 		// Get the df.Format by converting from known Arrow type
 		strFormat := arrowimpl.ArrowToDfFormat(arrow.BinaryTypes.String)
 
-		v := arrowimpl.NewArrowValue(s, strFormat) 
+		v := arrowimpl.NewArrowValue(s, strFormat)
 		assert.False(t, v.IsNil())
 		assert.Equal(t, "hello", v.Get())
 		assert.Equal(t, "hello", v.GetAsString())

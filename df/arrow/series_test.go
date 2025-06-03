@@ -4,8 +4,8 @@ package arrow_test
 
 import (
 	"fmt"
-	"reflect" 
-	"sort" 
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,7 +16,7 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/memory"
 	"github.com/apache/arrow/go/v14/arrow/scalar"
 	"github.com/blue4209211/pq/df"
-	"github.com/blue4209211/pq/df/expr" 
+	"github.com/blue4209211/pq/df/expr"
 	"github.com/stretchr/testify/assert"
 
 	arrowimpl "github.com/blue4209211/pq/df/arrow"
@@ -53,9 +53,9 @@ func extractValues(s df.Series) []interface{} {
 }
 func sortInterfaceSlice(slice []interface{}) {
 	sort.Slice(slice, func(i, j int) bool {
-		if slice[i] == nilPlaceholder && slice[j] != nilPlaceholder { return true } 
+		if slice[i] == nilPlaceholder && slice[j] != nilPlaceholder { return true }
 		if slice[i] != nilPlaceholder && slice[j] == nilPlaceholder { return false }
-		if slice[i] == nilPlaceholder && slice[j] == nilPlaceholder { return false } 
+		if slice[i] == nilPlaceholder && slice[j] == nilPlaceholder { return false }
 		return fmt.Sprintf("%v", slice[i]) < fmt.Sprintf("%v", slice[j])
 	})
 }
@@ -96,7 +96,7 @@ func TestArrowSeries_AsFormat(t *testing.T) {
 
 	arr1 := getTestInt64Array(mem, []int64{10, 0, 30}, []bool{true, false, true}); defer arr1.Release()
 	s1Int := arrowimpl.NewArrowSeries(arr1, sSchemaInt); defer s1Int.(*arrowimpl.ArrowSeries).Release()
-	
+
 	s1AsStr := s1Int.AsFormat(df.StringFormat);	defer s1AsStr.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, s1Int.Len(), s1AsStr.Len())
 	assert.Equal(t, df.StringFormat.Name(), s1AsStr.Schema().Format.Name())
@@ -120,8 +120,8 @@ func TestArrowSeries_AsFormat(t *testing.T) {
 	s4AsInt := s4Float.AsFormat(df.IntegerFormat);	defer s4AsInt.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, int64(10), s4AsInt.Get(0).GetAsInt())
 	assert.True(t, s4AsInt.Get(1).IsNil())
-	assert.Equal(t, int64(10), s4AsInt.Get(2).GetAsInt()) 
-	assert.Equal(t, int64(30), s4AsInt.Get(3).GetAsInt()) 
+	assert.Equal(t, int64(10), s4AsInt.Get(2).GetAsInt())
+	assert.Equal(t, int64(30), s4AsInt.Get(3).GetAsInt())
 
 	s1AsIntCopy := s1Int.AsFormat(df.IntegerFormat);	defer s1AsIntCopy.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, s1Int.Len(), s1AsIntCopy.Len())
@@ -132,7 +132,7 @@ func TestArrowSeries_AsFormat(t *testing.T) {
 	sEmpty := arrowimpl.NewArrowSeries(emptyArr, sSchemaInt); defer sEmpty.(*arrowimpl.ArrowSeries).Release()
 	sEmptyAsStr := sEmpty.AsFormat(df.StringFormat);	defer sEmptyAsStr.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, int64(0), sEmptyAsStr.Len())
-	
+
 	assert.PanicsWithValue(t, "AsFormat: targetFormat cannot be nil", func() { s1Int.AsFormat(nil) })
 }
 
@@ -151,18 +151,18 @@ func TestArrowSeries_WhenNil_Series(t *testing.T) {
 
 	fillValNil := arrowimpl.NewArrowValue(scalar.NewNullScalar(arrow.PrimitiveTypes.Int64), df.IntegerFormat)
 	s1FilledNil := s1.WhenNil(fillValNil);	defer s1FilledNil.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, extractValues(s1), extractValues(s1FilledNil)) 
+	assert.Equal(t, extractValues(s1), extractValues(s1FilledNil))
 
 	arrNoNil := getTestInt64Array(mem, []int64{1,2,3}, nil); defer arrNoNil.Release()
 	sNoNil := arrowimpl.NewArrowSeries(arrNoNil, sSchemaInt); defer sNoNil.(*arrowimpl.ArrowSeries).Release()
 	sNoNilFilled := sNoNil.WhenNil(fillVal1);	defer sNoNilFilled.(*arrowimpl.ArrowSeries).Release()
-	assert.Equal(t, extractValues(sNoNil), extractValues(sNoNilFilled)) 
+	assert.Equal(t, extractValues(sNoNil), extractValues(sNoNilFilled))
 
 	emptyArr := getTestInt64Array(mem, []int64{}, nil); defer emptyArr.Release()
 	sEmpty := arrowimpl.NewArrowSeries(emptyArr, sSchemaInt); defer sEmpty.(*arrowimpl.ArrowSeries).Release()
 	sEmptyFilled := sEmpty.WhenNil(fillVal1);	defer sEmptyFilled.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, int64(0), sEmptyFilled.Len())
-	
+
 	assert.PanicsWithValue(t, "WhenNil: fillValue cannot be nil (can be a nil df.Value though)", func() { s1.WhenNil(nil) })
 
 	fillValStr := arrowimpl.NewArrowValue(scalar.NewStringScalar("abc"), df.StringFormat)
@@ -192,7 +192,7 @@ func TestArrowSeries_When_Series(t *testing.T) {
 	expected2 := []interface{}{int64(10), nilPlaceholder, nilPlaceholder, int64(10), int64(30), nilPlaceholder}
 	assert.Equal(t, expected2, extractValues(s1Replaced2))
 
-	replaceMapNoMatch := map[any]df.Value{ int64(999): arrowimpl.NewArrowValue(scalar.NewInt64Scalar(1000), df.IntegerFormat) } 
+	replaceMapNoMatch := map[any]df.Value{ int64(999): arrowimpl.NewArrowValue(scalar.NewInt64Scalar(1000), df.IntegerFormat) }
 	s1NoMatch := s1.When(replaceMapNoMatch);	defer s1NoMatch.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, extractValues(s1), extractValues(s1NoMatch))
 
@@ -203,14 +203,14 @@ func TestArrowSeries_When_Series(t *testing.T) {
 	sEmpty := arrowimpl.NewArrowSeries(emptyArr, sSchemaInt); defer sEmpty.(*arrowimpl.ArrowSeries).Release()
 	sEmptyReplaced := sEmpty.When(replaceMap1);	defer sEmptyReplaced.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, int64(0), sEmptyReplaced.Len())
-	
+
 	replaceMapCast := map[any]df.Value{
-		int64(10): arrowimpl.NewArrowValue(scalar.NewStringScalar("1000"), df.StringFormat), 
+		int64(10): arrowimpl.NewArrowValue(scalar.NewStringScalar("1000"), df.StringFormat),
 	}
 	s1ReplacedCast := s1.When(replaceMapCast);	defer s1ReplacedCast.(*arrowimpl.ArrowSeries).Release()
 	assert.Equal(t, int64(1000), s1ReplacedCast.Get(0).GetAsInt())
 	assert.Equal(t, int64(1000), s1ReplacedCast.Get(3).GetAsInt())
-	assert.True(t, s1ReplacedCast.Get(1).IsNil()) 
+	assert.True(t, s1ReplacedCast.Get(1).IsNil())
 
 	replaceMapBadCast := map[any]df.Value{
 		int64(10): arrowimpl.NewArrowValue(scalar.NewStringScalar("not-an-int"), df.StringFormat),
@@ -218,5 +218,5 @@ func TestArrowSeries_When_Series(t *testing.T) {
 	assert.Panics(t, func() { s1.When(replaceMapBadCast) })
 }
 
-// TODO: Add more tests for other Series methods (Map, Filter, Sort, etc.) once implemented. 
+// TODO: Add more tests for other Series methods (Map, Filter, Sort, etc.) once implemented.
 // This TODO was part of the original structure, some of these are now tested.
